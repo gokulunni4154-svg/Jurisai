@@ -256,6 +256,17 @@ async function extractErrorMessage(res: Response): Promise<string> {
     return `Request failed with status ${res.status}`;
   }
 }
+// ---- New type, alongside LegalHealthScore etc. ----
+type PdfExportStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+interface PdfExport {
+  id: string;
+  document_analysis_id: string;
+  status: PdfExportStatus;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
 
 // Legal Health Score prerequisite handling (Amendment/File 161 follow-up).
 //
@@ -319,6 +330,13 @@ export default function DocumentAnalysisPage() {
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
   const [startAnalysisError, setStartAnalysisError] = useState<string | null>(null);
 
+  const [pdfExport, setPdfExport] = useState<PdfExport | null>(null);
+const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+const [isFetchingPdfUrl, setIsFetchingPdfUrl] = useState(false);
+const [pdfError, setPdfError] = useState<string | null>(null);
+
+
+
   const loadEverything = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -345,7 +363,22 @@ export default function DocumentAnalysisPage() {
           fetch(`/api/documents/${documentId}/analyses/${latest.id}/legal-health-scores`, {
             credentials: 'include',
           }),
+          
         ]);
+        const pdfExportsRes = await fetch(
+  `/api/documents/${documentId}/analyses/${latest.id}/pdf-exports`,
+  { credentials: 'include' },
+);if (pdfExportsRes.ok) {
+  const json = await pdfExportsRes.json();
+  const runs: PdfExport[] = json.data;
+  // Sorted client-side, same reasoning as Open Item #32 already applies
+  // to classification/healthScore above — API ordering isn't re-verified
+  // for this endpoint either.
+  const sorted = [...runs].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  setPdfExport(sorted.find((r) => r.status === 'completed') ?? null);
+}
 
         if (classificationsRes.ok) {
           const json = await classificationsRes.json();
@@ -474,7 +507,59 @@ export default function DocumentAnalysisPage() {
     } finally {
       setIsStartingAnalysis(false);
     }
-  };
+    // ---- New handler ----
+const handleDownloadPdf = async () => {
+  if (!analysis) return;
+  setPdfError(null);
+
+  // Gated on both prerequisites being completed — same two-check shape
+  // File 168's own POST route enforces server-side; checked client-side
+  // too so the button can explain *why* it's disabled rather than
+  // letting the request round-trip just to 404.
+  if (classification?.status !== 'completed' || healthScore?.status !== 'completed') {
+    setPdfError(
+      'Both Clause Classification and Legal Health Score must be completed before a PDF report can be generated.',
+    );
+    return;
+  }
+
+  try {
+    let exportToDownload = pdfExport;
+
+    if (!exportToDownload) {
+      setIsGeneratingPdf(true);
+      const res = await fetch(
+        `/api/documents/${documentId}/analyses/${analysis.id}/pdf-exports`,
+        { method: 'POST', credentials: 'include' },
+      );
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      exportToDownload = json.data as PdfExport;
+      setPdfExport(exportToDownload);
+
+      if (exportToDownload.status !== 'completed') {
+        throw new Error(
+          exportToDownload.error_message ?? 'PDF generation failed for an unknown reason.',
+        );
+      }
+    }
+
+    setIsFetchingPdfUrl(true);
+    const urlRes = await fetch(
+      `/api/documents/${documentId}/analyses/${analysis.id}/pdf-exports/${exportToDownload.id}/download`,
+      { credentials: 'include' },
+    );
+    if (!urlRes.ok) throw new Error(await extractErrorMessage(urlRes));
+    const urlJson = await urlRes.json();
+    window.open(urlJson.data.url, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    setPdfError(err instanceof Error ? err.message : 'Could not download the PDF report.');
+  } finally {
+    setIsGeneratingPdf(false);
+    setIsFetchingPdfUrl(false);
+  }
+};
+  
 
   return (
     <div className="flex h-screen w-full flex-col bg-background font-sans text-foreground">
@@ -540,6 +625,36 @@ export default function DocumentAnalysisPage() {
               </p>
             )}
           </div>
+          // ---- New JSX section, placed above the Legal Health Score <section> ----
+{analysis && (
+  <div className="mx-auto flex w-full max-w-3xl items-center justify-between rounded-lg border border-border bg-card px-5 py-4">
+    <div>
+      <p className="text-[13px] font-medium text-foreground">PDF Report</p>
+      <p className="text-[12px] text-muted-foreground">
+        {pdfExport
+          ? 'A report has already been generated — download it, or regenerate for the latest data.'
+          : 'Combines Clause Classification and Legal Health Score into a downloadable PDF.'}
+      </p>
+    </div>
+    <button
+      onClick={handleDownloadPdf}
+      disabled={isGeneratingPdf || isFetchingPdfUrl}
+      className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {(isGeneratingPdf || isFetchingPdfUrl) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+      {isGeneratingPdf
+        ? 'Generating…'
+        : isFetchingPdfUrl
+          ? 'Preparing download…'
+          : pdfExport
+            ? 'Download PDF'
+            : 'Generate & Download'}
+    </button>
+  </div>
+)}
+{pdfError && (
+  <p className="mx-auto w-full max-w-3xl text-[12px] text-destructive">{pdfError}</p>
+)}
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
             {/* Legal Health Score */}
