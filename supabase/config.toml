@@ -1,0 +1,148 @@
+# ==============================================================================
+# JurisAI — Supabase CLI Project Configuration
+# ==============================================================================
+# Governs the LOCAL DEVELOPMENT stack only (what `supabase start` spins up in
+# Docker). Hosted/staging/production Supabase projects are configured via the
+# Supabase dashboard, not this file.
+#
+# This file is the infra-layer counterpart to src/core/config/env.server.ts —
+# together they define every value the app needs to talk to Supabase, split
+# by who owns each concern (CLI vs. application runtime).
+#
+# Docs: https://supabase.com/docs/guides/local-development/cli/config
+# ==============================================================================
+
+# Unique local identifier. Namespaces Docker containers/volumes so this
+# project's local stack never collides with another Supabase project running
+# on the same machine (e.g. supabase_db_jurisai vs supabase_db_some_other_app).
+project_id = "jurisai"
+
+
+# ------------------------------------------------------------------------------
+# API (PostgREST)
+# ------------------------------------------------------------------------------
+[api]
+enabled = true
+port = 54321
+# Schemas exposed over the auto-generated REST API. "public" holds
+# application tables; "graphql_public" is required for Supabase's built-in
+# GraphQL endpoint even if we primarily query via the JS client.
+schemas = ["public", "graphql_public"]
+# Extra search_path schemas PostgREST is allowed to resolve unqualified
+# table/function references against, beyond what's in `schemas`.
+extra_search_path = ["public", "extensions"]
+# Max rows a single request can return without explicit pagination — a
+# deliberate guardrail against accidental full-table dumps from client code.
+max_rows = 1000
+
+
+# ------------------------------------------------------------------------------
+# Database (Postgres)
+# ------------------------------------------------------------------------------
+[db]
+port = 54322
+shadow_port = 54320
+# Pinned major version — must match the hosted project's Postgres version so
+# migrations behave identically locally and in production.
+major_version = 15
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+
+# ------------------------------------------------------------------------------
+# Studio (local admin UI)
+# ------------------------------------------------------------------------------
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+
+# ------------------------------------------------------------------------------
+# Auth
+# ------------------------------------------------------------------------------
+[auth]
+enabled = true
+# Must match NEXT_PUBLIC_APP_URL in .env.example for local dev. Auth email
+# links (confirmation, magic link, password reset) redirect here.
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+
+# Access tokens: short-lived by design. A stolen access token should have a
+# small blast-radius window; long-lived sessions are handled via refresh
+# token rotation below, not by extending access token life.
+jwt_expiry = 3600
+
+# Refresh token rotation: each refresh token can be used exactly once. If a
+# rotated-out token is reused (a signal of token theft), the entire session
+# family is revoked. This is a deliberate security posture for a platform
+# handling legal documents, not the CLI's permissive default.
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+
+# NOTE: email confirmation is NOT configured here — `enable_confirmations`
+# is not a valid key on the top-level [auth] table (it caused a real
+# `failed to parse config` error: "'auth' has invalid keys:
+# enable_confirmations"). It's configured per-provider below instead —
+# see [auth.email] and [auth.sms].
+
+# Minimum password strength enforced server-side, independent of whatever
+# client-side validation the Auth UI later adds.
+minimum_password_length = 12
+password_requirements = "lower_upper_letters_digits_symbols"
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[auth.sms]
+# Disabled in Phase 1. Reserved for future OTP-based login/MFA, matching the
+# Twilio credentials already reserved (commented out) in .env.example.
+enable_signup = false
+enable_confirmations = false
+
+
+# ------------------------------------------------------------------------------
+# Storage
+# ------------------------------------------------------------------------------
+# Enabled now even though Phase 1 builds no Storage-backed feature yet. The
+# roadmap's Legal Vault module depends on Storage; enabling the infra today
+# means that module only requires application code later, not a config
+# change and a fresh `supabase start`.
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+
+# ------------------------------------------------------------------------------
+# Realtime
+# ------------------------------------------------------------------------------
+# Enabled now for the same forward-compatibility reason as Storage — future
+# modules (AI Chat streaming state, Notifications, live Appointment status)
+# will subscribe to Postgres changes or broadcast channels.
+[realtime]
+enabled = true
+
+
+# ------------------------------------------------------------------------------
+# Edge Functions
+# ------------------------------------------------------------------------------
+[edge_runtime]
+enabled = true
+# "oneshot" reloads a function's code on every invocation locally, so edits
+# are reflected immediately without manually restarting the runtime —
+# correct for local dev; hosted deployments are unaffected by this setting.
+policy = "oneshot"
+
+
+# ------------------------------------------------------------------------------
+# Analytics (local log drain, off by default)
+# ------------------------------------------------------------------------------
+[analytics]
+enabled = false
