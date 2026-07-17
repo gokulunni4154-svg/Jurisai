@@ -1,0 +1,35 @@
+-- ============================================================================
+-- Amendment #1 to File 140 — ai_legal_insights
+--
+-- CORRECTS a Source Verification Rule violation: File 140's original
+-- migration included a `source_modules jsonb` column, justified by its
+-- own docstring as "extending File 125's ai_recommendations.source_modules
+-- precedent from four upstream tables to seven." That precedent does not
+-- exist. File 126 (ai-recommendation.entity.ts), pasted after File 140
+-- was already presented, shows ai_recommendations has no top-level
+-- source_modules column at all — only id, document_analysis_id, status,
+-- result, provider_used, error_message, created_at, completed_at. The
+-- real per-recommendation sourceModules field lives exclusively inside
+-- result.recommendations[] (File 125, schema-layer only), never promoted
+-- to its own column.
+--
+-- File 141 (ai-legal-insight.schemas.ts) already independently arrived
+-- at the correct pattern — insightSchema.sourceModules lives inside
+-- result.insights[], schema-layer only, matching the real File 125/126
+-- precedent. Only File 140's migration-level column was wrong.
+--
+-- No index existed on source_modules specifically (only
+-- ai_legal_insights_document_analysis_id_idx and
+-- ai_legal_insights_status_idx were created in File 140), so this
+-- amendment is a single column drop with nothing else to unwind.
+--
+-- CARRIED FORWARD, still true after this amendment: File 141's
+-- insights[].sourceModules / sourceSummary retains the exact same known
+-- weakness as File 125's original — schema-layer provenance only, no
+-- database-level referential integrity back to any upstream table. This
+-- amendment does not change that; it only removes a second, redundant,
+-- and non-precedented copy of the same weakness at the migration level.
+-- ============================================================================
+
+alter table public.ai_legal_insights
+  drop column source_modules;
