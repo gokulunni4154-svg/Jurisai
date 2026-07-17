@@ -2,6 +2,8 @@
 // File 166 — JurisAI PDF Export module
 // (renumbered from the originally-planned File 165, following the new
 // pdf-export.template.tsx split — see that file's header for why)
+// AMENDMENT (File 171) — adds getDownloadUrl(), mirroring
+// DocumentService's getDownloadUrl() (Amendment #13) exactly.
 
 import 'server-only';
 
@@ -86,6 +88,13 @@ const GENERIC_FAILURE_MESSAGE =
  * in this thread beyond the one paste shown at the start of this session
  * — its requireAuthentication()/requireOwnership() signatures are used
  * below exactly as every upstream service already uses them.
+ *
+ * AMENDMENT (File 171) — adds getDownloadUrl(). See that method's own
+ * doc comment below for its reasoning; nothing about the class-level
+ * decisions above needed to change to accommodate it — it slots in as a
+ * seventh public method alongside create/list/get/run/two passthroughs,
+ * reusing getPdfExportById() and pdfExportRepository directly rather
+ * than adding an eighth constructor dependency.
  */
 export class PdfExportService extends BaseService {
   constructor(
@@ -343,6 +352,54 @@ export class PdfExportService extends BaseService {
 
       throw error;
     }
+  }
+
+  /**
+   * AMENDMENT (File 171) — new. Generates a short-lived signed download
+   * URL for a completed export's PDF. Mirrors DocumentService's
+   * getDownloadUrl() (Amendment #13) exactly, one layer over from
+   * Documents rather than a fresh design: deliberately reuses
+   * getPdfExportById()'s existing fetch-and-check sequence (analysis
+   * visibility + document_analysis_id-match, both already RLS-scoped)
+   * rather than querying the repository directly — same reasoning
+   * DocumentService.getDownloadUrl() itself documents for not delegating
+   * to getDocumentById() internally: duplicating a second, independent
+   * implementation of "is this row visible to the caller" would risk
+   * drifting from getPdfExportById()'s own definition of that same
+   * check.
+   *
+   * Throws NotFoundError — not a distinct "not ready yet" error — for a
+   * pending/processing/failed row or one with no storage_path, same
+   * shape as DocumentService.getDownloadUrl()'s soft-delete check: from
+   * the caller's point of view, a not-yet-downloadable export genuinely
+   * isn't there yet.
+   *
+   * No requireOwnership() call — same reasoning as every read method on
+   * this service: pdf_exports' RLS (File 162) already scopes reads to
+   * user_id = auth.uid(), so a non-owner's pdfExportId never resolves in
+   * the first place (findByIdOrThrow, called inside getPdfExportById(),
+   * throws NotFoundError before this method's own status check is ever
+   * reached).
+   *
+   * The repository's createSignedDownloadUrl() (File 170) is
+   * intentionally authorization-blind — it will happily sign a URL for
+   * any storage path it's given. This method is what keeps that safe:
+   * it only ever passes a storage_path that came from a row this same
+   * request already proved is both visible (survived getPdfExportById(),
+   * which is RLS-scoped) and 'completed'.
+   */
+  async getDownloadUrl(
+    rawParams: unknown,
+    analysisId: string,
+    pdfExportId: string,
+  ): Promise<string> {
+    const pdfExport = await this.getPdfExportById(rawParams, analysisId, pdfExportId);
+
+    if (pdfExport.status !== 'completed' || !pdfExport.storage_path) {
+      throw new NotFoundError('pdf_exports', pdfExportId);
+    }
+
+    return this.pdfExportRepository.createSignedDownloadUrl(pdfExport.storage_path);
   }
 }
 
