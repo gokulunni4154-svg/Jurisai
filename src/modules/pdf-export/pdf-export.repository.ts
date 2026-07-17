@@ -30,14 +30,20 @@
 // real base class otherwise, same footing as File 64's identical flag
 // for `document_analyses`.
 //
-// NOT YET ADDED: any "find existing export for this document_analysis_id"
-// lookup, even though File 162's own migration comment says a completed
-// export should be "re-downloadable without regenerating." That lookup
-// would most naturally be the Service layer (File 165) calling the
-// inherited findMany() with a filter, not a new repository method — but
-// that's a guess about File 165's shape, not confirmed. Flagging here
-// rather than adding a speculative method; raise it when File 165 is
-// built if the base findMany() filter options don't cover it.
+// AMENDMENT 1 (confirmed with the user before building File 165):
+// findByDocumentAnalysisId/findLatestByDocumentAnalysisId added below,
+// closing the gap flagged in the original version of this file. Mirrors
+// LegalHealthScoreRepository's (File 135) and ClauseClassificationRepository's
+// (File 95) identically-named, identically-shaped methods exactly — same
+// "plural by design" reasoning does NOT carry over, though: unlike those
+// two tables, nothing in File 162's migration or File 163's entity
+// suggests re-running a PDF export for the same document_analysis_id is
+// a first-class, expected occurrence the way re-running an AI pipeline
+// stage is. Both methods are still added, for symmetry with the rest of
+// the project's repositories and because findLatestByDocumentAnalysisId
+// is what File 165 needs for the "re-downloadable without regenerating"
+// read — not because multiple real exports per analysis are expected in
+// practice.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -81,6 +87,58 @@ type PdfExportRow = Database['public']['Tables']['pdf_exports']['Row'];
 export class PdfExportRepository extends BaseRepository<'pdf_exports'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'pdf_exports');
+  }
+
+  /**
+   * AMENDMENT 1: new. Returns every export run for a given analysis,
+   * most recent first. Mirrors LegalHealthScoreRepository#findByDocumentAnalysisId
+   * and ClauseClassificationRepository#findByDocumentAnalysisId exactly
+   * in shape — see the amendment note above on why plurality is kept for
+   * symmetry rather than an expected real-world occurrence.
+   */
+  async findByDocumentAnalysisId(documentAnalysisId: string): Promise<PdfExport[]> {
+    const { data, error } = await this.supabase
+      .from('pdf_exports')
+      .select('*')
+      .eq('document_analysis_id', documentAnalysisId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new DatabaseError('Failed to list pdf_exports by document_analysis_id', error, {
+        table: this.tableName,
+        documentAnalysisId,
+      });
+    }
+
+    return (data ?? []) as PdfExportRow[] as PdfExport[];
+  }
+
+  /**
+   * AMENDMENT 1: new. Returns the most recent export run for a given
+   * analysis, or null if none exists yet. This is the method File 165 is
+   * expected to use for the "is there already a completed export to
+   * re-download" read described in File 162's migration comment — mirrors
+   * LegalHealthScoreRepository#findLatestByDocumentAnalysisId and
+   * ClauseClassificationRepository#findLatestByDocumentAnalysisId exactly.
+   */
+  async findLatestByDocumentAnalysisId(documentAnalysisId: string): Promise<PdfExport | null> {
+    const { data, error } = await this.supabase
+      .from('pdf_exports')
+      .select('*')
+      .eq('document_analysis_id', documentAnalysisId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(
+        'Failed to find latest pdf_export by document_analysis_id',
+        error,
+        { table: this.tableName, documentAnalysisId },
+      );
+    }
+
+    return data ? (data as PdfExportRow as PdfExport) : null;
   }
 
   /**
