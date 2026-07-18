@@ -1,131 +1,49 @@
 // src/app/documents/[id]/page.tsx
 // File 160 — JurisAI Frontend, Phase 3
 //
-// The single-document analysis view. First page to consume the Phase 2
-// pipeline's frontend surface — staged to Clause Classification + Legal
-// Health Score only, per this session's confirmed rollout decision.
+// AMENDMENT, THIS SESSION — hearing_date view/set/change/clear UI added
+// to the header, alongside document title. Built against real,
+// source-verified dependencies from this session:
+//   - documents.schemas.ts's updateDocumentSchema: hearingDate is
+//     .optional().nullable() — omitted = untouched, null = clear, a
+//     date = set/change. This page always sends the key explicitly
+//     (never omits it) since every call here is a deliberate user
+//     action on this one field — there is no scenario on this page
+//     where hearingDate would be sent alongside an unrelated title
+//     change, so the "omit to leave untouched" case doesn't arise here.
+//   - document.service.ts's updateDocument(): returns the full updated
+//     DocumentRow, which this page uses to refresh local `doc` state
+//     directly rather than re-fetching.
+//   - route.ts (PATCH /api/documents/[id]): confirmed response shape
+//     `{ data: { document } }`, confirmed no try/catch needed around
+//     request.json() beyond this page's own existing extractErrorMessage
+//     convention (matches every other mutation on this page).
+//   - database.types.ts (regenerated, this session): documents.hearing_date
+//     is `string | null` (timestamptz, ISO string) — DocumentRow below
+//     is amended to match exactly.
 //
-// SOURCE-VERIFIED AGAINST (this session):
-//   - GET  /api/documents/[id]                                    (route.ts)
-//       -> { data: { document } }
-//   - GET  /api/documents/[id]/analyses                            (File 68)
-//       -> { data: { analyses: DocumentAnalysis[] } }, most-recent-first,
-//          NO pagination (deliberate, per File 68's own comment — a
-//          document is expected to accumulate a handful of runs, not
-//          thousands).
-//   - document-analysis.entity.ts                                  (File 63)
-//       -> DocumentAnalysis shape (id, document_id, status, ...).
-//   - GET/POST /api/documents/[id]/analyses/[analysisId]/classifications
-//       (File 98) -> GET returns { data: ClauseClassification[] } (BARE
-//       array, not nested under a key). POST returns { data:
-//       <ClauseClassification> } (single object), status 201, and BLOCKS
-//       until the run is 'completed' or 'failed' — runClassification()
-//       is awaited inline server-side (File 98's own KNOWN LIMITATION
-//       note), so this page does not poll; the POST response IS the
-//       final state.
-//   - clause-classification.entity.ts + .schemas.ts (Files 92/93)
-//       -> ClauseClassification.result.clauses[]: { category, excerpt,
-//          order, confidence }.
-//   - GET/POST /api/documents/[id]/analyses/[analysisId]/legal-health-scores
-//       (File 138) -> same bare-array (GET) / single-object (POST,
-//       status 201) shape as classifications. Also blocks until
-//       completed/failed — no polling needed here either. POST 404s
-//       with a distinctly-named resource (e.g. "risk_detections") if
-//       any of the FIVE upstream Phase 2 modules has no completed run
-//       for this analysis yet — see OPEN GAP below, this page does not
-//       pre-check those four unstaged modules itself.
-//   - legal-health-score.entity.ts + .schemas.ts (Files 132/133)
-//       -> LegalHealthScore.overall_score (number|null),
-//          .category_scores (CategoryScores|null: risk, compliance,
-//          completeness, negotiationLeverage), .result.categoryBreakdown[]
-//          (category, score, weight, rationale, contributingEvidence[]).
+// FLAGGED, NOT DRAWN FROM PRECEDENT: this project's other date displays
+// (formatRelativeTime, in File 159) show relative time ("2d ago"), not
+// this. Hearing date is a future-facing, exact date a user needs to
+// know precisely — a relative/fuzzy format would be actively unhelpful
+// here, so this uses toLocaleDateString('en-IN', ...) instead, same
+// absolute-date formatter File 159 already falls back to for anything
+// older than a week. Not a new formatting convention, reusing an
+// existing one for a different reason.
 //
-// RESOLVED, Open Item (analysis creation) — Amendment, File 161.
-// POST /api/documents/[id]/analyze (File 67, real source pasted this
-// session) is now wired to the empty state below. Confirmed from real
-// source, not assumed:
-//   - No request body — the route ignores whatever the client sends.
-//     One button, no analysis-type picker.
-//   - Blocks server-side for up to 60s (maxDuration = 60, File 67) —
-//     two sequential inline-awaited external calls (OCR, then the AI
-//     analysis call). No polling; the response IS the final state.
-//   - Response is { data: { extraction, analysis } }, status 201, EVEN
-//     when extraction or analysis failed — File 67 deliberately does
-//     not surface either as an HTTP error. `analysis` is null
-//     specifically when OCR failed (no text to analyze); a non-null
-//     `analysis` can itself still carry status 'failed'.
-//   - This route creates a DocumentAnalysis row (File 63's entity) —
-//     the same generic row File 68 lists — NOT a ClauseClassification
-//     or LegalHealthScore row. It does not pre-populate either of the
-//     two panels below; it only unblocks them from having somewhere to
-//     attach to.
+// FLAGGED, DELEGATED DECISION: uses a native <input type="date">, same
+// "no design-system date picker exists in this project yet, a native
+// control is the smallest thing that could plausibly be right" reasoning
+// File 159's own comment gives for its bare native file-picker input.
+// Revisit if a real date-picker component is built or adopted later.
 //
-// RESOLVED, NEW OPEN ITEM from Amendment/File 161 — OCRExtraction's real
-// entity (File 73) has now been pasted and confirmed. It DOES have an
-// `error_message: string | null` field, same user-safe-message
-// convention as document_analyses (File 65) — the earlier generic
-// client-side placeholder has been replaced with the real field.
-// `error_message` is nullable even on a 'failed' row in principle (the
-// entity doesn't enforce non-null on failure), so a fallback string is
-// still kept for that edge case, not removed entirely.
-//
-// RESOLVED — document-analysis.entity.ts (File 63) has now been pasted
-// and confirmed directly. This page's local `DocumentAnalysis` subset
-// (id, document_id, status, created_at, completed_at) matches the real
-// entity exactly — the real entity additionally has `result`,
-// `provider_used`, and `error_message`, all deliberately unused by this
-// page, same pattern as the local OCRExtraction subset above. No code
-// change required; confidence upgraded from inferred to source-verified.
-//
-// CORRECTED TRACKING NOTE — the folder structure's annotation on File 67
-// ("Amendment #27 applied, not independently re-verified") was stale.
-// The real File 67 pasted this session is unchanged from the Amendment
-// #25 version already built against below — no Amendment #27 exists in
-// its header or body. Confirmed by direct comparison, not assumed.
-//
-// With this, every type/response-shape dependency File 161 has on File
-// 67, File 63, and File 73 is now source-verified. What is NOT verified,
-// and can't be from this session alone: an actual run against the live
-// app (dev server, real click-through, real timeout/failure behavior).
-//
-// PARTIALLY RESOLVED, Amendment/File 161 follow-up — Legal Health
-// Score's prerequisite error now names the specific missing module by
-// its real name (Clause Classification / Risk Detection / Missing
-// Clause Detection / Compliance Detection / AI Recommendation Engine)
-// instead of a raw resource string or a generic message. Built against
-// confirmed real source (File 10's NotFoundError, File 21's
-// handleApiError, File 138's route) — see describeMissingPrerequisite()
-// above for the exact contract this depends on and why it's parsed from
-// `message` rather than a structured field (there isn't one; File 10's
-// toJSON() deliberately excludes `context`, and all five checks share
-// the identical statusCode/code).
-//
-// STILL OPEN, NOT SOLVED BY THIS AMENDMENT — Risk Detection, Missing
-// Clause Detection, Compliance Detection, and AI Recommendation Engine
-// still have no trigger anywhere on this page (only Clause
-// Classification does, alongside Legal Health Score itself). Naming the
-// missing module accurately doesn't let the user act on it for those
-// four — the message says so explicitly rather than implying a button
-// exists. Actually closing this requires wiring those four modules in
-// (the "expand to remaining 5 analysis types" option raised earlier,
-// scoped down to 4 now that Clause Classification is already handled).
-//
-// ASSUMPTION, not yet confirmed — route placement. Follows File
-// 158/159's own established assumption (client-side fetch, credentials
-// included, no shared data-fetching hook) since none has been
-// established elsewhere in the project.
-//
-// RESOLVED, Open Item #31 — CATEGORY_LABELS below is keyed snake_case
-// ("negotiation_leverage") deliberately, and this is confirmed correct:
-// legal-health-score.schemas.ts (Files 132/133) shows
-// result.categoryBreakdown[].category is typed against the snake_case
-// LegalHealthCategory enum, while the flat category_scores column is
-// separately typed camelCase (categoryScoresSchema). The two structures
-// genuinely use different casing for the same concept — this file
-// already handles that correctly: CATEGORY_LABELS (snake_case) for the
-// categoryBreakdown lookup below, and an inline camelCase check
-// ("negotiationLeverage") for the category_scores grid above it. No
-// change made here; confirmed against real source, not guessed.
+// FLAGGED: an empty-string input clears the hearing date (sends
+// `hearingDate: null`), rather than being treated as "no change" and
+// silently ignored. This is a UI-level choice, not dictated by the
+// schema — the schema's "omit to leave untouched" affordance isn't
+// reachable from this page's UI at all, since this page never sends a
+// hearingDate-omitted PATCH. Worth knowing if a future requirement wants
+// a true three-way UI ("leave as-is" as a distinct, selectable action).
 
 'use client';
 
@@ -141,6 +59,7 @@ import {
   ListChecks,
   Scale,
   Play,
+  CalendarClock,
 } from 'lucide-react';
 
 // ---- Shapes, source-verified against the entities/schemas listed above ----
@@ -151,6 +70,9 @@ interface DocumentRow {
   mime_type: string;
   size_bytes: number;
   created_at: string;
+  // NEW, THIS SESSION — matches database.types.ts's regenerated
+  // documents.Row.hearing_date exactly (timestamptz -> string | null).
+  hearing_date: string | null;
 }
 
 type DocumentAnalysisStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -256,6 +178,30 @@ async function extractErrorMessage(res: Response): Promise<string> {
     return `Request failed with status ${res.status}`;
   }
 }
+
+// NEW, THIS SESSION — formats hearing_date's real ISO string (timestamptz)
+// as a plain date, deliberately not relative time. See file-level comment
+// above for why this differs from File 159's formatRelativeTime.
+function formatHearingDate(isoString: string): string {
+  return new Date(isoString).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+// NEW, THIS SESSION — converts hearing_date's real ISO string into the
+// `YYYY-MM-DD` shape <input type="date"> requires as its `value`. Takes
+// only the date portion (first 10 characters of an ISO timestamptz
+// string) — deliberately not timezone-adjusted, since the hearing_date
+// column stores a point in time and this page has no stated requirement
+// yet for which timezone a "hearing date" should be interpreted in. This
+// is a UI-level simplification, not something confirmed against a real
+// product decision — flagged, not silently assumed correct for every case.
+function isoToDateInputValue(isoString: string): string {
+  return isoString.slice(0, 10);
+}
+
 // ---- New type, alongside LegalHealthScore etc. ----
 type PdfExportStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -331,11 +277,17 @@ export default function DocumentAnalysisPage() {
   const [startAnalysisError, setStartAnalysisError] = useState<string | null>(null);
 
   const [pdfExport, setPdfExport] = useState<PdfExport | null>(null);
-const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-const [isFetchingPdfUrl, setIsFetchingPdfUrl] = useState(false);
-const [pdfError, setPdfError] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isFetchingPdfUrl, setIsFetchingPdfUrl] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
-
+  // NEW, THIS SESSION — hearing_date view/edit state. Mirrors the
+  // isEditing/isSaving/error state shape already used for every other
+  // mutation on this page (classification, health score, PDF).
+  const [isEditingHearingDate, setIsEditingHearingDate] = useState(false);
+  const [hearingDateInput, setHearingDateInput] = useState('');
+  const [isSavingHearingDate, setIsSavingHearingDate] = useState(false);
+  const [hearingDateError, setHearingDateError] = useState<string | null>(null);
 
   const loadEverything = useCallback(async () => {
     setIsLoading(true);
@@ -363,22 +315,22 @@ const [pdfError, setPdfError] = useState<string | null>(null);
           fetch(`/api/documents/${documentId}/analyses/${latest.id}/legal-health-scores`, {
             credentials: 'include',
           }),
-          
         ]);
         const pdfExportsRes = await fetch(
-  `/api/documents/${documentId}/analyses/${latest.id}/pdf-exports`,
-  { credentials: 'include' },
-);if (pdfExportsRes.ok) {
-  const json = await pdfExportsRes.json();
-  const runs: PdfExport[] = json.data;
-  // Sorted client-side, same reasoning as Open Item #32 already applies
-  // to classification/healthScore above — API ordering isn't re-verified
-  // for this endpoint either.
-  const sorted = [...runs].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
-  setPdfExport(sorted.find((r) => r.status === 'completed') ?? null);
-}
+          `/api/documents/${documentId}/analyses/${latest.id}/pdf-exports`,
+          { credentials: 'include' },
+        );
+        if (pdfExportsRes.ok) {
+          const json = await pdfExportsRes.json();
+          const runs: PdfExport[] = json.data;
+          // Sorted client-side, same reasoning as Open Item #32 already applies
+          // to classification/healthScore above — API ordering isn't re-verified
+          // for this endpoint either.
+          const sorted = [...runs].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          );
+          setPdfExport(sorted.find((r) => r.status === 'completed') ?? null);
+        }
 
         if (classificationsRes.ok) {
           const json = await classificationsRes.json();
@@ -509,10 +461,6 @@ const [pdfError, setPdfError] = useState<string | null>(null);
     }
   };
 
-  // BUGFIX (File 173, verification pass): originally pasted nested inside
-  // handleStartAnalysis, above — out of scope for the JSX below, which
-  // would have failed to compile ("Cannot find name 'handleDownloadPdf'").
-  // Moved to component scope, as a sibling of every other handler.
   const handleDownloadPdf = async () => {
     if (!analysis) return;
     setPdfError(null);
@@ -565,6 +513,46 @@ const [pdfError, setPdfError] = useState<string | null>(null);
     }
   };
 
+  // NEW, THIS SESSION — enters edit mode, seeding the input from doc's
+  // real current hearing_date (converted to <input type="date">'s
+  // required YYYY-MM-DD shape) or empty if none is set yet.
+  const handleStartEditHearingDate = () => {
+    setHearingDateError(null);
+    setHearingDateInput(doc?.hearing_date ? isoToDateInputValue(doc.hearing_date) : '');
+    setIsEditingHearingDate(true);
+  };
+
+  // NEW, THIS SESSION — PATCH /api/documents/[id] with hearingDate always
+  // present as a key (never omitted): a real date string if the input has
+  // a value, or `null` if the input was cleared. Both are legitimate,
+  // deliberate states per updateDocumentSchema — this handler covers
+  // set/change AND clear in one path, since the only difference is what
+  // the input field currently holds.
+  const handleSaveHearingDate = async () => {
+    setIsSavingHearingDate(true);
+    setHearingDateError(null);
+    try {
+      const res = await fetch(`/api/documents/${documentId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hearingDate: hearingDateInput === '' ? null : hearingDateInput,
+        }),
+      });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      setDoc(json.data.document);
+      setIsEditingHearingDate(false);
+    } catch (err) {
+      setHearingDateError(
+        err instanceof Error ? err.message : 'Could not update the hearing date.',
+      );
+    } finally {
+      setIsSavingHearingDate(false);
+    }
+  };
+
   return (
     <div className="flex h-screen w-full flex-col bg-background font-sans text-foreground">
       <header className="flex items-center gap-4 border-b border-border px-8 py-6">
@@ -582,6 +570,58 @@ const [pdfError, setPdfError] = useState<string | null>(null);
           <h1 className="truncate font-serif text-[24px] leading-none text-foreground">
             {doc?.title ?? (isLoading ? 'Loading…' : 'Document')}
           </h1>
+
+          {/* NEW, THIS SESSION — hearing date view/edit, only rendered
+              once the document has actually loaded. */}
+          {doc && (
+            <div className="mt-2 flex items-center gap-2">
+              <CalendarClock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+              {isEditingHearingDate ? (
+                <>
+                  <input
+                    type="date"
+                    value={hearingDateInput}
+                    onChange={(e) => setHearingDateInput(e.target.value)}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-[12px] text-foreground focus:outline-none"
+                  />
+                  <button
+                    onClick={handleSaveHearingDate}
+                    disabled={isSavingHearingDate}
+                    className="text-[12px] font-medium text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingHearingDate ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditingHearingDate(false);
+                      setHearingDateError(null);
+                    }}
+                    disabled={isSavingHearingDate}
+                    className="text-[12px] text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-[12px] text-muted-foreground">
+                    {doc.hearing_date
+                      ? `Hearing date: ${formatHearingDate(doc.hearing_date)}`
+                      : 'No hearing date set'}
+                  </span>
+                  <button
+                    onClick={handleStartEditHearingDate}
+                    className="text-[12px] font-medium text-primary underline underline-offset-2"
+                  >
+                    {doc.hearing_date ? 'Change' : 'Set date'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {hearingDateError && (
+            <p className="mt-1 text-[12px] text-destructive">{hearingDateError}</p>
+          )}
         </div>
       </header>
 
@@ -631,16 +671,6 @@ const [pdfError, setPdfError] = useState<string | null>(null);
           </div>
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
-            {/* BUGFIX (File 173, verification pass): this PDF Report card
-                was originally pasted inside the `!analysis` empty-state
-                branch above, as a sibling `{analysis && (...)}` block —
-                that was both invalid JSX (multiple adjacent expressions
-                inside one parenthesized ternary arm) and dead code even
-                if it had compiled, since `analysis` is guaranteed falsy
-                inside that branch. Moved here, to the top of the branch
-                that only renders once `analysis` actually exists, per
-                this document's own "placed above the Legal Health Score
-                section" intent. */}
             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-5 py-4">
               <div>
                 <p className="text-[13px] font-medium text-foreground">PDF Report</p>

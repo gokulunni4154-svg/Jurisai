@@ -1,55 +1,33 @@
 // src/app/documents/page.tsx
 // File 159 — JurisAI Frontend, Phase 3
 //
-// Same Documents list as File 158, with the upload control wired to a
-// real path. This is the first file to consume
-// src/core/storage/document-upload.ts (this session) and it closes
-// Carried-Forward Open Item #28.
+// AMENDMENT, THIS SESSION:
+//   - Document row buttons previously had no onClick at all — clicking a
+//     document did nothing. Now navigates to /documents/[id] (File 160,
+//     confirmed real and already built this session's prior turns).
+//   - The Bell button in the left rail previously had no onClick and no
+//     badge — purely decorative. Now opens the new NotificationsPanel
+//     (src/shared/components/notifications/notifications-panel.tsx, new
+//     this session) and shows an unread-count badge, sourced from
+//     GET /api/notifications (confirmed real response shape this
+//     session — see notifications-panel.tsx's own header comment for the
+//     full source-verification trail).
 //
-// SOURCE-VERIFIED AGAINST (this session):
-//   - src/core/storage/document-upload.ts — uploadDocument(file, title)
-//     is the exact signature called below. Its return shape
-//     (UploadedDocument) matches this file's own DocumentRow interface
-//     field-for-field (id, title, mime_type, size_bytes, storage_path,
-//     owner_id, deleted_at, created_at, updated_at), so the new document
-//     can be prepended to local state directly, with no shape mapping.
-//   - documents.schemas.ts — ALLOWED_MIME_TYPES and MAX_FILE_SIZE_BYTES
-//     both already enforced inside uploadDocument() itself, so this page
-//     does not duplicate that validation — it only surfaces whatever
-//     UploadValidationError message comes back.
-//
-// CHANGED FROM FILE 158:
-//   - Upload button is no longer disabled. Tooltip explaining the gap
-//     is removed since the gap it described (no upload path) is closed.
-//   - Clicking Upload opens the native file picker directly (hidden
-//     <input type="file">) rather than a custom modal — no upload-modal
-//     design exists yet from any prior session, and a bare file picker
-//     is the smallest thing that could plausibly be right. If a design
-//     system component for this exists or gets built later, this should
-//     be revisited rather than treated as final.
-//   - Title is taken from the filename (extension stripped) with no
-//     rename-before-upload step. Same reasoning: no title-entry UI has
-//     been designed. Flagged as a real product gap, not hidden — a user
-//     who wants a different title currently has to rename after upload
-//     via the (separately existing) title-only updateDocumentSchema
-//     path, which this page does not yet expose either.
-//   - New document is prepended to local `documents` state and `total`
-//     is incremented by 1 on success, rather than refetching page 0.
-//     This can drift from server truth if another tab/session also
-//     modified the list concurrently — acceptable for a single-user
-//     MVP flow, flagged as a real gap if multi-tab/session use becomes
-//     a real scenario.
-//
-// STILL OPEN, NOT ADDRESSED HERE (see Open Item #29, this session):
-//   Orphaned Storage objects on upload-succeeds/metadata-POST-fails are
-//   possible via uploadDocument() and are NOT cleaned up or retried by
-//   this page — the raw error from uploadDocument() is just shown to
-//   the user, who can retry manually. Accepted gap, same class as File
-//   48's TOCTOU note.
+// FLAGGED: the unread count is only fetched once the panel has been
+// opened at least once (NotificationsPanel's own fetch is gated on
+// `isOpen`) — there is no independent "check for unread notifications on
+// page load" call here. This means the badge shows 0/hidden until the
+// user opens the panel for the first time in a given page load, not a
+// true "you have unread notifications" indicator from the moment the
+// page mounts. Flagged as a real, deliberate scope-narrowing (avoids a
+// second, redundant fetch pattern/polling design this session hasn't
+// been asked to build), not an oversight — revisit if "notify without
+// opening" becomes a real requirement.
 
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Search,
   Upload,
@@ -65,6 +43,7 @@ import {
   Inbox,
 } from 'lucide-react';
 import { uploadDocument, UploadValidationError } from '@/core/storage/document-upload';
+import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
 
 interface DocumentRow {
   id: string;
@@ -123,6 +102,8 @@ function titleFromFilename(filename: string): string {
 }
 
 export default function DocumentsPage() {
+  const router = useRouter();
+
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -133,6 +114,10 @@ export default function DocumentsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // NEW, THIS SESSION — notifications panel open/closed + unread badge.
+  const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchDocuments = useCallback(async (nextOffset: number) => {
     setIsLoading(true);
@@ -202,7 +187,7 @@ export default function DocumentsPage() {
   const hasPrevPage = offset > 0;
 
   return (
-    <div className="flex h-screen w-full bg-background font-sans text-foreground">
+    <div className="relative flex h-screen w-full bg-background font-sans text-foreground">
       {/* Left rail */}
       <aside className="flex w-16 flex-col items-center bg-primary py-5">
         <div className="mb-8 flex h-9 w-9 items-center justify-center rounded-md bg-primary-foreground/15">
@@ -216,11 +201,21 @@ export default function DocumentsPage() {
           >
             <FolderOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </button>
+          {/* AMENDED, THIS SESSION — was purely decorative (no onClick,
+              no badge). Now opens NotificationsPanel and shows an
+              unread-count badge. */}
           <button
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/40"
+            onClick={() => setIsNotificationsPanelOpen((prev) => !prev)}
+            className="relative flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
             aria-label="Notifications"
+            aria-expanded={isNotificationsPanelOpen}
           >
             <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
+            {unreadCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-none text-destructive-foreground">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
           <button
             className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/40"
@@ -230,6 +225,13 @@ export default function DocumentsPage() {
           </button>
         </nav>
       </aside>
+
+      {/* NEW, THIS SESSION */}
+      <NotificationsPanel
+        isOpen={isNotificationsPanelOpen}
+        onClose={() => setIsNotificationsPanelOpen(false)}
+        onUnreadCountChange={setUnreadCount}
+      />
 
       {/* Main column */}
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -322,6 +324,7 @@ export default function DocumentsPage() {
                 {filtered.map((doc) => (
                   <button
                     key={doc.id}
+                    onClick={() => router.push(`/documents/${doc.id}`)}
                     className="group flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">

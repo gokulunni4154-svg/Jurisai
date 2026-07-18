@@ -1,5 +1,7 @@
 import { getCurrentUser } from '@/core/auth/session';
 import { createClient } from '@/core/supabase/server';
+import { NotificationRepository } from '@/modules/notifications/notification.repository';
+import { NotificationService } from '@/modules/notifications/notification.service';
 
 import { DocumentRepository } from './document.repository';
 import { DocumentService } from './document.service';
@@ -27,11 +29,30 @@ import { DocumentService } from './document.service';
  * RLS-bypassing client here would silently turn every caller into an
  * admin for read purposes, defeating the model this module was built
  * around.
+ *
+ * NEW, AMENDMENT #14 — DocumentService now also needs a NotificationService
+ * (to fire the immediate 'hearing_date_set' notification from
+ * updateDocument()). Inline-constructed here, sharing this factory's
+ * SAME currentUser and SAME supabase client instances, rather than
+ * calling buildNotificationService() — this follows the unanimous
+ * inline-construction precedent this project has used since File 105
+ * (most recently pdf-export.factory.ts's inline construction of
+ * LegalHealthScoreService and its own sibling graph), not a new pattern
+ * introduced here. Sharing the same currentUser/supabase instances
+ * (rather than each factory independently re-resolving them) means
+ * DocumentService and the NotificationService it calls internally are
+ * guaranteed to be acting as the exact same request-scoped actor — there
+ * is no scenario where updateDocument()'s notification gets created
+ * under a different identity than the update itself.
  */
 export async function buildDocumentService(): Promise<DocumentService> {
   const currentUser = await getCurrentUser();
   const supabase = await createClient();
 
   const documentRepository = new DocumentRepository(supabase);
-  return new DocumentService(currentUser, documentRepository);
+
+  const notificationRepository = new NotificationRepository(supabase);
+  const notificationService = new NotificationService(currentUser, notificationRepository);
+
+  return new DocumentService(currentUser, documentRepository, notificationService);
 }
