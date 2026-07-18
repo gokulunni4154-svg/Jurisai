@@ -1,6 +1,11 @@
 // src/modules/documents/document.service.ts
 // File 48 — JurisAI Legal Vault module
 // Amendment #13: added getDownloadUrl() for the download route (File 57).
+// Amendment #14: updateDocument() now accepts an optional hearingDate
+// field and fires an immediate 'hearing_date_set' Notification when it
+// changes to a real (non-null) value. Built against real
+// documents.schemas.ts (this session's amendment) and the real
+// Notifications module (Files 176-180).
 
 import 'server-only';
 
@@ -8,6 +13,7 @@ import type { AuthUser } from '@/core/auth/types';
 import { AuthorizationError, NotFoundError } from '@/core/errors/app-error';
 import { BaseService } from '@/core/services/base.service';
 import type { Database } from '@/core/supabase/database.types';
+import type { NotificationService } from '@/modules/notifications/notification.service';
 
 import type { DocumentRepository } from './document.repository';
 import {
@@ -64,6 +70,13 @@ export interface ListDocumentsResult {
  * either, even though the underlying Storage object still physically
  * exists (soft-delete only marks the DB row, per File 47's delete()).
  *
+ * NEW, AMENDMENT #14 — this Service now depends on NotificationService,
+ * a cross-module dependency (Documents -> Notifications), same shape as
+ * PdfExportService's dependency on DocumentService/ClassificationService/
+ * LegalHealthScoreService — not a new architectural pattern for this
+ * project, just the first time Documents itself has depended on
+ * something outside its own module.
+ *
  * OPEN GAP, flagged rather than silently assumed away: File 45's storage
  * path convention is `{owner_id}/{document_id}/{filename}`, but the
  * `document_id` path segment and the DB row's actual (Postgres-generated)
@@ -83,11 +96,29 @@ export interface ListDocumentsResult {
  * is no concurrent multi-actor write scenario yet. Revisit if/when
  * Law Firm/Business Dashboard multi-tenant ownership lands (see
  * BaseService#requireOwnership's own documented limitation).
+ *
+ * NEW LIMITATION, SAME CLASS AS ABOVE, FLAGGED NOT SOLVED — Amendment
+ * #14's updateDocument() now does repository.update() THEN, as a
+ * separate step, notificationService.createNotification(). These two
+ * writes are not transactional either: if the document update succeeds
+ * but notification creation throws, the hearing_date change persists
+ * with no notification ever created, and the thrown error propagates to
+ * the caller as if the whole request failed — a misleading signal, since
+ * part of it (the actual data change) did succeed. Same "accepted, not
+ * solved" posture as the orphaned-Storage-object risk documented
+ * elsewhere in this project (document-upload.ts, File 166's
+ * runPdfExport) — not fixed here, since fixing it would mean either a
+ * real Postgres transaction spanning two different repository writes
+ * (no precedent for that in this codebase) or a best-effort
+ * try/catch-and-log around the notification call (which this project
+ * has no established convention for either). Flagged for a future
+ * session, not resolved.
  */
 export class DocumentService extends BaseService {
   constructor(
     currentUser: AuthUser | null,
     private readonly documentRepository: DocumentRepository,
+    private readonly notificationService: NotificationService,
   ) {
     super(currentUser);
   }
@@ -194,13 +225,36 @@ export class DocumentService extends BaseService {
   }
 
   /**
-   * Updates a document's title. Owner-only (see class-level doc comment
-   * on why there's no admin override here). A soft-deleted document
-   * cannot be updated — must be treated as gone, not as an editable
-   * trash entry.
+   * Updates a document. Owner-only (see class-level doc comment on why
+   * there's no admin override here). A soft-deleted document cannot be
+   * updated — must be treated as gone, not as an editable trash entry.
+   *
+   * AMENDED, THIS SESSION — now a genuine partial update (see
+   * updateDocumentSchema's own amended doc comment): only fields
+   * actually present in the parsed input are written. `title` behaves
+   * as before. `hearingDate` is new:
+   * - Omitted entirely from the input -> untouched, not included in the
+   *   repository update payload at all.
+   * - Sent as `null` -> hearing_date is cleared. Deliberately does NOT
+   *   fire a notification — "clear" isn't "set/change", and the
+   *   scoped feature never asked for a "hearing date removed"
+   *   notification. Flagged as a scoping call, not drawn from an
+   *   explicit requirement either way.
+   * - Sent as a real date -> hearing_date is written, and if the new
+   *   value actually differs from the row's existing hearing_date (not
+   *   just "the field was present" — resending the same date is not
+   *   treated as a change), a 'hearing_date_set' Notification is
+   *   created via NotificationService, addressed to the current user,
+   *   snapshotting the new hearing_date value (this is what makes the
+   *   future cron job's dedup check, per NotificationRepository's own
+   *   doc comment, actually work).
+   *
+   * See class-level doc comment for the accepted, not-solved
+   * non-transactional risk between the repository update and the
+   * notification creation below.
    */
   async updateDocument(rawParams: unknown, rawInput: unknown): Promise<DocumentRow> {
-    this.requireAuthentication();
+    const user = this.requireAuthentication();
     const { id } = documentIdParamSchema.parse(rawParams);
     const input = updateDocumentSchema.parse(rawInput);
 
@@ -212,7 +266,41 @@ export class DocumentService extends BaseService {
 
     this.requireOwnership(existing.owner_id);
 
-    return this.documentRepository.update(id, { title: input.title });
+    const updatePayload: { title?: string; hearing_date?: string | null } = {};
+
+    if (input.title !== undefined) {
+      updatePayload.title = input.title;
+    }
+
+    // 'hearingDate' in input distinguishes "field omitted" (key absent
+    // after Zod's .optional() parsing) from "field sent as null" — see
+    // documentHearingDateSchema's doc comment in documents.schemas.ts
+    // for why this check, not a truthiness check, is required here.
+    const hearingDateFieldPresent = 'hearingDate' in input;
+    let newHearingDateIso: string | null = existing.hearing_date;
+
+    if (hearingDateFieldPresent) {
+      newHearingDateIso = input.hearingDate === null ? null : input.hearingDate.toISOString();
+      updatePayload.hearing_date = newHearingDateIso;
+    }
+
+    const updated = await this.documentRepository.update(id, updatePayload);
+
+    const hearingDateActuallyChanged =
+      hearingDateFieldPresent && newHearingDateIso !== existing.hearing_date;
+
+    if (hearingDateActuallyChanged && newHearingDateIso !== null) {
+      await this.notificationService.createNotification({
+        userId: user.id,
+        documentId: id,
+        type: 'hearing_date_set',
+        title: 'Hearing date set',
+        message: `A hearing date was set for "${updated.title}".`,
+        hearingDateSnapshot: newHearingDateIso,
+      });
+    }
+
+    return updated;
   }
 
   /**

@@ -77,6 +77,20 @@ export const documentStoragePathSchema = z
   );
 
 /**
+ * Must match `documents.hearing_date` (nullable timestamptz, migration
+ * 20260725000000_add_hearing_date_to_documents.sql, File 174). Nullable
+ * so an update payload can explicitly clear a previously-set hearing
+ * date, not just set/change one -- `null` and "field omitted entirely"
+ * are two different, both-meaningful states on a PATCH, which is why
+ * this is `.nullable()` here but made `.optional()` only at the point
+ * updateDocumentSchema uses it below, not here. `z.coerce.date()`
+ * matches hearing_date_snapshot's real validation in
+ * notifications.schemas.ts (File 177), for consistency between the two
+ * places a hearing_date-shaped value gets validated in this project.
+ */
+export const documentHearingDateSchema = z.coerce.date().nullable();
+
+/**
  * Payload validated after a file has already been uploaded to Storage
  * (by the future upload route/service), immediately before inserting the
  * corresponding public.documents row. Every field here is meant to be
@@ -97,19 +111,56 @@ export const createDocumentSchema = z
 export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;
 
 /**
- * Only `title` is mutable after upload. storage_path, mime_type, and
- * size_bytes describe the physical file itself -- changing any of them
- * without re-uploading would desync the metadata row from the actual
- * Storage object, so none of them belong in an update payload. Replacing
- * a document's content is modeled as delete-and-reupload, not an update,
- * to keep that invariant simple rather than needing a partial-re-upload
- * flow.
+ * `title` and `hearingDate` are the only mutable fields after upload.
+ * storage_path, mime_type, and size_bytes describe the physical file
+ * itself -- changing any of them without re-uploading would desync the
+ * metadata row from the actual Storage object, so none of them belong
+ * in an update payload. Replacing a document's content is modeled as
+ * delete-and-reupload, not an update, to keep that invariant simple
+ * rather than needing a partial-re-upload flow. hearing_date is a
+ * different kind of field -- it describes a court/hearing date
+ * associated with the document, not the document's own physical
+ * content -- so this same "physical-file-field" rationale for excluding
+ * storage_path/mime_type/size_bytes does not apply to it, and it is
+ * deliberately included here. (This comment previously said only title
+ * was mutable; that statement is now stale and has been corrected here,
+ * not silently left inconsistent with the schema below.)
+ *
+ * BOTH FIELDS ARE OPTIONAL -- a deliberate change from this schema's
+ * prior shape, where title was required simply because it was the only
+ * mutable field, not because full-payload-on-every-update was an
+ * intentional PATCH design. With two mutable fields, forcing a client
+ * to resend title just to set a hearing date (or vice versa) would be
+ * poor API design, so this is now a genuine partial update: send only
+ * the field(s) you want to change. The `.refine()` below rejects a
+ * payload with neither field present, since that would be a meaningless
+ * no-op PATCH. hearingDate's three real states -- omitted (leave
+ * unchanged), null (clear it), a date (set/change it) -- are all
+ * distinguishable after parsing: Zod's `.optional()` omits the key
+ * entirely from the parsed result when the client doesn't send it,
+ * rather than setting it to `undefined` as an own-property, so the
+ * future document.service.ts amendment can check
+ * `'hearingDate' in input` to tell "not sent" apart from "sent as
+ * null." Flagged here since that distinction only matters once the
+ * Service layer consumes it, which is not this file's job -- not built
+ * or verified yet.
+ *
+ * FLAGGED, DELEGATED DECISION, NOT DRAWN FROM PRECEDENT: no other schema
+ * in this project does a "require at least one of N optional fields"
+ * check via `.refine()`. This is a reasonable pattern, not a confirmed
+ * one -- if a different partial-update convention already exists
+ * elsewhere in the real codebase (unseen so far), this should match it
+ * instead.
  */
 export const updateDocumentSchema = z
   .object({
-    title: documentTitleSchema,
+    title: documentTitleSchema.optional(),
+    hearingDate: documentHearingDateSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((data) => data.title !== undefined || data.hearingDate !== undefined, {
+    message: 'At least one field (title or hearingDate) must be provided.',
+  });
 
 export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;
 
