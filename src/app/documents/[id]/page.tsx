@@ -507,59 +507,63 @@ const [pdfError, setPdfError] = useState<string | null>(null);
     } finally {
       setIsStartingAnalysis(false);
     }
-    // ---- New handler ----
-const handleDownloadPdf = async () => {
-  if (!analysis) return;
-  setPdfError(null);
+  };
 
-  // Gated on both prerequisites being completed — same two-check shape
-  // File 168's own POST route enforces server-side; checked client-side
-  // too so the button can explain *why* it's disabled rather than
-  // letting the request round-trip just to 404.
-  if (classification?.status !== 'completed' || healthScore?.status !== 'completed') {
-    setPdfError(
-      'Both Clause Classification and Legal Health Score must be completed before a PDF report can be generated.',
-    );
-    return;
-  }
+  // BUGFIX (File 173, verification pass): originally pasted nested inside
+  // handleStartAnalysis, above — out of scope for the JSX below, which
+  // would have failed to compile ("Cannot find name 'handleDownloadPdf'").
+  // Moved to component scope, as a sibling of every other handler.
+  const handleDownloadPdf = async () => {
+    if (!analysis) return;
+    setPdfError(null);
 
-  try {
-    let exportToDownload = pdfExport;
-
-    if (!exportToDownload) {
-      setIsGeneratingPdf(true);
-      const res = await fetch(
-        `/api/documents/${documentId}/analyses/${analysis.id}/pdf-exports`,
-        { method: 'POST', credentials: 'include' },
+    // Gated on both prerequisites being completed — same two-check shape
+    // File 168's own POST route enforces server-side; checked client-side
+    // too so the button can explain *why* it's disabled rather than
+    // letting the request round-trip just to 404.
+    if (classification?.status !== 'completed' || healthScore?.status !== 'completed') {
+      setPdfError(
+        'Both Clause Classification and Legal Health Score must be completed before a PDF report can be generated.',
       );
-      if (!res.ok) throw new Error(await extractErrorMessage(res));
-      const json = await res.json();
-      exportToDownload = json.data as PdfExport;
-      setPdfExport(exportToDownload);
-
-      if (exportToDownload.status !== 'completed') {
-        throw new Error(
-          exportToDownload.error_message ?? 'PDF generation failed for an unknown reason.',
-        );
-      }
+      return;
     }
 
-    setIsFetchingPdfUrl(true);
-    const urlRes = await fetch(
-      `/api/documents/${documentId}/analyses/${analysis.id}/pdf-exports/${exportToDownload.id}/download`,
-      { credentials: 'include' },
-    );
-    if (!urlRes.ok) throw new Error(await extractErrorMessage(urlRes));
-    const urlJson = await urlRes.json();
-    window.open(urlJson.data.url, '_blank', 'noopener,noreferrer');
-  } catch (err) {
-    setPdfError(err instanceof Error ? err.message : 'Could not download the PDF report.');
-  } finally {
-    setIsGeneratingPdf(false);
-    setIsFetchingPdfUrl(false);
-  }
-};
-  
+    try {
+      let exportToDownload = pdfExport;
+
+      if (!exportToDownload) {
+        setIsGeneratingPdf(true);
+        const res = await fetch(
+          `/api/documents/${documentId}/analyses/${analysis.id}/pdf-exports`,
+          { method: 'POST', credentials: 'include' },
+        );
+        if (!res.ok) throw new Error(await extractErrorMessage(res));
+        const json = await res.json();
+        exportToDownload = json.data as PdfExport;
+        setPdfExport(exportToDownload);
+
+        if (exportToDownload.status !== 'completed') {
+          throw new Error(
+            exportToDownload.error_message ?? 'PDF generation failed for an unknown reason.',
+          );
+        }
+      }
+
+      setIsFetchingPdfUrl(true);
+      const urlRes = await fetch(
+        `/api/documents/${documentId}/analyses/${analysis.id}/pdf-exports/${exportToDownload.id}/download`,
+        { credentials: 'include' },
+      );
+      if (!urlRes.ok) throw new Error(await extractErrorMessage(urlRes));
+      const urlJson = await urlRes.json();
+      window.open(urlJson.data.url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : 'Could not download the PDF report.');
+    } finally {
+      setIsGeneratingPdf(false);
+      setIsFetchingPdfUrl(false);
+    }
+  };
 
   return (
     <div className="flex h-screen w-full flex-col bg-background font-sans text-foreground">
@@ -625,38 +629,48 @@ const handleDownloadPdf = async () => {
               </p>
             )}
           </div>
-          // ---- New JSX section, placed above the Legal Health Score <section> ----
-{analysis && (
-  <div className="mx-auto flex w-full max-w-3xl items-center justify-between rounded-lg border border-border bg-card px-5 py-4">
-    <div>
-      <p className="text-[13px] font-medium text-foreground">PDF Report</p>
-      <p className="text-[12px] text-muted-foreground">
-        {pdfExport
-          ? 'A report has already been generated — download it, or regenerate for the latest data.'
-          : 'Combines Clause Classification and Legal Health Score into a downloadable PDF.'}
-      </p>
-    </div>
-    <button
-      onClick={handleDownloadPdf}
-      disabled={isGeneratingPdf || isFetchingPdfUrl}
-      className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {(isGeneratingPdf || isFetchingPdfUrl) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-      {isGeneratingPdf
-        ? 'Generating…'
-        : isFetchingPdfUrl
-          ? 'Preparing download…'
-          : pdfExport
-            ? 'Download PDF'
-            : 'Generate & Download'}
-    </button>
-  </div>
-)}
-{pdfError && (
-  <p className="mx-auto w-full max-w-3xl text-[12px] text-destructive">{pdfError}</p>
-)}
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
+            {/* BUGFIX (File 173, verification pass): this PDF Report card
+                was originally pasted inside the `!analysis` empty-state
+                branch above, as a sibling `{analysis && (...)}` block —
+                that was both invalid JSX (multiple adjacent expressions
+                inside one parenthesized ternary arm) and dead code even
+                if it had compiled, since `analysis` is guaranteed falsy
+                inside that branch. Moved here, to the top of the branch
+                that only renders once `analysis` actually exists, per
+                this document's own "placed above the Legal Health Score
+                section" intent. */}
+            <div className="flex items-center justify-between rounded-lg border border-border bg-card px-5 py-4">
+              <div>
+                <p className="text-[13px] font-medium text-foreground">PDF Report</p>
+                <p className="text-[12px] text-muted-foreground">
+                  {pdfExport
+                    ? 'A report has already been generated — download it, or regenerate for the latest data.'
+                    : 'Combines Clause Classification and Legal Health Score into a downloadable PDF.'}
+                </p>
+              </div>
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isGeneratingPdf || isFetchingPdfUrl}
+                className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {(isGeneratingPdf || isFetchingPdfUrl) && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                {isGeneratingPdf
+                  ? 'Generating…'
+                  : isFetchingPdfUrl
+                    ? 'Preparing download…'
+                    : pdfExport
+                      ? 'Download PDF'
+                      : 'Generate & Download'}
+              </button>
+            </div>
+            {pdfError && (
+              <p className="text-[12px] text-destructive">{pdfError}</p>
+            )}
+
             {/* Legal Health Score */}
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
