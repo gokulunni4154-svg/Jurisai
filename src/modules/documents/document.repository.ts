@@ -1,6 +1,9 @@
 // src/modules/documents/document.repository.ts
 // File 47 — JurisAI Legal Vault module
 // Amendment #12: added createSignedDownloadUrl() for the download route (File 57).
+// Amendment #14 (THIS SESSION): added findDueForHearingReminder() for the
+// hearing-date-reminder cron route (Item #48, decision (a) — see that
+// method's own doc comment).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -39,7 +42,9 @@ const DOCUMENTS_BUCKET = 'legal-vault-documents';
  * `Database['public']['Tables']['documents']` matches File 45's migration
  * exactly (confirmed from the regenerated database.types.ts): id,
  * owner_id, title, storage_path, mime_type, size_bytes, deleted_at
- * (nullable), created_at, updated_at.
+ * (nullable), created_at, updated_at, hearing_date (nullable, added
+ * File 174, confirmed live this session after the migration-history
+ * repair).
  *
  * Extends BaseRepository<'documents'> and inherits findById,
  * findByIdOrThrow, create, and update as-is — none of those need
@@ -54,6 +59,11 @@ const DOCUMENTS_BUCKET = 'legal-vault-documents';
  * constructor is what determines whose rows are visible; that decision
  * stays visible at the call site (future DocumentService / factory),
  * consistent with the pattern BaseRepository already establishes.
+ *
+ * ONE METHOD ON THIS CLASS NOW BREAKS THAT RULE DELIBERATELY —
+ * findDueForHearingReminder() below is explicitly unscoped, for a
+ * reason documented on the method itself. Every other method's
+ * RLS-reliance is unchanged.
  */
 export class DocumentRepository extends BaseRepository<'documents'> {
   constructor(supabase: SupabaseClient<Database>) {
@@ -211,5 +221,73 @@ export class DocumentRepository extends BaseRepository<'documents'> {
     }
 
     return data.signedUrl;
+  }
+
+  /**
+   * NEW — Amendment #14, THIS SESSION. Supports the hearing-date-reminder
+   * cron route (Item #48, resolved this session as decision (a): the
+   * cron route calls DocumentRepository/NotificationRepository directly
+   * under admin.ts, bypassing DocumentService/NotificationService
+   * entirely, since a Vercel Cron invocation has no requesting user for
+   * a currentUser-requiring Service to act as).
+   *
+   * DELIBERATELY NOT OWNER-SCOPED — the one method on this class that
+   * isn't. Every other method here relies on the injected Supabase
+   * client's RLS policy (owner_id = auth.uid()) to narrow visibility;
+   * this method is meant to run ONLY under admin.ts's service-role
+   * client, which bypasses RLS by design. Cross-tenant access here is
+   * correct and necessary — the cron job's entire job is to look across
+   * every user's documents for ones with a hearing_date due for a
+   * reminder. Calling this with an RLS-scoped (server.ts) client would
+   * silently under-return (only that one user's own documents), not
+   * error — flagged so a future caller doesn't reach for this outside
+   * admin.ts by mistake.
+   *
+   * "Due for a reminder on `reminderDate`" is defined as: hearing_date
+   * falls on reminderDate's UTC calendar date, and the document is not
+   * soft-deleted. Matches File 174's partial index
+   * (documents_hearing_date_active_idx, `WHERE hearing_date IS NOT NULL
+   * AND deleted_at IS NULL`) for the not-null/not-deleted narrowing —
+   * the actual date-range comparison is not baked into the index itself,
+   * just the two boolean conditions.
+   *
+   * FLAGGED, NOT A CONFIRMED PRODUCT DECISION: compares hearing_date
+   * against reminderDate using UTC calendar dates. Same timezone-naive
+   * caveat already flagged for File 160's `isoToDateInputValue()` (Item
+   * #54) — if "N days before" is meant to be computed in IST rather than
+   * UTC, a hearing_date near midnight IST could match a day early or
+   * late relative to what a user in India would expect. Not silently
+   * assumed correct; revisit together if a reminder ever fires on the
+   * wrong day.
+   */
+  async findDueForHearingReminder(reminderDate: Date): Promise<DocumentRow[]> {
+    const startOfDayUtc = new Date(
+      Date.UTC(
+        reminderDate.getUTCFullYear(),
+        reminderDate.getUTCMonth(),
+        reminderDate.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
+    );
+    const startOfNextDayUtc = new Date(startOfDayUtc.getTime() + 24 * 60 * 60 * 1000);
+
+    const { data, error } = await this.supabase
+      .from('documents')
+      .select('*')
+      .is('deleted_at', null)
+      .gte('hearing_date', startOfDayUtc.toISOString())
+      .lt('hearing_date', startOfNextDayUtc.toISOString());
+
+    if (error) {
+      throw new DatabaseError('Failed to find documents due for a hearing reminder', error, {
+        table: this.tableName,
+        reminderDate: reminderDate.toISOString(),
+      });
+    }
+
+    return (data ?? []) as DocumentRow[];
   }
 }

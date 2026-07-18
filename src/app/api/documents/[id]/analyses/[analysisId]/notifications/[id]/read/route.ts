@@ -12,17 +12,13 @@ import { buildNotificationService } from '@/modules/notifications/notification.f
  * service a raw object, service owns validation" division as every
  * other route in this project.
  *
- * FLAGGED, GENUINELY UNVERIFIED — this file has no real precedent to
- * build against. Every route pasted in this project so far
- * (/api/documents's GET/POST, File 50) is a collection route with no
- * dynamic segment; File 57 (the single-resource download route, which
- * WOULD have this shape) has never been pasted in any session captured
- * by the progress doc. The `{ params }: { params: Promise<{ id: string
- * }> }` signature and `await params` below follow Next.js 14's App
- * Router convention as a reasonable default, not a confirmed one — if
- * File 57 (or any other dynamic-segment route) turns out to destructure
- * params differently in this codebase, this file needs to match it, not
- * the other way around.
+ * `params` is a plain synchronous object, NOT a Promise — confirmed
+ * against real source this session (`/api/documents/[id]/route.ts`'s
+ * own dated comment, which cites File 30 as documented precedent for
+ * this exact confusion). This file previously guessed at
+ * `Promise<{ id: string }>` + `await params` before that real source
+ * existed to check against; that guess is now known wrong and corrected
+ * here to match the confirmed convention, not the reverse.
  *
  * PATCH chosen over POST for "mark read" as a partial-update semantic
  * (only read_at changes) — not drawn from precedent either, since no
@@ -33,12 +29,16 @@ import { buildNotificationService } from '@/modules/notifications/notification.f
  * /api/documents's POST response shape for a single-resource result,
  * not the plural `documents` key GET uses for a collection.
  */
+interface RouteContext {
+  params: { id: string };
+}
+
 export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  _request: NextRequest,
+  { params }: RouteContext,
 ): Promise<NextResponse> {
   try {
-    const { id } = await params;
+    const { id } = params;
 
     const service = await buildNotificationService();
     const notification = await service.markAsRead({ id });

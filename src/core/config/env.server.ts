@@ -94,6 +94,51 @@ const serverEnvSchema = z.object({
   GOOGLE_CLOUD_VISION_STAGING_BUCKET: z
     .string()
     .min(1, 'GOOGLE_CLOUD_VISION_STAGING_BUCKET is required'),
+
+  /**
+   * NEW — closes PROJECT_PROGRESS.md Item #56. Secures the
+   * hearing-date-reminder cron route (Item #48) via Vercel's documented
+   * `Authorization: Bearer <CRON_SECRET>` mechanism. Previously read via
+   * raw `process.env.CRON_SECRET` because this file had never been
+   * pasted in any session — now wired through the same validated,
+   * fail-fast pattern as every other secret here.
+   *
+   * No format constraint beyond non-empty: unlike OPENAI_API_KEY,
+   * Vercel does not mandate a fixed prefix/shape for a user-supplied
+   * Cron secret — it's an arbitrary string you generate yourself and
+   * set as the CRON_SECRET environment variable in Vercel. Not assumed
+   * otherwise.
+   */
+  CRON_SECRET: z.string().min(1, 'CRON_SECRET is required'),
+
+  /**
+   * NEW — Billing module, CashfreeService. Cashfree's real, current
+   * Subscriptions API (POST /pg/plans, POST /pg/subscriptions) auths via
+   * two headers, `x-client-id` and `x-client-secret` — confirmed against
+   * Cashfree's real, current API docs this session, not the deprecated
+   * "previous"/v1 docs. No fixed format/prefix is documented for either
+   * value the way OPENAI_API_KEY's "sk-" prefix is, so only non-empty is
+   * enforced here, same posture as CRON_SECRET above.
+   */
+  CASHFREE_CLIENT_ID: z.string().min(1, 'CASHFREE_CLIENT_ID is required'),
+  CASHFREE_CLIENT_SECRET: z.string().min(1, 'CASHFREE_CLIENT_SECRET is required'),
+
+  /**
+   * NEW — Billing module, CashfreeService. Selects which Cashfree base
+   * URL CashfreeService talks to (sandbox.cashfree.com vs
+   * api.cashfree.com) — real, deliberate config rather than inferring
+   * the environment from NODE_ENV, since a real Cashfree sandbox
+   * *account* (separate credentials, not just a different URL) is what
+   * actually determines which base URL a given client-id/secret pair is
+   * valid against. Getting this wrong doesn't fail loudly — Cashfree
+   * would just reject the credentials — so it's made an explicit,
+   * required choice rather than a silent default.
+   */
+  CASHFREE_ENVIRONMENT: z.enum(['sandbox', 'production'], {
+    errorMap: () => ({
+      message: 'CASHFREE_ENVIRONMENT must be exactly "sandbox" or "production"',
+    }),
+  }),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -107,6 +152,10 @@ function loadServerEnv(): ServerEnv {
       process.env['GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_KEY'],
     GOOGLE_CLOUD_VISION_STAGING_BUCKET:
       process.env['GOOGLE_CLOUD_VISION_STAGING_BUCKET'],
+    CRON_SECRET: process.env['CRON_SECRET'],
+    CASHFREE_CLIENT_ID: process.env['CASHFREE_CLIENT_ID'],
+    CASHFREE_CLIENT_SECRET: process.env['CASHFREE_CLIENT_SECRET'],
+    CASHFREE_ENVIRONMENT: process.env['CASHFREE_ENVIRONMENT'],
   });
 
   if (!result.success) {
