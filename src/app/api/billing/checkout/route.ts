@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { handleApiError } from '@/core/errors/error-handler';
 import { buildBillingService } from '@/modules/billing/billing.factory';
+import { createCheckoutSchema } from '@/modules/billing/billing.schemas';
 
 /**
  * Same reasoning as every other route in this project that makes an
@@ -30,49 +31,34 @@ export const maxDuration = 60;
 /**
  * POST /api/billing/checkout
  *
- * FLAGGED — no billing.schemas.ts exists yet, so this route does NOT
- * follow this project's established Zod-at-the-Route-boundary discipline
- * (the pattern chat.schemas.ts set with createChatConversationInputSchema/
- * sendMessageInputSchema). Below is a minimal manual shape check only.
- * A real schema file should replace this before treating checkout as
- * production-ready — deliberately not invented here without a real
- * precedent for this module's own input shape to build it against.
+ * FIXED — this route previously called createCheckoutSchema.safeParse()
+ * and, on failure, threw a plain `Error` with the flattened field errors
+ * JSON-stringified into the message. Once error-handler.ts was pasted
+ * and verified this session, that turned out to be wrong:
+ * normalizeError() only converts a genuine ZodError into a client-facing
+ * ValidationError (proper 400, real field errors exposed in the
+ * response). A plain Error falls through to InternalServerError, which
+ * deliberately hides the original message from the client and returns a
+ * generic 500 — so checkout validation failures were silently
+ * unhelpful to any real client. Switched to `.parse()`, matching the
+ * firms route's already-correct pattern (let the real ZodError throw
+ * and propagate to handleApiError, which is built specifically to
+ * catch it).
  *
  * Validation failures and BillingService's own thrown errors (NotFoundError
  * for a missing/inactive plan, AuthorizationError via requireOwnership()
- * for a firm the caller doesn't own, plain Errors for "no firm-creation
- * flow", "already has an active subscription", etc.) are all routed
- * through the same handleApiError() as every other route — no
- * billing-specific error branching added here.
+ * for a firm the caller doesn't own, ConflictError for "already has an
+ * active subscription", plain Errors for "no firm-creation flow", etc.)
+ * are all routed through the same handleApiError() as every other route
+ * — no billing-specific error branching added here.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
-
-    if (
-      typeof body?.planSlug !== 'string' ||
-      typeof body?.returnUrl !== 'string' ||
-      typeof body?.customer?.customerName !== 'string' ||
-      typeof body?.customer?.customerEmail !== 'string' ||
-      typeof body?.customer?.customerPhone !== 'string'
-    ) {
-      throw new Error(
-        'planSlug, returnUrl, and customer.{customerName, customerEmail, customerPhone} are required.',
-      );
-    }
+    const input = createCheckoutSchema.parse(body);
 
     const billingService = await buildBillingService();
-
-    const session = await billingService.createCheckoutSession({
-      planSlug: body.planSlug,
-      firmId: typeof body.firmId === 'string' ? body.firmId : undefined,
-      customer: {
-        customerName: body.customer.customerName,
-        customerEmail: body.customer.customerEmail,
-        customerPhone: body.customer.customerPhone,
-      },
-      returnUrl: body.returnUrl,
-    });
+    const session = await billingService.createCheckoutSession(input);
 
     return NextResponse.json({ data: session }, { status: 201 });
   } catch (error) {

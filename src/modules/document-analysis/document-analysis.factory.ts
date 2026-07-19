@@ -44,6 +44,16 @@ import { DocumentAnalysisService } from './document-analysis.service';
  * RLS-respecting client. Never admin.ts (File 17) here — both
  * DocumentService's and DocumentAnalysisRepository's visibility models
  * depend on that.
+ *
+ * FLAGGED, NOT YET FIXED (confirmed this session): the DocumentService
+ * construction below passes only (currentUser, documentRepository) —
+ * two arguments. The real DocumentService constructor (document.service.ts,
+ * File 48, Amendment #15) requires FOUR: (currentUser, documentRepository,
+ * notificationService, auditLogRepository). As written, this file does
+ * not compile against the real DocumentService. Left as-is per the
+ * standing instruction to track flagged-but-not-fixed items rather than
+ * proactively fix them — needs notificationService and auditLogRepository
+ * constructed and passed here before this factory is usable.
  */
 export async function buildDocumentAnalysisService(): Promise<DocumentAnalysisService> {
   const currentUser = await getCurrentUser();

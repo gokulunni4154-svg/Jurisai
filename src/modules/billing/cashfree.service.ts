@@ -15,18 +15,21 @@
 // would mean inventing a currentUser-shaped authorization check that
 // doesn't correspond to anything this class actually does.
 //
-// FLAGGED — this project's real error-handling convention for a FAILED
-// EXTERNAL API CALL has never been confirmed. DocumentService imports
-// AuthorizationError/NotFoundError from '@/core/errors/app-error', but
-// those model Supabase-row authorization/existence failures, not
-// "a third-party HTTP API returned a non-2xx response" — a different
-// failure class. GoogleVisionOCRProvider (File 71) is referenced in
-// env.server.ts's own comments as this project's first external-API
-// integration, but its real source has never been pasted in any session,
-// so I cannot confirm it established a reusable pattern for this. A local
-// CashfreeApiError is defined below instead of assuming a shared
-// ExternalServiceError exists in '@/core/errors/app-error' — please paste
-// that file if one already exists so this can be corrected to reuse it.
+// FIXED — CashfreeApiError previously extended bare `Error`, not this
+// project's AppError hierarchy, because app-error.ts had never been
+// pasted in any session at the time it was written (flagged explicitly
+// in this file's own original comment). Now that app-error.ts is
+// confirmed, this class extends the real ExternalServiceError
+// (serviceName, message, cause?, context?) instead. Real, concrete
+// consequence of the old bug: error-handler.ts's isAppError() check
+// failed on the old CashfreeApiError, so every failed Cashfree call fell
+// through to a generic InternalServerError — 500, real reason hidden
+// from the client. Now it correctly surfaces as a proper AppError (502,
+// EXTERNAL_SERVICE_ERROR code). Cashfree's own real HTTP status and
+// response body are preserved in `context` for server-side logs, not
+// exposed to the client — ExternalServiceError's statusCode is always
+// 502 regardless of what Cashfree itself returned. Revisit if the real
+// Cashfree status should reach the client instead.
 //
 // FLAGGED — API version pinned to '2023-08-01' as a module-level constant,
 // not an env var (it's a contract choice, not a secret/environment
@@ -37,17 +40,25 @@
 // — pinning to the older, fully-confirmed version deliberately rather
 // than guessing the newer one is backward-compatible.
 //
-// FLAGGED — only createPlan() and createSubscription() are built here,
-// matching what this session actually verified against real Cashfree
-// docs (POST /pg/plans, POST /pg/subscriptions). Other operations that
-// exist in Cashfree's API (Get Subscription Details, Manage Subscription,
-// Fetch Payments, etc.) are NOT built — adding them now would mean
-// guessing their shapes from nav-menu labels alone, which this session
-// did not fetch and verify. Build those as separate, real, source-checked
-// methods when the checkout/webhook flow actually needs them.
+// FLAGGED — only createPlan(), createSubscription(), and (as of this
+// session) manageSubscription()/cancelSubscription() are built here,
+// matching what's actually been verified against real Cashfree docs
+// (POST /pg/plans, POST /pg/subscriptions, POST
+// /pg/subscriptions/{subscription_id}/manage). Other operations that
+// exist in Cashfree's API (Get Subscription Details, Fetch Payments,
+// etc.) are still NOT built — adding them now would mean guessing their
+// shapes from nav-menu labels alone, which this session did not fetch
+// and verify. Build those as separate, real, source-checked methods
+// when the checkout/webhook flow actually needs them.
+//
+// NEW, this session — manageSubscription() added (see its own doc
+// comment for the version-pin caveat: confirmed against a '2025-01-01'-
+// tagged spec, this file pins '2023-08-01'). cancelSubscription() is a
+// thin convenience wrapper around it, not a separate endpoint.
 
 import 'server-only';
 
+import { ExternalServiceError } from '@/core/errors/app-error';
 import { serverEnv } from '@/core/config/env.server';
 
 const CASHFREE_API_VERSION = '2023-08-01';
@@ -58,20 +69,22 @@ const CASHFREE_BASE_URL =
     : 'https://sandbox.cashfree.com';
 
 /**
- * Thrown when Cashfree's API returns a non-2xx response. Deliberately
- * NOT one of '@/core/errors/app-error''s existing classes — see this
- * file's header comment. Carries the raw response body (parsed if JSON,
- * raw text otherwise) so a caller can inspect Cashfree's real error
- * shape without this class needing to model it upfront.
+ * Thrown when Cashfree's API returns a non-2xx response. Extends the
+ * real ExternalServiceError (see this file's header FIXED note) rather
+ * than bare Error — a genuine AppError, correctly caught by
+ * error-handler.ts. Carries the raw response body (parsed if JSON, raw
+ * text otherwise) in `context` so a caller can inspect Cashfree's real
+ * error shape server-side without this class needing to model it
+ * upfront.
  */
-export class CashfreeApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly responseBody: unknown,
-  ) {
-    super(message);
-    this.name = 'CashfreeApiError';
+export class CashfreeApiError extends ExternalServiceError {
+  public readonly status: number;
+  public readonly responseBody: unknown;
+
+  constructor(message: string, status: number, responseBody: unknown) {
+    super('cashfree', message, undefined, { status, responseBody });
+    this.status = status;
+    this.responseBody = responseBody;
   }
 }
 
@@ -141,6 +154,28 @@ export interface CashfreeSubscriptionResponse {
   cfSubscriptionId: string | null;
   status: string;
   raw: unknown;
+}
+
+export type CashfreeManageSubscriptionAction =
+  | 'CANCEL'
+  | 'PAUSE'
+  | 'ACTIVATE'
+  | 'CHANGE_PLAN';
+
+export interface ManageCashfreeSubscriptionInput {
+  /** The MERCHANT-generated subscription_id (used both in the URL path and
+   *  the request body, per Cashfree's real Manage Subscription docs) --
+   *  NOT cf_subscription_id. See subscriptions.subscription_id's own
+   *  column comment (20260726000005_add_subscription_merchant_id.sql) for
+   *  why this distinction matters. */
+  subscriptionId: string;
+  action: CashfreeManageSubscriptionAction;
+  /** Required when action is 'CHANGE_PLAN'. Ignored otherwise. */
+  planId?: string;
+  /** Required when action is 'ACTIVATE'. Cashfree's docs note only the
+   *  DATE component is considered, any time value is ignored -- pass a
+   *  plain date string. */
+  nextScheduledTime?: string;
 }
 
 /**
@@ -275,5 +310,81 @@ export class CashfreeService {
       status: raw.subscription_status ?? raw.status ?? 'INITIALIZED',
       raw,
     };
+  }
+
+  /**
+   * Manages an existing subscription via POST /pg/subscriptions/{subscription_id}/manage
+   * -- confirmed this session against Cashfree's current API reference
+   * (a single endpoint handling cancel, pause, activate, and plan-change
+   * via the `action` field). Real request shape:
+   * { subscription_id, action, action_details? }, with action_details.plan_id
+   * required for CHANGE_PLAN and action_details.next_scheduled_time
+   * required for ACTIVATE.
+   *
+   * FLAGGED, VERSION CAVEAT: the OpenAPI spec fetched for this endpoint is
+   * tagged '2025-01-01', while this file pins CASHFREE_API_VERSION to
+   * '2023-08-01' (see this file's header). The endpoint is part of the
+   * same /pg/subscriptions family already in use here (not the older,
+   * differently-shaped /pg/api/v2/... pause-subscription endpoint also
+   * seen in Cashfree's docs) -- confident this is the right endpoint, but
+   * its exact request/response shape at 2023-08-01 specifically was not
+   * independently re-verified. Same category of gap already flagged for
+   * the version pin generally; worth a real sandbox check.
+   *
+   * FLAGGED, ALSO NOTEWORTHY: the fetched docs describe this endpoint's
+   * response as reusing the same schema as Create/Get Subscription, and
+   * confirm its status field is named `subscription_status` -- this is
+   * corroborating (not conclusive, different doc version) evidence for
+   * createSubscription()'s own flagged uncertainty above about whether
+   * its response uses `subscription_status` or `status`. Not changed
+   * here since createSubscription() itself wasn't touched this session --
+   * flagging for a possible future cleanup, your call.
+   *
+   * Per Cashfree's docs: CHANGE_PLAN and PAUSE are not supported for
+   * ON_DEMAND subscriptions (only PERIODIC) -- NOT enforced here, since
+   * this method has no knowledge of which plan type a given subscription
+   * used. Whatever calls this is responsible for only requesting those
+   * two actions against a PERIODIC subscription; Cashfree's own API will
+   * presumably reject an invalid combination, surfaced as a normal
+   * CashfreeApiError.
+   */
+  async manageSubscription(
+    input: ManageCashfreeSubscriptionInput,
+  ): Promise<CashfreeSubscriptionResponse> {
+    const actionDetails: Record<string, string> = {};
+    if (input.planId !== undefined) {
+      actionDetails.plan_id = input.planId;
+    }
+    if (input.nextScheduledTime !== undefined) {
+      actionDetails.next_scheduled_time = input.nextScheduledTime;
+    }
+
+    const body = {
+      subscription_id: input.subscriptionId,
+      action: input.action,
+      ...(Object.keys(actionDetails).length > 0 ? { action_details: actionDetails } : {}),
+    };
+
+    const raw = await this.request<{
+      subscription_id: string;
+      cf_subscription_id: string;
+      subscription_status: string;
+    }>(`/pg/subscriptions/${input.subscriptionId}/manage`, body);
+
+    return {
+      subscriptionId: raw.subscription_id,
+      cfSubscriptionId: raw.cf_subscription_id,
+      status: raw.subscription_status,
+      raw,
+    };
+  }
+
+  /**
+   * Convenience wrapper around manageSubscription() for the single most
+   * common case. Not a separate Cashfree endpoint -- CANCEL is just one
+   * of manageSubscription()'s four possible `action` values.
+   */
+  async cancelSubscription(subscriptionId: string): Promise<CashfreeSubscriptionResponse> {
+    return this.manageSubscription({ subscriptionId, action: 'CANCEL' });
   }
 }
