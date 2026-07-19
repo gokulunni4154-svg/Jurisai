@@ -36,6 +36,40 @@ export interface FindManyOptions {
  * raw Supabase error), so services and Route Handlers only ever deal with
  * our own AppError hierarchy.
  *
+ * ARCHITECTURE DECISION, SETTLED THIS SESSION — NO TRANSACTION PRIMITIVE,
+ * ACCEPTED PERMANENTLY, NOT A GAP TO RE-FLAG PER FILE:
+ *
+ * This class has no transaction primitive, and one is deliberately NOT
+ * planned. Every method here goes through supabase-js/PostgREST, where
+ * each call (`.insert()`, `.update()`, etc.) is its own independent HTTP
+ * request — PostgREST has no client-side "begin/commit across several
+ * calls" concept. The only way to get real atomicity across multiple
+ * writes is a hand-written Postgres function (plpgsql) invoked via
+ * `.rpc()` — that is not a generic, reusable addition to this base
+ * class; it would be a bespoke SQL function per multi-step operation
+ * that needs one, each requiring its own migration and its own real-
+ * source verification, same as every other piece of SQL in this project.
+ * A shallower fix (e.g. wrapping sequential calls in a try/catch here)
+ * would not add real atomicity — it would just as easily hide the risk
+ * as document it, which is worse than the current, honest state.
+ *
+ * PRACTICAL IMPLICATION: several Service-layer methods across this
+ * project (e.g. FirmService#createFirm's firm-insert + profile-update +
+ * audit-write; NotificationService#createNotification's insert +
+ * audit-write) perform multiple independent writes with no rollback. If
+ * a later write in the sequence fails, earlier writes in that same
+ * sequence are NOT undone — this can leave data in an inconsistent-but-
+ * recoverable state (e.g. a firm created with no matching audit entry),
+ * never a corrupted one, since each individual write is still atomic on
+ * its own. This is treated as a known, accepted characteristic of this
+ * architecture, not an outstanding bug — flag any NEW instance in the
+ * Service method's own doc comment (as existing ones already do) rather
+ * than re-litigating whether to fix it generally each time. If a
+ * specific operation later turns out to need real atomicity badly
+ * enough to justify a dedicated Postgres function, that is a case-by-
+ * case decision made for that operation specifically, not a general
+ * pattern applied here.
+ *
  * Example future usage (once a `users` table + migration exists):
  *
  *   export class UserRepository extends BaseRepository<'users'> {

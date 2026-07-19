@@ -1,5 +1,7 @@
 import { getCurrentUser } from '@/core/auth/session';
+import { createAdminClient } from '@/core/supabase/admin';
 import { createClient } from '@/core/supabase/server';
+import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import { NotificationRepository } from '@/modules/notifications/notification.repository';
 import { NotificationService } from '@/modules/notifications/notification.service';
 
@@ -21,14 +23,22 @@ import { DocumentService } from './document.service';
  *
  * One thing worth stating explicitly for Documents specifically, since
  * it's load-bearing for File 47/48's design: createClient() (File 14) is
- * the RLS-respecting client. This factory deliberately never reaches for
- * admin.ts (File 17) here. DocumentService's entire "reads are visible
- * via RLS, including the admin SELECT policy branch, with no
+ * the RLS-respecting client, and it is the ONLY client DocumentRepository
+ * itself is ever constructed with. DocumentService's entire "reads are
+ * visible via RLS, including the admin SELECT policy branch, with no
  * admin-specific branching in the service itself" design (see File 48's
  * class-level doc comment) depends on that — swapping in an
- * RLS-bypassing client here would silently turn every caller into an
- * admin for read purposes, defeating the model this module was built
- * around.
+ * RLS-bypassing client for DocumentRepository here would silently turn
+ * every caller into an admin for read purposes, defeating the model this
+ * module was built around. That guarantee is unchanged by Amendment #15
+ * below.
+ *
+ * CORRECTED, AMENDMENT #15 (THIS SESSION) — this file's doc comment
+ * previously stated this factory "deliberately never reaches for
+ * admin.ts" at all. That is no longer true at the factory level (see
+ * below) and is corrected here rather than left stale; it remains true
+ * specifically for DocumentRepository, which is the guarantee that
+ * actually mattered.
  *
  * NEW, AMENDMENT #14 — DocumentService now also needs a NotificationService
  * (to fire the immediate 'hearing_date_set' notification from
@@ -44,6 +54,27 @@ import { DocumentService } from './document.service';
  * guaranteed to be acting as the exact same request-scoped actor — there
  * is no scenario where updateDocument()'s notification gets created
  * under a different identity than the update itself.
+ *
+ * NEW, AMENDMENT #15 (THIS SESSION) — DocumentService now also needs an
+ * AuditLogRepository (to write 'documents.create/update/delete' entries —
+ * see document.service.ts's Amendment #15 header). Built directly against
+ * real billing.factory.ts source for the pattern: audit_log has no RLS
+ * policy at all (confirmed via audit-log.repository.ts's own doc
+ * comment), so AuditLogRepository — unlike DocumentRepository and
+ * NotificationRepository, both of which sit behind real RLS policies and
+ * use the request-scoped `supabase` client above — is constructed with
+ * createAdminClient() (File: src/core/supabase/admin.ts), the cached
+ * module-level service-role client. This makes DocumentService the
+ * second Service in the project (after BillingService) to depend on two
+ * differently-scoped Supabase clients within a single request: ordinary
+ * reads/writes remain exactly as RLS-scoped as they were before this
+ * amendment, while only the audit trail itself bypasses RLS — matching
+ * billing.factory.ts's own stated rationale for the identical split.
+ * createAdminClient() is safe to call here even though this factory
+ * already holds a request-scoped `supabase` — per admin.ts's own doc
+ * comment, it carries no per-user session to isolate, so reusing the
+ * cached singleton is correct regardless of how many other clients this
+ * factory also constructs.
  */
 export async function buildDocumentService(): Promise<DocumentService> {
   const currentUser = await getCurrentUser();
@@ -54,5 +85,11 @@ export async function buildDocumentService(): Promise<DocumentService> {
   const notificationRepository = new NotificationRepository(supabase);
   const notificationService = new NotificationService(currentUser, notificationRepository);
 
-  return new DocumentService(currentUser, documentRepository, notificationService);
+  // Deliberately a DIFFERENT client instance from `supabase` above — see
+  // this file's Amendment #15 doc comment. createAdminClient() is a
+  // cached module-level singleton (admin.ts), not request-scoped.
+  const adminClient = createAdminClient();
+  const auditLogRepository = new AuditLogRepository(adminClient);
+
+  return new DocumentService(currentUser, documentRepository, notificationService, auditLogRepository);
 }

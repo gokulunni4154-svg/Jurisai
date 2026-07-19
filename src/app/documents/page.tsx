@@ -1,7 +1,7 @@
 // src/app/documents/page.tsx
 // File 159 — JurisAI Frontend, Phase 3
 //
-// AMENDMENT, THIS SESSION:
+// AMENDMENT (PRIOR SESSION):
 //   - Document row buttons previously had no onClick at all — clicking a
 //     document did nothing. Now navigates to /documents/[id] (File 160,
 //     confirmed real and already built this session's prior turns).
@@ -13,16 +13,42 @@
 //     session — see notifications-panel.tsx's own header comment for the
 //     full source-verification trail).
 //
-// FLAGGED: the unread count is only fetched once the panel has been
-// opened at least once (NotificationsPanel's own fetch is gated on
-// `isOpen`) — there is no independent "check for unread notifications on
-// page load" call here. This means the badge shows 0/hidden until the
-// user opens the panel for the first time in a given page load, not a
-// true "you have unread notifications" indicator from the moment the
-// page mounts. Flagged as a real, deliberate scope-narrowing (avoids a
-// second, redundant fetch pattern/polling design this session hasn't
-// been asked to build), not an oversight — revisit if "notify without
-// opening" becomes a real requirement.
+// FLAGGED (PRIOR SESSION): the unread count is only fetched once the
+// panel has been opened at least once (NotificationsPanel's own fetch is
+// gated on `isOpen`) — there is no independent "check for unread
+// notifications on page load" call here. This means the badge shows
+// 0/hidden until the user opens the panel for the first time in a given
+// page load, not a true "you have unread notifications" indicator from
+// the moment the page mounts. Flagged as a real, deliberate
+// scope-narrowing (avoids a second, redundant fetch pattern/polling
+// design this session hasn't been asked to build), not an oversight —
+// revisit if "notify without opening" becomes a real requirement.
+//
+// AMENDED, THIS SESSION — closes part of the "no frontend consumes
+// either Audit Log route" open item. Added a new rail button, routing to
+// /audit-log/firm (Phase 3 File 33, this session) — the firm-owner audit
+// log view, same audience as the existing Billing button just above it.
+//
+// FLAGGED, DELIBERATE SCOPE CHOICE: does NOT also add a button for
+// /audit-log/admin (Phase 3 File 34, this session). This rail has no
+// role-awareness anywhere in its existing pattern (every button here is
+// shown to every caller regardless of role — see the Billing button's
+// own prior-session comment making the same observation about this
+// rail's lack of pathname-awareness), so adding an admin-only link here
+// would either be shown to non-admins who'd just hit a 403 clicking it,
+// or would require inventing a client-side role-check this rail has
+// never had. Left reachable by direct URL only, same "orphaned but
+// ready" posture billing/subscription/page.tsx's own firmId path already
+// carries. Revisit once/if this rail ever gains real role-awareness.
+//
+// FLAGGED, CARRIED FORWARD UNCHANGED FROM PRIOR SESSION: this rail is
+// inline JSX in this one page, not a shared layout — adding another
+// button here means it's only visible from /documents, not from any
+// other page in the app (documents/page.tsx's own prior-session comment
+// on the Billing button already made this same observation; it applies
+// identically to this session's new button). A real fix (extracting
+// this into a shared dashboard shell) wasn't done here since it wasn't
+// asked for and would touch working code well beyond one button.
 
 'use client';
 
@@ -41,6 +67,10 @@ import {
   Loader2,
   AlertCircle,
   Inbox,
+  CreditCard,
+  ScrollText,
+  Tag,
+  Building2,
 } from 'lucide-react';
 import { uploadDocument, UploadValidationError } from '@/core/storage/document-upload';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
@@ -115,7 +145,7 @@ export default function DocumentsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // NEW, THIS SESSION — notifications panel open/closed + unread badge.
+  // Notifications panel open/closed + unread badge.
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -201,7 +231,7 @@ export default function DocumentsPage() {
           >
             <FolderOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </button>
-          {/* AMENDED, THIS SESSION — was purely decorative (no onClick,
+          {/* AMENDED, PRIOR SESSION — was purely decorative (no onClick,
               no badge). Now opens NotificationsPanel and shows an
               unread-count badge. */}
           <button
@@ -217,6 +247,72 @@ export default function DocumentsPage() {
               </span>
             )}
           </button>
+          {/* NEW, PRIOR SESSION — first nav link into the Billing module
+              from the main app rail. Static, like Settings below it (no
+              usePathname()-based active state) — this rail has no
+              pathname-awareness anywhere in its existing pattern (see
+              the hardcoded aria-current="page" on Documents above, which
+              was already like this before this change), so this button
+              doesn't introduce that pattern unilaterally either.
+              FLAGGED: this rail is inline JSX in this one page, not a
+              shared layout — adding this button here means it's only
+              visible from /documents, not from any other page in the
+              app. A real fix (extracting this into a shared dashboard
+              shell) wasn't done here since it wasn't asked for and
+              would touch working code well beyond this button. */}
+          <button
+            onClick={() => router.push('/billing/subscription')}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            aria-label="Billing"
+          >
+            <CreditCard className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
+          {/* NEW, THIS SESSION — Billing nav (Item #70, carried forward
+              from prior sessions' addenda). Links in 2 of the 4
+              previously-unreachable Billing pages: /pricing and
+              /billing/firms/new. Deliberately NOT linking /billing/checkout
+              or /billing/checkout/return here — checkout is normally
+              arrived at with a plan already selected (via ?planSlug=,
+              confirmed this session against the real, pasted
+              pricing/page.tsx and billing/firms/new/page.tsx source, both
+              of which already assume that query param), not a page anyone
+              browses to cold from a nav link; checkout/return exists only
+              as Cashfree's own post-payment redirect target, never a page
+              a user should navigate to on purpose. Same static-button,
+              no-pathname-awareness posture as every other button in this
+              rail. */}
+          <button
+            onClick={() => router.push('/pricing')}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            aria-label="Plans"
+          >
+            <Tag className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
+          <button
+            onClick={() => router.push('/billing/firms/new')}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            aria-label="Create firm"
+          >
+            <Building2 className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
+          {/* NEW, THIS SESSION — first nav link into the Audit Log module
+              from the main app rail. Points at /audit-log/firm (Phase 3
+              File 33), the firm-owner view — NOT /audit-log/admin (File
+              34), which stays reachable only by direct URL. See this
+              file's own header comment for why: this rail has no
+              role-awareness to gate an admin-only link behind, and
+              adding one unconditionally would surface a link every
+              non-admin caller would just get a 403 clicking. Same
+              static-button, no-active-state posture as Billing above —
+              not introducing pathname-awareness unilaterally here
+              either. */}
+          <button
+            onClick={() => router.push('/audit-log/firm')}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            aria-label="Audit log"
+          >
+            <ScrollText className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
           <button
             className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/40"
             aria-label="Settings"
@@ -226,7 +322,7 @@ export default function DocumentsPage() {
         </nav>
       </aside>
 
-      {/* NEW, THIS SESSION */}
+      {/* Notifications panel */}
       <NotificationsPanel
         isOpen={isNotificationsPanelOpen}
         onClose={() => setIsNotificationsPanelOpen(false)}

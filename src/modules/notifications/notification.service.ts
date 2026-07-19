@@ -7,6 +7,7 @@ import type { AuthUser } from '@/core/auth/types';
 import { AuthorizationError } from '@/core/errors/app-error';
 import { BaseService } from '@/core/services/base.service';
 import type { Database } from '@/core/supabase/database.types';
+import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 
 import type { NotificationRepository } from './notification.repository';
 import {
@@ -58,11 +59,28 @@ export interface ListNotificationsResult {
  * isn't a meaningful concept for a system-triggered write) or a second,
  * system-mode factory/service variant gets built, is a decision for
  * when the cron route itself is built — not decided here.
+ *
+ * AMENDED, THIS SESSION — AuditLogRepository added as a 4th constructor
+ * dependency, closing the "Notifications write zero audit entries" gap
+ * (prior sessions' addenda, Item #1). createNotification() and
+ * markAsRead() each write an audit entry as their last step, after the
+ * real mutation succeeds — same ordering document.service.ts already
+ * established for its own three mutations. Neither write is wrapped in
+ * a try/catch: see this file's own session-note below on why that's a
+ * flagged, not silently accepted, risk.
+ *
+ * FLAGGED, ENGINEERING JUDGMENT CALL, NOT CONFIRMED SCOPE: markAsRead()
+ * is treated as audit-worthy (the notifications-module analog of
+ * updateDocument()), not as a read. The prior addendum's Item #1 only
+ * said "Notifications... write zero audit entries" without naming which
+ * methods — if only creation should be audited, the markAsRead() audit
+ * write below should be removed.
  */
 export class NotificationService extends BaseService {
   constructor(
     currentUser: AuthUser | null,
     private readonly notificationRepository: NotificationRepository,
+    private readonly auditLogRepository: AuditLogRepository,
   ) {
     super(currentUser);
   }
@@ -76,6 +94,10 @@ export class NotificationService extends BaseService {
    * trusted as given, same defense-in-depth spirit as createDocument's
    * ownerSegment check — a caller cannot create a notification
    * addressed to someone else through this method.
+   *
+   * AMENDED, THIS SESSION: writes a 'notifications.create' audit entry
+   * as the last step, after the real insert succeeds. Not wrapped in a
+   * try/catch — see class-level doc comment.
    */
   async createNotification(rawInput: unknown): Promise<NotificationRow> {
     const user = this.requireAuthentication();
@@ -88,7 +110,7 @@ export class NotificationService extends BaseService {
       );
     }
 
-    return this.notificationRepository.create({
+    const notification = await this.notificationRepository.create({
       user_id: input.userId,
       document_id: input.documentId,
       type: input.type,
@@ -96,6 +118,16 @@ export class NotificationService extends BaseService {
       message: input.message,
       hearing_date_snapshot: input.hearingDateSnapshot.toISOString(),
     });
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      action: 'notifications.create',
+      resourceType: 'notification',
+      resourceId: notification.id,
+      metadata: { type: notification.type },
+    });
+
+    return notification;
   }
 
   /**
@@ -109,6 +141,9 @@ export class NotificationService extends BaseService {
    * what actually reaches the repository, so that's the default that
    * governs in practice; flagged here since the two defaults read as
    * contradictory in isolation.
+   *
+   * NOT audited — a read, same reasoning getDownloadUrl() was excluded
+   * in document.service.ts.
    */
   async listNotifications(rawQuery: unknown): Promise<ListNotificationsResult> {
     this.requireAuthentication();
@@ -138,6 +173,10 @@ export class NotificationService extends BaseService {
    * Same TOCTOU acceptance as updateDocument/deleteDocument — not
    * transactional, acceptable because only the owner can ever mutate
    * their own row today.
+   *
+   * AMENDED, THIS SESSION: writes a 'notifications.mark_read' audit
+   * entry as the last step — see class-level doc comment's flagged
+   * judgment call on whether this method should be audited at all.
    */
   async markAsRead(rawParams: unknown): Promise<NotificationRow> {
     this.requireAuthentication();
@@ -147,6 +186,15 @@ export class NotificationService extends BaseService {
 
     this.requireOwnership(existing.user_id);
 
-    return this.notificationRepository.markAsRead(id);
+    const updated = await this.notificationRepository.markAsRead(id);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: existing.user_id,
+      action: 'notifications.mark_read',
+      resourceType: 'notification',
+      resourceId: id,
+    });
+
+    return updated;
   }
 }
