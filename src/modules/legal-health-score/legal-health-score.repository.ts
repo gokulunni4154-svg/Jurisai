@@ -55,6 +55,15 @@ type LegalHealthScoreRow = Database['public']['Tables']['legal_health_scores']['
  * enforces they were ever written together (see File 132's stated
  * duplication trade-off).
  */
+export interface LegalHealthScoreAdminDocumentInfo {
+  document_id: string;
+  documents: { title: string; owner_id: string } | null;
+}
+
+export type LegalHealthScoreWithDocumentInfo = LegalHealthScore & {
+  document_analyses: LegalHealthScoreAdminDocumentInfo | null;
+};
+
 export class LegalHealthScoreRepository extends BaseRepository<'legal_health_scores'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'legal_health_scores');
@@ -158,6 +167,73 @@ export class LegalHealthScoreRepository extends BaseRepository<'legal_health_sco
     }
 
     return data ? this.parseRow(data) : null;
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3). Same purpose
+   * and shape as RiskDetectionRepository#findManyForAnalysisIds — the
+   * fourth of four sequential hops in Observability's firm-scoped query
+   * path, this repo being one of the eight module repos at the end of
+   * the chain. Given document_analysis ids already resolved upstream,
+   * returns every legal health score run across all of them, routed
+   * through parseRow() — which, unlike the other seven modules,
+   * independently validates both `result` and `category_scores` per row
+   * here, same as every other read path on this class.
+   *
+   * Returns an empty array (not an error) when `documentAnalysisIds` is
+   * empty, matching Postgrest's own `.in()` semantics.
+   */
+  async findManyForAnalysisIds(documentAnalysisIds: string[]): Promise<LegalHealthScore[]> {
+    if (documentAnalysisIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.supabase
+      .from('legal_health_scores')
+      .select('*')
+      .in('document_analysis_id', documentAnalysisIds);
+
+    if (error) {
+      throw new DatabaseError(
+        'Failed to find legal_health_scores for document_analysis ids',
+        error,
+        { table: this.tableName, documentAnalysisIds },
+      );
+    }
+
+    return (data ?? []).map((row) => this.parseRow(row));
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3), admin view.
+   * Same purpose and shape as RiskDetectionRepository#findManyForAdminView
+   * — single embedded call (legal_health_scores -> document_analyses ->
+   * documents), no firm filter, admin-client-only. FKs confirmed this
+   * session against database.types.ts. Same parseRow() reused here as
+   * every other read path on this class — validates both `result` and
+   * `category_scores` independently, per this class's own established
+   * two-column parsing pattern.
+   */
+  async findManyForAdminView(): Promise<LegalHealthScoreWithDocumentInfo[]> {
+    const { data, error } = await this.supabase
+      .from('legal_health_scores')
+      .select('*, document_analyses(document_id, documents(title, owner_id))');
+
+    if (error) {
+      throw new DatabaseError('Failed to list legal_health_scores for admin view', error, {
+        table: this.tableName,
+      });
+    }
+
+    return (data ?? []).map((row) => {
+      const { document_analyses, ...rest } = row as LegalHealthScoreRow & {
+        document_analyses: LegalHealthScoreAdminDocumentInfo | null;
+      };
+      return {
+        ...this.parseRow(rest as LegalHealthScoreRow),
+        document_analyses,
+      };
+    });
   }
 
   /**

@@ -33,6 +33,15 @@ import type {
  * here.
  */
 
+export interface ChatConversationAdminDocumentInfo {
+  document_id: string;
+  documents: { title: string; owner_id: string } | null;
+}
+
+export type ChatConversationWithDocumentInfo = ChatConversation & {
+  document_analyses: ChatConversationAdminDocumentInfo | null;
+};
+
 export class ChatConversationRepository extends BaseRepository<'chat_conversations'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'chat_conversations');
@@ -73,6 +82,86 @@ export class ChatConversationRepository extends BaseRepository<'chat_conversatio
     }
 
     return (data ?? []) as ChatConversation[];
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3). Confirmed this
+   * session (via the real, re-pasted database.types.ts) that
+   * chat_conversations DOES have a real FK to document_analyses
+   * (chat_conversations_document_analysis_id_fkey on document_analysis_id)
+   * — so, structurally, this table CAN join into the same four-hop
+   * aggregation path (profiles -> owner ids -> documents ->
+   * document_analyses -> each module repo) as the other seven modules.
+   *
+   * FLAGGED, DELIBERATE DEPARTURE FROM THE OTHER SEVEN MODULES' EQUIVALENT
+   * METHOD: chat_conversations has no status/error_message column at
+   * all (confirmed both from chat.entity.ts's own doc comment and from
+   * the real database.types.ts Row shape) — a conversation is not a
+   * single run that succeeds or fails, per this file's own header
+   * comment. This method therefore returns plain ChatConversation rows
+   * as-is; it does NOT synthesize a fake status or error_message to
+   * force this into the same row shape the other seven modules return.
+   * ObservabilityService is expected to treat chat's aggregated rows as
+   * a distinct shape (e.g. conversation started / last_message_at, no
+   * status/error/provider-at-the-conversation-level) rather than
+   * assuming one uniform {status, provider, error, timing} shape holds
+   * across all eight modules — decided together, not assumed silently,
+   * given the real risk of misleading the exact admin/firm-owner
+   * audience this feature exists to inform.
+   *
+   * No parseRow() involved — unlike the seven detection/analysis-result
+   * repositories, this table has no jsonb `result` column requiring
+   * schema validation.
+   *
+   * Returns an empty array (not an error) when `documentAnalysisIds` is
+   * empty, matching Postgrest's own `.in()` semantics — same reasoning
+   * as every other findManyForAnalysisIds-style method in this chain.
+   */
+  async findManyForAnalysisIds(documentAnalysisIds: string[]): Promise<ChatConversation[]> {
+    if (documentAnalysisIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.supabase
+      .from('chat_conversations')
+      .select('*')
+      .in('document_analysis_id', documentAnalysisIds);
+
+    if (error) {
+      throw new DatabaseError('Failed to find chat_conversations for document_analysis ids', error, {
+        table: 'chat_conversations',
+        documentAnalysisIds,
+      });
+    }
+
+    return (data ?? []) as ChatConversation[];
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3), admin view.
+   * Same embedded-call shape as every other module's
+   * findManyForAdminView (chat_conversations -> document_analyses ->
+   * documents), no firm filter, admin-client-only. FK confirmed this
+   * session against database.types.ts
+   * (chat_conversations_document_analysis_id_fkey).
+   *
+   * SAME FLAGGED DEPARTURE as findManyForAnalysisIds above: returns
+   * plain ChatConversation rows plus the embedded document info — no
+   * status/error_message to report, since this table has none. No
+   * parseRow() involved either, for the same reason.
+   */
+  async findManyForAdminView(): Promise<ChatConversationWithDocumentInfo[]> {
+    const { data, error } = await this.supabase
+      .from('chat_conversations')
+      .select('*, document_analyses(document_id, documents(title, owner_id))');
+
+    if (error) {
+      throw new DatabaseError('Failed to list chat_conversations for admin view', error, {
+        table: 'chat_conversations',
+      });
+    }
+
+    return (data ?? []) as ChatConversationWithDocumentInfo[];
   }
 
   /**

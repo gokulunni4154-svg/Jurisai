@@ -111,6 +111,32 @@ export const createDocumentSchema = z
 export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;
 
 /**
+ * Bulk-create envelope for Multi-document's bulk upload flow (added this
+ * session, alongside the new /api/documents/bulk route). Each item is
+ * validated by the SAME createDocumentSchema every single-document POST
+ * already uses -- deliberately no separate, bulk-specific item shape,
+ * since a bulk item describes the exact same server-derived
+ * post-upload facts (storagePath, mimeType, sizeBytes) a single item
+ * does.
+ *
+ * FLAGGED, DELEGATED DECISION, NOT DRAWN FROM PRECEDENT: no bulk
+ * endpoint exists anywhere else in this project to confirm an envelope
+ * shape or item cap against. The 20-item max below is a reasonable,
+ * unconfirmed default -- revisit if a real requirement (or a sibling
+ * bulk endpoint elsewhere) surfaces later.
+ */
+export const bulkCreateDocumentsSchema = z
+  .object({
+    documents: z
+      .array(createDocumentSchema)
+      .min(1, 'At least one document is required.')
+      .max(20, 'At most 20 documents can be uploaded at once.'),
+  })
+  .strict();
+
+export type BulkCreateDocumentsInput = z.infer<typeof bulkCreateDocumentsSchema>;
+
+/**
  * `title` and `hearingDate` are the only mutable fields after upload.
  * storage_path, mime_type, and size_bytes describe the physical file
  * itself -- changing any of them without re-uploading would desync the

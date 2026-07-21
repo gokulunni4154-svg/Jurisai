@@ -34,6 +34,15 @@ type ComplianceDetectionRow = Database['public']['Tables']['compliance_detection
  * built in from the start here rather than needing a follow-up
  * amendment the way File 95 originally did.
  */
+export interface ComplianceDetectionAdminDocumentInfo {
+  document_id: string;
+  documents: { title: string; owner_id: string } | null;
+}
+
+export type ComplianceDetectionWithDocumentInfo = ComplianceDetection & {
+  document_analyses: ComplianceDetectionAdminDocumentInfo | null;
+};
+
 export class ComplianceDetectionRepository extends BaseRepository<'compliance_detections'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'compliance_detections');
@@ -133,6 +142,68 @@ export class ComplianceDetectionRepository extends BaseRepository<'compliance_de
     }
 
     return data ? this.parseRow(data) : null;
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3). Same purpose
+   * and shape as RiskDetectionRepository#findManyForAnalysisIds — the
+   * fourth of four sequential hops in Observability's firm-scoped query
+   * path, this repo being one of the eight module repos at the end of
+   * the chain. Given document_analysis ids already resolved upstream,
+   * returns every compliance detection run across all of them, routed
+   * through parseRow() same as every other read path on this class.
+   *
+   * Returns an empty array (not an error) when `documentAnalysisIds` is
+   * empty, matching Postgrest's own `.in()` semantics.
+   */
+  async findManyForAnalysisIds(documentAnalysisIds: string[]): Promise<ComplianceDetection[]> {
+    if (documentAnalysisIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.supabase
+      .from('compliance_detections')
+      .select('*')
+      .in('document_analysis_id', documentAnalysisIds);
+
+    if (error) {
+      throw new DatabaseError(
+        'Failed to find compliance_detections for document_analysis ids',
+        error,
+        { table: this.tableName, documentAnalysisIds },
+      );
+    }
+
+    return (data ?? []).map((row) => this.parseRow(row));
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3), admin view.
+   * Same purpose and shape as RiskDetectionRepository#findManyForAdminView
+   * — single embedded call (compliance_detections -> document_analyses
+   * -> documents), no firm filter, admin-client-only. FKs confirmed
+   * this session against database.types.ts.
+   */
+  async findManyForAdminView(): Promise<ComplianceDetectionWithDocumentInfo[]> {
+    const { data, error } = await this.supabase
+      .from('compliance_detections')
+      .select('*, document_analyses(document_id, documents(title, owner_id))');
+
+    if (error) {
+      throw new DatabaseError('Failed to list compliance_detections for admin view', error, {
+        table: this.tableName,
+      });
+    }
+
+    return (data ?? []).map((row) => {
+      const { document_analyses, ...rest } = row as ComplianceDetectionRow & {
+        document_analyses: ComplianceDetectionAdminDocumentInfo | null;
+      };
+      return {
+        ...this.parseRow(rest as ComplianceDetectionRow),
+        document_analyses,
+      };
+    });
   }
 
   /**

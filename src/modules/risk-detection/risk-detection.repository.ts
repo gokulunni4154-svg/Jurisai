@@ -31,6 +31,15 @@ type RiskDetectionRow = Database['public']['Tables']['risk_detections']['Row'];
  * built in from the start here rather than needing a follow-up amendment
  * the way File 95 did.
  */
+export interface RiskDetectionAdminDocumentInfo {
+  document_id: string;
+  documents: { title: string; owner_id: string } | null;
+}
+
+export type RiskDetectionWithDocumentInfo = RiskDetection & {
+  document_analyses: RiskDetectionAdminDocumentInfo | null;
+};
+
 export class RiskDetectionRepository extends BaseRepository<'risk_detections'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'risk_detections');
@@ -127,6 +136,99 @@ export class RiskDetectionRepository extends BaseRepository<'risk_detections'> {
     }
 
     return data ? this.parseRow(data) : null;
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3). Fourth and last
+   * of the four sequential hops in Observability's firm-scoped query
+   * path (profiles -> owner ids -> documents -> document_analyses ->
+   * each module repo, this repo being one of the eight). Given the
+   * document_analysis ids resolved by
+   * DocumentAnalysisRepository#findManyForDocumentIds, returns every
+   * risk detection run across all of them in one call — this is the
+   * run-history data Observability actually surfaces (status,
+   * provider_used, error_message, timing), not just the latest run per
+   * analysis.
+   *
+   * Same "plural IN(...), no ordering imposed" shape as
+   * DocumentAnalysisRepository#findManyForDocumentIds — Observability's
+   * own service/aggregation layer is expected to sort/group across
+   * analyses as needed, not this repository. Routes every row through
+   * parseRow(), same as every other read path on this class.
+   *
+   * Returns an empty array (not an error) when `documentAnalysisIds` is
+   * empty, matching Postgrest's own `.in()` semantics — same reasoning
+   * as the other three building-block methods in this chain.
+   */
+  async findManyForAnalysisIds(documentAnalysisIds: string[]): Promise<RiskDetection[]> {
+    if (documentAnalysisIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.supabase
+      .from('risk_detections')
+      .select('*')
+      .in('document_analysis_id', documentAnalysisIds);
+
+    if (error) {
+      throw new DatabaseError('Failed to find risk_detections for document_analysis ids', error, {
+        table: this.tableName,
+        documentAnalysisIds,
+      });
+    }
+
+    return (data ?? []).map((row) => this.parseRow(row));
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3), admin view.
+   * Unlike findManyForAnalysisIds (firm-owner path, four sequential
+   * hops because documents->profiles has no FK), the admin view skips
+   * firm-scoping entirely — so a single embedded Postgrest call works:
+   * risk_detections -> document_analyses -> documents, both FKs real
+   * and confirmed this session against database.types.ts
+   * (risk_detections_document_analysis_id_fkey,
+   * document_analyses_document_id_fkey). No firm filter, meant to run
+   * under the admin client only (bypasses RLS, same class of exception
+   * as DocumentRepository#findDueForHearingReminder and
+   * DocumentRepository#findManyForOwnerIds) — every user's/firm's rows
+   * are visible by design here.
+   *
+   * Table name kept literal in .from() (not this.tableName) so
+   * Postgrest-js can actually type the embed — same reason every other
+   * method in this file already uses the literal string.
+   *
+   * The embedded `document_analyses.documents` object is typed as
+   * nullable defensively: Postgrest doesn't guarantee non-nullness of
+   * an embedded to-one relation at the type level even though both FKs
+   * here are NOT NULL columns — same "don't blindly trust an embed"
+   * discipline this project already applies to jsonb `result` columns.
+   *
+   * Reuses this class's own private parseRow() for the base row shape
+   * by destructuring the embedded field out first, validating the rest,
+   * then reattaching the embed — rather than duplicating parseRow's
+   * validation logic here.
+   */
+  async findManyForAdminView(): Promise<RiskDetectionWithDocumentInfo[]> {
+    const { data, error } = await this.supabase
+      .from('risk_detections')
+      .select('*, document_analyses(document_id, documents(title, owner_id))');
+
+    if (error) {
+      throw new DatabaseError('Failed to list risk_detections for admin view', error, {
+        table: this.tableName,
+      });
+    }
+
+    return (data ?? []).map((row) => {
+      const { document_analyses, ...rest } = row as RiskDetectionRow & {
+        document_analyses: RiskDetectionAdminDocumentInfo | null;
+      };
+      return {
+        ...this.parseRow(rest as RiskDetectionRow),
+        document_analyses,
+      };
+    });
   }
 
   /**

@@ -290,4 +290,66 @@ export class DocumentRepository extends BaseRepository<'documents'> {
 
     return (data ?? []) as DocumentRow[];
   }
+
+  /**
+   * NEW — added for the Observability module (Phase 3). Second of the
+   * four sequential hops in Observability's firm-scoped query path
+   * (profiles -> owner ids -> documents -> document_analyses -> each
+   * module repo), needed because `documents.owner_id` has no FK to
+   * `profiles.id` (this file's own header comment / RLS note already
+   * establishes that ownership is enforced by RLS, not a joinable FK) —
+   * so a firm's document set cannot be reached via a single embedded
+   * Postgrest call starting from `profiles`. This method is the
+   * `owner_id IN (...)` fetch that closes that gap.
+   *
+   * DELIBERATELY UNSCOPED — same class of exception as
+   * findDueForHearingReminder() above, and for the same reason: this
+   * method is meant to run ONLY under admin.ts's service-role client.
+   * Every other method on this class relies on the injected client's RLS
+   * policy (owner_id = auth.uid()) to narrow visibility to the calling
+   * user; this one is explicitly given a list of owner ids to cross,
+   * which only makes sense for a caller (Observability's firm-owner or
+   * admin view) that has already resolved those ids itself (e.g. via
+   * ProfileRepository#findByFirmId) and is authorized to see all of
+   * them at once. Calling this with an RLS-scoped (server.ts) client
+   * would silently under-return rather than error — flagged so a future
+   * caller doesn't reach for this outside admin.ts by mistake, same
+   * warning findDueForHearingReminder's own doc comment gives.
+   *
+   * Excludes soft-deleted documents by default, matching this class's
+   * own findMany()/count() default (`includeDeleted` opt-in) rather than
+   * introducing a different default for this one method — nothing in
+   * Observability's confirmed scope (run-history/failure visibility, NOT
+   * a trash/recycle-bin view) calls for surfacing deleted documents.
+   *
+   * Returns an empty array (not an error) when `ownerIds` is empty,
+   * matching Postgrest's own `.in()` semantics for an empty list — a
+   * firm with zero members should read as "zero documents", not throw.
+   */
+  async findManyForOwnerIds(
+    ownerIds: string[],
+    options?: { includeDeleted?: boolean },
+  ): Promise<DocumentRow[]> {
+    if (ownerIds.length === 0) {
+      return [];
+    }
+
+    let query = this.supabase.from('documents').select('*').in('owner_id', ownerIds);
+
+    if (!options?.includeDeleted) {
+      query = query.is('deleted_at', null);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new DatabaseError('Failed to find documents for owner ids', error, {
+        table: this.tableName,
+        ownerIds,
+        options,
+      });
+    }
+
+    return (data ?? []) as DocumentRow[];
+  }
 }
