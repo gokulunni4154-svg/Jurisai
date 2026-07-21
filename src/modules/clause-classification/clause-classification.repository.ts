@@ -33,6 +33,15 @@ type ClauseClassificationRow = Database['public']['Tables']['clause_classificati
  * reimplemented here rather than calling super, closing that gap
  * directly rather than partially.
  */
+export interface ClauseClassificationAdminDocumentInfo {
+  document_id: string;
+  documents: { title: string; owner_id: string } | null;
+}
+
+export type ClauseClassificationWithDocumentInfo = ClauseClassification & {
+  document_analyses: ClauseClassificationAdminDocumentInfo | null;
+};
+
 export class ClauseClassificationRepository extends BaseRepository<'clause_classifications'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'clause_classifications');
@@ -127,6 +136,68 @@ export class ClauseClassificationRepository extends BaseRepository<'clause_class
     }
 
     return data ? this.parseRow(data) : null;
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3). Same purpose
+   * and shape as RiskDetectionRepository#findManyForAnalysisIds — the
+   * fourth of four sequential hops in Observability's firm-scoped query
+   * path, this repo being one of the eight module repos at the end of
+   * the chain. Given document_analysis ids already resolved upstream,
+   * returns every classification run across all of them, routed through
+   * parseRow() same as every other read path on this class.
+   *
+   * Returns an empty array (not an error) when `documentAnalysisIds` is
+   * empty, matching Postgrest's own `.in()` semantics.
+   */
+  async findManyForAnalysisIds(documentAnalysisIds: string[]): Promise<ClauseClassification[]> {
+    if (documentAnalysisIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.supabase
+      .from('clause_classifications')
+      .select('*')
+      .in('document_analysis_id', documentAnalysisIds);
+
+    if (error) {
+      throw new DatabaseError(
+        'Failed to find clause_classifications for document_analysis ids',
+        error,
+        { table: this.tableName, documentAnalysisIds },
+      );
+    }
+
+    return (data ?? []).map((row) => this.parseRow(row));
+  }
+
+  /**
+   * NEW — added for the Observability module (Phase 3), admin view.
+   * Same purpose and shape as RiskDetectionRepository#findManyForAdminView
+   * — single embedded call (clause_classifications -> document_analyses
+   * -> documents), no firm filter, admin-client-only. FKs confirmed
+   * this session against database.types.ts.
+   */
+  async findManyForAdminView(): Promise<ClauseClassificationWithDocumentInfo[]> {
+    const { data, error } = await this.supabase
+      .from('clause_classifications')
+      .select('*, document_analyses(document_id, documents(title, owner_id))');
+
+    if (error) {
+      throw new DatabaseError('Failed to list clause_classifications for admin view', error, {
+        table: this.tableName,
+      });
+    }
+
+    return (data ?? []).map((row) => {
+      const { document_analyses, ...rest } = row as ClauseClassificationRow & {
+        document_analyses: ClauseClassificationAdminDocumentInfo | null;
+      };
+      return {
+        ...this.parseRow(rest as ClauseClassificationRow),
+        document_analyses,
+      };
+    });
   }
 
   /**

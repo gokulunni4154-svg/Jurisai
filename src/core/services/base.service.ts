@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { AuthUser, UserRole } from '@/core/auth/types';
+import type { AuthUser, FirmRole, UserRole } from '@/core/auth/types';
 import { AuthenticationError, AuthorizationError } from '@/core/errors/app-error';
 
 /**
@@ -94,13 +94,11 @@ export abstract class BaseService {
    * resource object plus a key name. This keeps the base class from
    * guessing at resource shape, but it also means this method only covers
    * single-owner resources. Known, documented limitation: this does NOT
-   * yet cover team/firm-level ownership (e.g. a case file that should be
-   * accessible to every lawyer at the same law_firm, or a document owned
-   * by a business account but accessible to that business's employees).
-   * Those multi-tenant authorization models don't exist yet and will need
-   * dedicated handling when the Law Firm Dashboard and Business Dashboard
-   * modules are built — they should NOT be bolted onto this method as
-   * special cases later without redesigning it.
+   * cover team/firm-level ownership (e.g. a case file that should be
+   * accessible to every lawyer at the same firm). See requireFirmRole()
+   * below — added this session as the dedicated handling this comment
+   * always said team/firm-level authorization would need, rather than
+   * being bolted onto this method as a special case.
    */
   protected requireOwnership(
     resourceOwnerId: string,
@@ -122,6 +120,96 @@ export abstract class BaseService {
       actualRole: user.role,
       allowRoles: options?.allowRoles,
     });
+  }
+
+  /**
+   * Asserts that a user is authenticated, holds a role that requires
+   * professional verification (currently 'lawyer' and 'law_firm' only —
+   * per product decision, no other role is subject to this check), AND
+   * that their professional_verifications status is 'verified'.
+   *
+   * ADDED (requireVerified() design session, #43 follow-up): deliberately
+   * takes `verificationStatus` as a parameter rather than reading it off
+   * `this.currentUser`, same reasoning as requireOwnership()'s
+   * resourceOwnerId parameter above: BaseService has no repository access
+   * (see class doc comment) and AuthUser deliberately does not carry
+   * verification status (same "not cheap enough for every
+   * getCurrentUser() call" reasoning AuthUser's own doc comment gives for
+   * omitting FirmRole). The caller — a concrete service that already has
+   * ProfessionalVerificationRepository injected — is responsible for
+   * fetching the row first (e.g. via findByProfileId(user.id)) and
+   * passing its `status` in, or `null` if no row exists yet.
+   *
+   * The status union is typed inline here rather than imported from
+   * professional-verification.repository.ts's VerificationStatus type,
+   * to avoid this core file depending on a feature module — flagged as a
+   * deliberate choice, not an oversight. If a shared-types location gets
+   * introduced later, this should be reconciled to import from there
+   * instead of duplicating the union.
+   *
+   * FLAGGED ASSUMPTION: a caller whose role is NOT 'lawyer'/'law_firm'
+   * (e.g. 'individual', 'business', 'admin', 'support') is rejected here
+   * too, since requireVerified() implies "must be a role that
+   * verification even applies to." If a route ever needs a softer
+   * "verified-if-lawyer-or-firm, otherwise just authenticated" branch
+   * instead of a hard gate, that is a different, not-yet-built check —
+   * do not silently loosen this one to cover that case later.
+   */
+  protected requireVerified(
+    verificationStatus: 'pending' | 'verified' | 'rejected' | 'resubmitted' | null
+  ): AuthUser {
+    const user = this.requireRole('lawyer', 'law_firm');
+
+    if (verificationStatus !== 'verified') {
+      throw new AuthorizationError(
+        'This action requires a verified professional account.',
+        { actualStatus: verificationStatus }
+      );
+    }
+
+    return user;
+  }
+
+  /**
+   * NEW, Phase 4 — Enterprise & Collaboration. Asserts that a user is
+   * authenticated AND holds one of the given FirmRoles WITHIN A SPECIFIC
+   * FIRM. This is the dedicated team/firm-level authorization
+   * requireOwnership()'s own doc comment above already flagged as a
+   * known gap, not yet built ("will need dedicated handling... should
+   * NOT be bolted onto [requireOwnership] as special cases later without
+   * redesigning it") — added as its own method rather than extending
+   * requireOwnership(), per that comment's own instruction.
+   *
+   * Follows requireVerified()'s established pattern exactly: takes the
+   * already-resolved firmRole as a parameter rather than fetching it
+   * itself, since BaseService has no repository access (see class doc
+   * comment). The caller — a concrete service with FirmMemberRepository
+   * injected — fetches it first via
+   * findByFirmAndProfile(firmId, user.id) and passes the result in,
+   * `null` if no firm_members row exists for that (firmId, profileId)
+   * pair (a normal, expected state — see FirmRole's own doc comment in
+   * types.ts).
+   *
+   * Says nothing about platform UserRole — a 'lawyer' UserRole and an
+   * 'admin' FirmRole are independent facts (see FirmRole's own doc
+   * comment). Callers needing both must call requireRole() and
+   * requireFirmRole() separately; this method does not call
+   * requireRole() internally.
+   */
+  protected requireFirmRole(
+    firmRole: FirmRole | null,
+    allowedRoles: readonly FirmRole[]
+  ): AuthUser {
+    const user = this.requireAuthentication();
+
+    if (!firmRole || !allowedRoles.includes(firmRole)) {
+      throw new AuthorizationError(
+        'You do not have permission to perform this action within this firm.',
+        { requiredFirmRoles: allowedRoles, actualFirmRole: firmRole }
+      );
+    }
+
+    return user;
   }
 
   /**

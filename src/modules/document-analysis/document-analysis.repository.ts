@@ -145,6 +145,56 @@ export class DocumentAnalysisRepository extends BaseRepository<'document_analyse
   }
 
   /**
+   * NEW — added for the Observability module (Phase 3). Third of the
+   * four sequential hops in Observability's firm-scoped query path
+   * (profiles -> owner ids -> documents -> document_analyses -> each
+   * module repo). Given the document ids resolved by
+   * DocumentRepository#findManyForOwnerIds, returns every analysis run
+   * across all of them in one call.
+   *
+   * Unlike DocumentRepository#findManyForOwnerIds, this method is NOT
+   * flagged as admin-client-only in the same sense — the ownership
+   * boundary was already crossed one hop earlier (at the `documents`
+   * step). This method only takes a list of document ids the caller has
+   * already legitimately resolved; it doesn't itself decide who's
+   * allowed to see them. Still expected to run under the admin client in
+   * practice (Observability's whole query chain does, per the four-hop
+   * design), but that's inherited from the caller's context, not
+   * re-justified independently here.
+   *
+   * Routes every row through parseRow() — same as findById/
+   * findByDocumentId above — so `result` is validated against
+   * documentAnalysisResultSchema for every row returned, not trusted as
+   * an opaque Json blob. No ordering imposed (Observability's own
+   * service/aggregation layer is expected to sort/group these across
+   * documents as needed, not this repository).
+   *
+   * Returns an empty array (not an error) when `documentIds` is empty,
+   * matching Postgrest's own `.in()` semantics — same reasoning as
+   * findManyForOwnerIds: a firm with zero documents should read as
+   * "zero analyses", not throw.
+   */
+  async findManyForDocumentIds(documentIds: string[]): Promise<DocumentAnalysis[]> {
+    if (documentIds.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.supabase
+      .from('document_analyses')
+      .select('*')
+      .in('document_id', documentIds);
+
+    if (error) {
+      throw new DatabaseError('Failed to find document analyses for document ids', error, {
+        table: this.tableName,
+        documentIds,
+      });
+    }
+
+    return (data ?? []).map((row) => this.parseRow(row));
+  }
+
+  /**
    * Transitions an analysis run from 'pending' to 'processing'. Called
    * by File 65 immediately before the AI call starts, so a caller
    * polling GET .../analyses/[analysisId] can distinguish "queued" from

@@ -5,9 +5,10 @@ import { FirmRepository } from './firm.repository';
 import { ProfileRepository } from './profile.repository';
 import { FirmService } from './firm.service';
 import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
+import { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 
 /**
- * NEW THIS SESSION, closing Item #67.
+ * Closes Item #67.
  *
  * UNLIKE billing.factory.ts's createCheckoutSession() wiring — which reads
  * FirmRepository via the RLS-respecting createClient() — this factory
@@ -20,22 +21,24 @@ import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
  * for profiles.firm_id either (profiles' own RLS has never been pasted in
  * this session to confirm that directly, but the firms migration's stated
  * reasoning — "membership changes are service-layer operations" — applies
- * equally to the profile side of that same operation). Flagged as an
- * inference, not confirmed against pasted profiles RLS.
+ * equally to the profile side of that same operation).
  *
- * AMENDED, THIS SESSION — FirmService now also needs an
- * AuditLogRepository (see firm.service.ts's own header on why:
+ * AMENDED (Firm-creation audit entry, prior session) — FirmService also
+ * needs an AuditLogRepository (see firm.service.ts's own header on why:
  * createFirm() writes a 'firm.create' audit entry as its final step).
- * Unlike notification.factory.ts (which had to reach for a SECOND,
- * differently-scoped client, since NotificationRepository is
- * RLS-respecting there), this factory already constructs everything
- * against createAdminClient() — the same single adminClient instance
- * already in scope is reused for AuditLogRepository too, no second
- * client needed. This still matches audit-log.factory.ts's own
- * established precedent that AuditLogRepository is always constructed
- * against the admin client; it's just that here, that happens to be
- * the same client the rest of this factory already uses, rather than a
- * distinct one.
+ * The same single adminClient instance already in scope is reused for
+ * AuditLogRepository too, no second client needed — matches
+ * audit-log.factory.ts's own established precedent that AuditLogRepository
+ * is always constructed against the admin client.
+ *
+ * AMENDED, THIS SESSION — Phase 4, Enterprise & Collaboration.
+ * FirmMemberRepository added as a 4th dependency, closing the same
+ * "which client" question the same way: firm_members has no
+ * client-writable RLS policy either (see that table's own migration
+ * header — "No insert/update/delete policy for authenticated: membership
+ * changes... are service-layer operations only"), so it's constructed
+ * against the same adminClient already in scope here, same reasoning as
+ * every other repository in this factory.
  */
 export function createFirmService(currentUser: AuthUser | null): FirmService {
   const adminClient = createAdminClient();
@@ -43,6 +46,13 @@ export function createFirmService(currentUser: AuthUser | null): FirmService {
   const firmRepository = new FirmRepository(adminClient);
   const profileRepository = new ProfileRepository(adminClient);
   const auditLogRepository = new AuditLogRepository(adminClient);
+  const firmMemberRepository = new FirmMemberRepository(adminClient);
 
-  return new FirmService(currentUser, firmRepository, profileRepository, auditLogRepository);
+  return new FirmService(
+    currentUser,
+    firmRepository,
+    profileRepository,
+    auditLogRepository,
+    firmMemberRepository,
+  );
 }

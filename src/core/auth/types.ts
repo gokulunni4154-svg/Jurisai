@@ -22,8 +22,40 @@
  * e.g. `type UserRole = Database['public']['Enums']['user_role']` — so
  * the database becomes the single source of truth and this union can't
  * silently drift out of sync with it.
+ *
+ * AMENDMENT (Admin Tooling RBAC, File 3): added `'support'`. Support is
+ * structurally identical to `'admin'` — platform staff sourced only from
+ * `auth.users.app_metadata`, no firm/customer association — not a new
+ * axis, just a second value of the same kind. Support is granted the
+ * SAME elevated read access as Admin (see
+ * 20260802000000_add_support_role_to_admin_policies.sql), a deliberate
+ * product decision, not a default.
  */
-export type UserRole = 'individual' | 'lawyer' | 'law_firm' | 'business' | 'admin';
+export type UserRole = 'individual' | 'lawyer' | 'law_firm' | 'business' | 'admin' | 'support';
+
+/**
+ * A profile's role WITHIN a specific firm — independent of `UserRole`.
+ * Backed by the `firm_members` table
+ * (20260802000001_create_firm_members_table.sql), not `app_metadata`.
+ *
+ * This is deliberately a SEPARATE type from `UserRole`, not folded into
+ * it: `UserRole` answers "what kind of account is this, platform-wide"
+ * (or "is this platform staff"), while `FirmRole` answers "what can this
+ * profile do inside one particular firm" — a profile can be `lawyer`
+ * (UserRole) and `admin` (FirmRole) at the same time; these are two
+ * independent facts, not a single spectrum.
+ *
+ * Only meaningful when a profile has a corresponding `firm_members` row.
+ * A profile with no such row (e.g. an `individual`-plan user, or a
+ * `law_firm`-plan user not yet added to any firm's membership) has no
+ * `FirmRole` — callers must treat "no firm_members row" as a real state,
+ * not coerce it to a default like `'employee'`.
+ *
+ * `'owner'` mirrors `firms.owner_id` but is NOT independently enforced —
+ * see 20260802000001_create_firm_members_table.sql's own header,
+ * assumption #5, for the currently-open seam this leaves.
+ */
+export type FirmRole = 'owner' | 'admin' | 'employee' | 'lawyer';
 
 /**
  * The application's representation of an authenticated user.
@@ -42,6 +74,13 @@ export type UserRole = 'individual' | 'lawyer' | 'law_firm' | 'business' | 'admi
  * (User Management module, not yet built) backed by a `profiles` table.
  * Keeping those concerns separate means every auth check stays cheap —
  * it never implicitly requires a profile join.
+ *
+ * Deliberately does NOT carry `FirmRole` here, for the same reason it
+ * doesn't carry firm affiliation: resolving `FirmRole` requires a
+ * `firm_members` lookup, which isn't cheap enough to do on every
+ * `getCurrentUser()` call. Callers needing `FirmRole` will fetch it
+ * explicitly (a future `FirmMemberRepository` method, not yet built) —
+ * flagged here so the omission reads as deliberate, not an oversight.
  */
 export interface AuthUser {
   /** Supabase auth user id (UUID). Primary identifier across the app. */

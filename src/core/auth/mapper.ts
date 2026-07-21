@@ -3,12 +3,18 @@ import type { User } from '@supabase/supabase-js';
 import { InternalServerError } from '@/core/errors/app-error';
 import type { AuthUser, UserRole } from '@/core/auth/types';
 
+// AMENDMENT (Admin Tooling RBAC, File 4): added 'support', matching the
+// addition to UserRole in src/core/auth/types.ts (File 3) and the RLS
+// policy widening in 20260802000000_add_support_role_to_admin_policies.sql
+// (File 1). No other change in this file — 'support' now simply passes
+// the same validation 'admin' already did.
 const VALID_ROLES: readonly UserRole[] = [
   'individual',
   'lawyer',
   'law_firm',
   'business',
   'admin',
+  'support',
 ];
 
 /**
