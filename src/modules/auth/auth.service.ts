@@ -6,6 +6,7 @@ import {
   AuthenticationError,
   ExternalServiceError,
   RateLimitError,
+  ValidationError,
   ErrorCode,
 } from '@/core/errors/app-error';
 import { mapSupabaseUserToAuthUser } from '@/core/auth/mapper';
@@ -19,6 +20,9 @@ import {
   requestPasswordResetSchema,
   updatePasswordSchema,
 } from './auth.schemas';
+import { FirmInvitationRepository } from '@/modules/user-management/firm-invitation.repository';
+import { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
+import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 
 /**
  * The role assigned to every new sign-up today. There is deliberately no
@@ -90,10 +94,20 @@ function mapSupabaseAuthError(error: AuthError): AppError {
  * Constructed with an injected RLS-respecting SupabaseClient<Database>
  * (src/core/supabase/server.ts), the same request-scoped client
  * ProfileRepository uses -- NOT the admin client. The one place this
- * class does reach for the admin client (signUp's role assignment) is
- * called out explicitly at that call site, per admin.ts's own
- * documented expectation that using it be a deliberate, reviewable
- * decision.
+ * class does reach for the admin client (signUp's role assignment, and
+ * now signUp's invite-token handling below) is called out explicitly at
+ * that call site, per admin.ts's own documented expectation that using
+ * it be a deliberate, reviewable decision.
+ *
+ * AMENDED THIS SESSION -- Invitation System, Decision #13. signUp() gained
+ * a new optional `inviteToken` parameter. Deliberately NOT added as a new
+ * constructor dependency (FirmInvitationRepository/FirmMemberRepository/
+ * AuditLogRepository are not injected here) -- that would ripple into
+ * every route that constructs AuthService (sign-in, sign-out, password
+ * reset), none of which touch invitations. Instead, all three are
+ * constructed locally inside signUp() off the same `admin` client the
+ * role-assignment step already reaches for -- not a new pattern, the
+ * exact one this file already established for that step.
  */
 export class AuthService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
@@ -127,8 +141,38 @@ export class AuthService {
    * built to catch loudly on first sign-in. This method surfaces that
    * immediately instead, as an ExternalServiceError, rather than
    * reporting sign-up as successful when a required step failed.
+   *
+   * NEW -- Decision #13 (Invitation System, token-based new-user
+   * acceptance). If `inviteToken` is supplied, this method runs ONE more
+   * step after role assignment succeeds: validate the token against
+   * `firm_invitations` and, if valid, insert the resulting `firm_members`
+   * row using `data.user.id` -- all within this same call, per the
+   * confirmed trigger behavior (`handle_new_user()` on
+   * 20260711120000_create_profiles_table.sql fires `after insert on
+   * auth.users`, `security definer`, no gating on
+   * `email_confirmed_at` -- so `profiles` is guaranteed to exist by now
+   * regardless of pending email confirmation).
+   *
+   * Same "surface it loudly, don't report false success" discipline as
+   * the role-assignment step: an invalid/expired/already-used token
+   * throws explicitly rather than silently skipping the firm-join step
+   * while still returning a 2xx sign-up response. The one exception is
+   * an unrecognized token specifically -- this throws a ValidationError
+   * (400) rather than silently creating an account with no firm
+   * membership, since a bad token in the sign-up URL is a caller-facing
+   * input problem, not an infrastructure failure like the role-assignment
+   * branch above.
+   *
+   * `firmMemberRepository.create()`'s own inherited BaseRepository error
+   * handling already throws a DatabaseError if that insert fails -- no
+   * separate explicit error path is added here beyond letting that
+   * propagate, since it already satisfies the "don't silently report
+   * success" requirement without duplicating logic.
    */
-  async signUp(rawInput: unknown): Promise<{
+  async signUp(
+    rawInput: unknown,
+    inviteToken?: string,
+  ): Promise<{
     userId: string;
     email: string;
     emailConfirmationRequired: boolean;
@@ -174,6 +218,53 @@ export class AuthService {
         roleAssignmentError,
         { userId: data.user.id },
       );
+    }
+
+    // NEW -- Decision #13. Same admin client already in scope above,
+    // reused here rather than constructing a second one. See class-level
+    // comment for why these repositories are constructed locally instead
+    // of being added to this class's constructor.
+    if (inviteToken) {
+      const firmInvitationRepository = new FirmInvitationRepository(admin);
+      const firmMemberRepository = new FirmMemberRepository(admin);
+      const auditLogRepository = new AuditLogRepository(admin);
+
+      const invitation = await firmInvitationRepository.findByToken(inviteToken);
+
+      if (!invitation) {
+        throw new ValidationError('This invitation link is invalid.', { inviteToken });
+      }
+
+      if (invitation.status !== 'pending') {
+        throw new ConflictError('This invitation is no longer valid.', {
+          currentStatus: invitation.status,
+        });
+      }
+
+      if (new Date(invitation.expires_at) < new Date()) {
+        await firmInvitationRepository.update(invitation.id, { status: 'expired' });
+        throw new ConflictError('This invitation has expired.');
+      }
+
+      await firmMemberRepository.create({
+        firm_id: invitation.firm_id,
+        profile_id: data.user.id,
+        role: invitation.role,
+      });
+
+      await firmInvitationRepository.update(invitation.id, {
+        status: 'accepted',
+        accepted_at: new Date().toISOString(),
+        profile_id: data.user.id,
+      });
+
+      await auditLogRepository.create({
+        actor_id: data.user.id,
+        actor_type: 'profile',
+        action: 'firm_invitation.accept',
+        target_id: invitation.id,
+        metadata: { firmId: invitation.firm_id, role: invitation.role, viaSignUp: true },
+      });
     }
 
     return {

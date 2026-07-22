@@ -43,16 +43,23 @@ const PERMANENT_BAN_DURATION = '87600h';
 /**
  * AuthUserRepository
  * -------------------
- * Admin Tooling — User & Org Management module.
+ * Admin Tooling — User & Org Management module. Also now the Invitation
+ * System's email-resolution path (see findIdByEmail() below).
  *
  * NOT a BaseRepository<T> subclass — auth.users is reached only via
- * Supabase's separate Auth Admin API (supabase.auth.admin.*), never
- * `.from('users')`. See this class's own prior doc comment (unchanged)
- * for the full reasoning.
+ * Supabase's separate Auth Admin API (supabase.auth.admin.*) or, for the
+ * one case that API can't serve (email lookup — no filter param exists
+ * on listUsers()), a dedicated security-definer RPC. Still never a raw
+ * `.from('users')` call from this class — see this class's own prior
+ * doc comment for the original reasoning, and
+ * 20260807000000_create_find_auth_user_by_email_function.sql for why the
+ * RPC approach was chosen over that alternative for email lookup
+ * specifically.
  *
  * MUST be constructed with the admin.ts service-role client — every
- * method here calls supabase.auth.admin.*, which requires the service
- * role key.
+ * method here either calls supabase.auth.admin.* (requires the service
+ * role key) or an RPC whose EXECUTE grant is restricted to
+ * service_role.
  */
 export class AuthUserRepository {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
@@ -88,6 +95,43 @@ export class AuthUserRepository {
     );
 
     return results.filter((summary): summary is AuthUserSummary => summary !== null);
+  }
+
+  /**
+   * NEW — Invitation System (Decision #2: does the invited email match
+   * an existing user, or is this a genuine new-user invite). Wraps the
+   * find_auth_user_id_by_email RPC (security definer, service_role
+   * only) rather than querying auth.users directly or paginating
+   * listUsers() — see the migration's own header for the full trade-off
+   * this was chosen against, and this class's own doc comment above.
+   *
+   * Returns the matching auth.users.id, which IS profiles.id per the
+   * confirmed handle_new_user() trigger on
+   * 20260711120000_create_profiles_table.sql — so the caller can use
+   * this value directly as a profile_id with no further translation.
+   * Returns null if no user has that email. Case-insensitivity is
+   * handled inside the RPC itself (lower(email) = lower(p_email)), not
+   * by this method — no normalization happens here.
+   *
+   * FLAGGED: this project's generated database.types.ts must be
+   * regenerated after the RPC migration is applied for
+   * `this.supabase.rpc('find_auth_user_id_by_email', ...)` to type-check
+   * against a real Functions entry rather than falling back to `any` —
+   * not done as part of this file, since it depends on the migration
+   * actually being applied to a real database first.
+   */
+  async findIdByEmail(email: string): Promise<string | null> {
+    const { data, error } = await this.supabase.rpc('find_auth_user_id_by_email', {
+      p_email: email,
+    });
+
+    if (error) {
+      throw new DatabaseError('Failed to look up auth user by email', error, {
+        email,
+      });
+    }
+
+    return (data as string | null) ?? null;
   }
 
   /**
