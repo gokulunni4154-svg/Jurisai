@@ -27,8 +27,24 @@ export async function POST(request: Request): Promise<NextResponse> {
       throw new ValidationError('Request body must be valid JSON.');
     }
 
+    // inviteToken can arrive either as a field on the JSON body or as a
+    // query param on the sign-up POST (e.g. an invite link that lands on
+    // a sign-up page which then posts the token straight through as
+    // ?inviteToken=... rather than folding it into the body). Which one
+    // the frontend actually does is unconfirmed -- check both, body wins
+    // if somehow both are present.
+    const bodyInviteToken =
+      typeof rawInput === 'object' && rawInput !== null && 'inviteToken' in rawInput
+        ? (rawInput as { inviteToken?: unknown }).inviteToken
+        : undefined;
+    const queryInviteToken = new URL(request.url).searchParams.get('inviteToken');
+    const inviteToken =
+      typeof bodyInviteToken === 'string'
+        ? bodyInviteToken
+        : queryInviteToken ?? undefined;
+
     const service = await buildAuthService();
-    const result = await service.signUp(rawInput);
+    const result = await service.signUp(rawInput, inviteToken);
 
     // 201 Created -- this is the first Route Handler that creates a new
     // resource (an account) rather than reading or updating one.

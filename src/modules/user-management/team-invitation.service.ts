@@ -206,15 +206,20 @@ export class TeamInvitationService extends BaseService {
    * which has two.
    *
    * Write step uses teamMemberRepository.create() -- inherited
-   * BaseRepository behavior, per this file's own class-level flag on
-   * why that dependency is trusted without a fresh paste this session.
+   * BaseRepository behavior, now confirmed directly against real
+   * team-member.repository.ts source this session (it extends
+   * BaseRepository<'team_members'> plainly, no override), rather than
+   * merely assumed as it was before this session's paste.
    *
-   * FLAGGED, NOT YET HANDLED, same class of gap already flagged and
-   * deliberately left unfixed in FirmInvitationService#acceptFromList()
-   * this session: no check for whether `user` is ALREADY a team_members
-   * row for this team before the create() call below. Left as-is for
-   * parity with that file's current state -- both should likely be
-   * fixed together, not one now and one later.
+   * FIXED THIS SESSION, together with FirmInvitationService#acceptFromList()'s
+   * identical gap: no check for whether `user` is ALREADY a
+   * team_members row for this team before the create() call below.
+   * Guarded via teamMemberRepository.findRowByTeamAndProfile() --
+   * confirmed against real team-member.repository.ts source this
+   * session (open item #3, now closed): that method exists exactly for
+   * this purpose, per its own doc comment ("exists purely for delete()'s
+   * id requirement" -- this is the second real use of it, an existence
+   * check, not a delete-id lookup, but the same method serves both).
    */
   async acceptInvitation(invitationId: string): Promise<void> {
     const user = this.requireAuthentication();
@@ -234,6 +239,23 @@ export class TeamInvitationService extends BaseService {
     if (new Date(invitation.expires_at) < new Date()) {
       await this.teamInvitationRepository.update(invitationId, { status: 'expired' });
       throw new ConflictError('This invitation has expired.');
+    }
+
+    // CORRECTED against real team-member.repository.ts source (this
+    // session): the method is findRowByTeamAndProfile(), not
+    // findByTeamAndProfile() as guessed when this check was first
+    // added -- table has no role column (decision #4), so this returns
+    // the full TeamMemberRow (or null), not a role value. Same
+    // .maybeSingle()-backed existence check either way.
+    const existingMembership = await this.teamMemberRepository.findRowByTeamAndProfile(
+      invitation.team_id,
+      user.id,
+    );
+
+    if (existingMembership !== null) {
+      throw new ConflictError('You are already a member of this team.', {
+        teamId: invitation.team_id,
+      });
     }
 
     await this.teamMemberRepository.create({

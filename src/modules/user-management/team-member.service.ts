@@ -17,18 +17,27 @@ const MANAGE_ROLES: readonly FirmRole[] = ['owner', 'admin'];
  * TeamMemberService
  * -------------------
  * Phase 4 — Enterprise & Collaboration. Structural mirror of
- * FirmMemberService, with two deliberate differences forced by the
- * teams migration's own decisions:
+ * FirmMemberService, with deliberate differences forced by the teams
+ * migration's own decisions:
  *
- *   1. No role concept (decision #4) — addMember() takes no role
- *      parameter, and there is no changeRole() at all (nothing to
- *      change). No last-owner-style protection exists either, since
- *      that protection was specifically about roles.
+ *   1. Role concept reopened (CASE_ACCESS_GRANTS_SCOPING.md §4.4) —
+ *      team_members now has a role column ('member'/'lead', default
+ *      'member'; see 20260808000001_add_role_to_team_members.sql).
+ *      addMember() still takes no role parameter; new members always
+ *      default to 'member' via the column default. changeRole() is the
+ *      only way to promote/demote. A team can have multiple leads
+ *      simultaneously — no per-team uniqueness constraint on
+ *      role = 'lead'. Deliberately NO last-lead protection — unlike
+ *      FirmMemberService's last-owner check, a team may validly reach
+ *      zero leads for v1 (see changeRole()'s own doc comment, and the
+ *      scoping doc's explicit low-priority flag on this).
  *   2. Authorization is entirely firm-level, not team-level — same
  *      reasoning TeamService's own class doc comment gives. Every
  *      write here resolves the team's PARENT FIRM first (via
  *      TeamRepository), then gates on the caller's FirmRole in that
- *      firm — never a team-specific role, since none exists.
+ *      firm — never a team-specific role. This applies to changeRole()
+ *      too: promoting/demoting a team lead is still an owner/admin-only
+ *      operation, not something a team lead can do to another member.
  *
  * FLAGGED, NEW DECISION — addMember() enforces that targetProfileId
  * already holds a firm_members row for the team's firm before allowing
@@ -61,6 +70,11 @@ export class TeamMemberService extends BaseService {
    * method of the same name, extended one step to first resolve
    * teamId -> firm_id (FirmMemberService/TeamService both already have
    * firmId directly; this Service's callers only have teamId).
+   *
+   * Also the gate for changeRole() — confirmed real source here does
+   * NOT branch on team-level role at all, so promoting/demoting a lead
+   * is firm-owner/admin-gated, same as add/removeMember(), not
+   * team-lead-gated.
    */
   private async requireManageAccess(teamId: string): Promise<{ user: AuthUser; firmId: string }> {
     const team = await this.teamRepository.findByIdOrThrow(teamId);
@@ -74,7 +88,9 @@ export class TeamMemberService extends BaseService {
   /**
    * Adds a profile to a team. Owner/admin (of the team's parent firm)
    * only. See class-level doc comment for the firm-membership
-   * precondition this enforces.
+   * precondition this enforces. No role parameter — new members always
+   * default to 'member' via the column default; changeRole() is the
+   * only way to promote to 'lead'.
    */
   async addMember(teamId: string, targetProfileId: string): Promise<TeamMemberRow> {
     const { user, firmId } = await this.requireManageAccess(teamId);
@@ -109,8 +125,51 @@ export class TeamMemberService extends BaseService {
   }
 
   /**
+   * Changes a team member's role (member/lead). Owner/admin (of the
+   * team's parent firm) only — same requireManageAccess() gate as
+   * addMember()/removeMember(); NOT gated by the target's or caller's
+   * own team role, since no team-level authorization concept exists
+   * (see class-level doc comment, point 2).
+   *
+   * Deliberately NO last-lead protection. A team may validly reach zero
+   * leads for v1 — firm admins remain a fallback grant-authorizer
+   * regardless (CASE_ACCESS_GRANTS_SCOPING.md §4.4's explicit flag on
+   * this). Mirrors FirmMemberService#assertNotLastOwner() in shape
+   * only, not in behavior — the absence of that check here is
+   * deliberate, not an oversight. Revisit if this causes a real
+   * problem.
+   */
+  async changeRole(
+    teamId: string,
+    targetProfileId: string,
+    newRole: TeamMemberRow['role'],
+  ): Promise<TeamMemberRow> {
+    const { user, firmId } = await this.requireManageAccess(teamId);
+
+    const target = await this.teamMemberRepository.findRowByTeamAndProfile(teamId, targetProfileId);
+
+    if (!target) {
+      throw new NotFoundError('team_members', `${teamId}:${targetProfileId}`);
+    }
+
+    const updated = await this.teamMemberRepository.update(target.id, { role: newRole });
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId,
+      action: 'team.member.role_change',
+      resourceType: 'team_member',
+      resourceId: target.id,
+      metadata: { teamId, targetProfileId, previousRole: target.role, newRole },
+    });
+
+    return updated;
+  }
+
+  /**
    * Removes a profile from a team. Owner/admin (of the team's parent
-   * firm) only.
+   * firm) only. No last-lead protection here either — same reasoning as
+   * changeRole(); removing a team's only lead is currently allowed.
    */
   async removeMember(teamId: string, targetProfileId: string): Promise<void> {
     const { user, firmId } = await this.requireManageAccess(teamId);

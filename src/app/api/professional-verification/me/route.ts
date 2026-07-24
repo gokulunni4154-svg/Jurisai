@@ -3,9 +3,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getCurrentUser } from '@/core/auth/session';
 import { handleApiError } from '@/core/errors/error-handler';
 import { ValidationError } from '@/core/errors/app-error';
-import { buildProfessionalVerificationService } from '@/modules/professional-verification/professional-verification.factory';
+import { createProfessionalVerificationService } from '@/modules/professional-verification/professional-verification.factory';
 
 /**
  * GET /api/professional-verification/me
@@ -18,12 +19,20 @@ import { buildProfessionalVerificationService } from '@/modules/professional-ver
  * unauthenticated caller gets a 401 via `handleApiError`, not a route-
  * layer check.
  *
+ * RECONCILED THIS SESSION (open item #4): session now resolved here via
+ * `getCurrentUser()` and passed into the factory, matching every other
+ * route in the project (Pattern 1) instead of the factory resolving it
+ * internally. The factory itself is still `await`ed — see its own doc
+ * comment for why that's unrelated to this change.
+ *
  * No maxDuration override — a single DB read, same reasoning the
  * confirmed `route.ts` gives for omitting it on pure-DB-read paths.
  */
 export async function GET(): Promise<NextResponse> {
   try {
-    const service = await buildProfessionalVerificationService();
+    const currentUser = await getCurrentUser();
+
+    const service = await createProfessionalVerificationService(currentUser);
 
     const verification = await service.getOwnVerification();
 
@@ -47,7 +56,7 @@ export async function GET(): Promise<NextResponse> {
  * `registrationNumber` from the body, and if it's missing or not a
  * non-empty string, reject before calling the Service.
  *
- * RESOLVED, CLOSED THIS SESSION: this validation failure previously
+ * RESOLVED, CLOSED (prior session): this validation failure previously
  * threw a plain `Error`. `core/errors/app-error.ts` and
  * `core/errors/error-handler.ts` are now confirmed real via full pasted
  * source. Per `error-handler.ts`'s `normalizeError()`, a plain `Error`
@@ -60,6 +69,9 @@ export async function GET(): Promise<NextResponse> {
  * `ConflictError`, HTTP 409) — that fix does not require any change
  * here, since this route already just re-throws whatever the Service
  * throws up to `handleApiError`.
+ *
+ * RECONCILED THIS SESSION (open item #4): same session-resolution
+ * change as GET above.
  *
  * No maxDuration override — same reasoning as GET above.
  */
@@ -76,7 +88,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const service = await buildProfessionalVerificationService();
+    const currentUser = await getCurrentUser();
+
+    const service = await createProfessionalVerificationService(currentUser);
 
     const verification = await service.submit(registrationNumber.trim());
 
