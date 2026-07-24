@@ -4,36 +4,69 @@ import { paginationSchema, uuidSchema } from '@/core/validation/common.schemas';
 
 /**
  * Must match the `type in (...)` check constraint on public.notifications
- * (migration 20260725010000_create_notifications_table.sql). Kept as an
- * application-level enum for the same reason MAX_TITLE_LENGTH duplicates
- * File 45's check constraint (documents.schemas.ts): a bad value is
- * rejected with a clear ValidationError before ever reaching Postgres.
- * If the migration's constraint list ever grows, this must grow with it.
+ * (migration 20260725010000_create_notifications_table.sql, widened by
+ * 20260812000000_widen_notifications_for_lawyer_inquiries.sql to add
+ * 'lawyer_inquiry_received'). Kept as an application-level enum for the
+ * same reason MAX_TITLE_LENGTH duplicates File 45's check constraint
+ * (documents.schemas.ts): a bad value is rejected with a clear
+ * ValidationError before ever reaching Postgres. If the migration's
+ * constraint list ever grows, this must grow with it.
  */
-export const NotificationType = z.enum(['hearing_date_set', 'hearing_date_reminder']);
+export const NotificationType = z.enum([
+  'hearing_date_set',
+  'hearing_date_reminder',
+  'lawyer_inquiry_received',
+]);
 export type NotificationType = z.infer<typeof NotificationType>;
 
 /**
- * Server-derived, not client input. Both current notification types are
- * created by server-side logic (inline on a hearing_date update, or by
- * the future Vercel Cron job) that already knows every field -- there is
- * no route where a client submits a notification body directly, unlike
+ * Server-derived, not client input. All three current notification types
+ * are created by server-side logic (inline on a hearing_date update, the
+ * future Vercel Cron job, or -- new -- inquiry creation in the Lawyer
+ * Inquiry feature) that already knows every field -- there is no route
+ * where a client submits a notification body directly, unlike
  * createDocumentSchema which validates a value assembled from a
  * completed upload. Kept here anyway, `.strict()`, as the single place
  * the Notifications Service/Repository validate a row shape before
  * insert, following the same defense-in-depth rationale
  * createDocumentSchema's own comment states.
+ *
+ * documentId/hearingDateSnapshot/inquiryId were widened from required to
+ * optional when lawyer_inquiry_received was added
+ * (20260812000000_widen_notifications_for_lawyer_inquiries.sql) --
+ * document_id and hearing_date_snapshot are not applicable to an
+ * inquiry-scoped notification, and inquiryId is not applicable to the two
+ * original document-scoped types. The .refine() below is the
+ * application-layer counterpart to the DB's
+ * notifications_reference_by_type_check constraint, same
+ * defense-in-depth relationship this file already has with the type
+ * CHECK constraint above -- a bad combination is rejected here, before
+ * ever reaching Postgres, rather than relying on the DB constraint alone.
  */
 export const createNotificationSchema = z
   .object({
     userId: uuidSchema,
-    documentId: uuidSchema,
+    documentId: uuidSchema.optional(),
+    inquiryId: uuidSchema.optional(),
     type: NotificationType,
     title: z.string().trim().min(1, 'Title is required.'),
     message: z.string().trim().min(1, 'Message is required.'),
-    hearingDateSnapshot: z.coerce.date(),
+    hearingDateSnapshot: z.coerce.date().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (data) => {
+      if (data.type === 'lawyer_inquiry_received') {
+        return data.inquiryId !== undefined && data.documentId === undefined && data.hearingDateSnapshot === undefined;
+      }
+      // hearing_date_set / hearing_date_reminder
+      return data.documentId !== undefined && data.hearingDateSnapshot !== undefined && data.inquiryId === undefined;
+    },
+    {
+      message:
+        "hearing_date_set/hearing_date_reminder require documentId + hearingDateSnapshot (and no inquiryId); lawyer_inquiry_received requires inquiryId (and no documentId/hearingDateSnapshot).",
+    },
+  );
 
 export type CreateNotificationInput = z.infer<typeof createNotificationSchema>;
 

@@ -1,307 +1,186 @@
-// src/modules/user-management/firm-invitation.service.ts
+// src/modules/user-management/firm-invitation.repository.ts
+//
+// REBUILT THIS SESSION — the real file on disk was found to be
+// corrupted (it actually contained firm-invitation.service.ts's code,
+// self-importing from './firm-invitation.repository', confirmed three
+// independent ways: file upload, direct paste, and PowerShell
+// `Get-Content`, all byte-identical). No recoverable original was
+// found. Reconstructed from two sources, not guessed from scratch:
+//   1. team-invitation.repository.ts's real, confirmed structure —
+//      the direct structural analog, extends the same BaseRepository
+//      pattern, same custom-read-methods-only-no-write-override shape.
+//   2. Every method call firm-invitation.service.ts's real (confirmed)
+//      source actually makes on `this.firmInvitationRepository` — the
+//      method signatures below are constrained by that real call
+//      evidence, not invented independently.
+//
+// FLAGGED: this is a reconstruction, not an originally-pasted-and-
+// verified file. The METHOD SIGNATURES are confirmed (derived from
+// real call sites), but implementation details with no call-site
+// evidence (e.g. exact ordering, exact error-message wording) are
+// this file's own best judgment, following team-invitation.repository.ts's
+// precedent as closely as possible. Re-diff against the real table
+// schema (firm_invitations' actual columns) before trusting this
+// blindly — assumed columns: id, firm_id, email, profile_id (nullable
+// FK), role, token, status, invited_by, expires_at, revoked_at,
+// accepted_at, created_at, updated_at — inferred from every field
+// referenced in the service's create()/update() calls, not from a
+// freshly pasted migration this session.
 
-import 'server-only';
-import { randomBytes } from 'crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { BaseService } from '@/core/services/base.service';
-import type { AuthUser, FirmRole } from '@/core/auth/types';
-import { AuthorizationError, ConflictError, NotFoundError, ValidationError } from '@/core/errors/app-error';
+import { DatabaseError } from '@/core/errors/app-error';
+import { BaseRepository } from '@/core/repositories/base.repository';
+import type { Database } from '@/core/supabase/database.types';
 
-import { FirmInvitationRepository } from './firm-invitation.repository';
-import { FirmMemberRepository } from './firm-member.repository';
-import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
-import type { AuthUserRepository } from './auth-user.repository';
-
-const INVITATION_EXPIRY_DAYS = 7;
-
-const ALLOWED_INVITE_ROLES: readonly FirmRole[] = ['owner', 'admin', 'employee', 'lawyer'];
-
-interface CreateFirmInvitationInput {
-  readonly firmId: string;
-  readonly email: string;
-  readonly role: FirmRole;
-}
-
-/**
- * FLAGGED, NEW, UNCONFIRMED: the base URL used to build the
- * /signup?invite=<token> link (Decision #13). No prior module in this
- * project has needed to construct an absolute app URL from server-side
- * code — every existing route/service works purely in terms of
- * relative API paths or DB rows. `NEXT_PUBLIC_APP_URL` is the
- * conventional Next.js env var name for this, but it has not been
- * confirmed to exist in this project's real .env / deployment config.
- * If it isn't set, this throws rather than silently emitting a broken
- * link with an empty origin — request confirmation of the real env var
- * name (or that one needs to be added) before this ships.
- */
-function resolveAppUrl(): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!appUrl) {
-    throw new Error(
-      'NEXT_PUBLIC_APP_URL is not set. FirmInvitationService.createInvitation() needs a ' +
-        'confirmed base URL to build the /signup?invite=<token> link (Decision #13) -- ' +
-        'this is a new, unconfirmed requirement, not existing project config.',
-    );
-  }
-
-  return appUrl;
-}
+type FirmInvitationRow = Database['public']['Tables']['firm_invitations']['Row'];
 
 /**
- * FirmInvitationService
+ * FirmInvitationRepository
  * ----------------------
- * Phase 4 — Enterprise & Collaboration, Invitation System.
+ * Phase 4 — Enterprise & Collaboration, Invitation System. Extends
+ * BaseRepository<'firm_invitations'> and inherits findById/
+ * findByIdOrThrow/findMany/count/create/update/delete as-is — same
+ * "no bespoke write wrapper" reasoning team-invitation.repository.ts's
+ * own doc comment gives: create()/update() (inherited) are the write
+ * path for issuing, revoking, and accepting a firm invitation.
  *
- * Constructed with FirmInvitationRepository (this feature's own table),
- * FirmMemberRepository (needed to resolve the caller's FirmRole for
- * requireFirmRole() -- same pattern TeamService already establishes,
- * per base.service.ts's own doc comment on requireFirmRole()),
- * AuditLogRepository (every membership-changing operation in this
- * project writes an audit entry -- see firm.factory.ts's own comment on
- * why FirmService needed one), and now AuthUserRepository (Decision #2's
- * email-to-existing-user resolution, via its new findIdByEmail() method
- * -- see that method's own doc comment for why this couldn't live on
- * ProfileRepository: profiles has no email column at all).
+ * Four custom read methods below — one MORE than
+ * TeamInvitationRepository's three, since firm_invitations (unlike
+ * team_invitations) has a token/new-user path (Decisions #2/#3/#13) —
+ * findByToken() has no team-invitation analog at all, since a team
+ * invitation can only ever target an existing firm member (Decisions
+ * #11/#12) and therefore never needs a token lookup.
  */
-export class FirmInvitationService extends BaseService {
-  constructor(
-    currentUser: AuthUser | null,
-    private readonly firmInvitationRepository: FirmInvitationRepository,
-    private readonly firmMemberRepository: FirmMemberRepository,
-    private readonly auditLogRepository: AuditLogRepository,
-    private readonly authUserRepository: AuthUserRepository,
-  ) {
-    super(currentUser);
+export class FirmInvitationRepository extends BaseRepository<'firm_invitations'> {
+  constructor(supabase: SupabaseClient<Database>) {
+    super(supabase, 'firm_invitations');
   }
 
   /**
-   * Resolves the caller's FirmRole within the given firm, or null if
-   * they have no firm_members row there. Small private helper so every
-   * public method below doesn't repeat the same two-line lookup before
-   * calling requireFirmRole() -- not a new pattern, just avoiding
-   * duplicating TeamService's own established call shape five times in
-   * this file.
-   */
-  private async resolveCallerFirmRole(firmId: string, userId: string): Promise<FirmRole | null> {
-    return this.firmMemberRepository.findByFirmAndProfile(firmId, userId);
-  }
-
-  private generateToken(): string {
-    // 32 bytes of randomness, hex-encoded -- generated here, not read
-    // back from a DB default, per the migration's own assumption D
-    // (the service needs the raw value in hand to build the
-    // /signup?invite=<token> URL it returns to the caller).
-    return randomBytes(32).toString('hex');
-  }
-
-  /**
-   * Creates a new firm invitation. Owner/admin only within the target
-   * firm (Decision #7's role-selection implies the inviter already has
-   * standing to assign roles -- same requirement addMember() enforces).
+   * Resolves an invitation by its raw token — the lookup the new-user
+   * signup path (AuthService.signUp(), Decision #13) needs to redeem
+   * a /signup?invite=<token> link. Not called anywhere within this
+   * service's own pasted methods — its call site lives inside
+   * AuthService.signUp(), which has not itself been pasted this
+   * session; this method's existence is confirmed only indirectly, via
+   * firm-invitation.service.ts#createInvitation()'s own return-type
+   * reference to it.
    *
-   * Handles Decision #10 (re-invite re-issues) explicitly: if a pending
-   * invitation already exists for this (firmId, normalized email), it
-   * is revoked here before the new one is created, rather than relying
-   * solely on the partial unique index to reject the insert -- this
-   * keeps the "old one invalidated" half of Decision #10 an explicit,
-   * auditable step rather than an implicit side effect of a constraint
-   * violation.
-   *
-   * UNBLOCKED this pass: Decision #2's existing-profile check now uses
-   * authUserRepository.findIdByEmail() (backed by the
-   * find_auth_user_id_by_email security-definer RPC), rather than the
-   * previously-assumed, nonexistent profile.repository.ts#findByEmail().
-   * A found id is used directly as profile_id -- it IS profiles.id, per
-   * the confirmed handle_new_user() trigger, so no separate profile
-   * lookup step is needed beyond this one call.
+   * `.maybeSingle()`: an invalid/unknown token is the expected "no
+   * match" case, not a DB error — same reasoning as every other
+   * single-row lookup in this module.
    */
-  async createInvitation(input: CreateFirmInvitationInput): Promise<{
-    invitation: NonNullable<Awaited<ReturnType<FirmInvitationRepository['findByToken']>>>;
-    inviteUrl: string | null;
-  }> {
-    const user = this.requireAuthentication();
+  async findByToken(token: string): Promise<FirmInvitationRow | null> {
+    const { data, error } = await this.supabase
+      .from('firm_invitations')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
 
-    if (!ALLOWED_INVITE_ROLES.includes(input.role)) {
-      throw new ValidationError('Invalid firm role for invitation.', { role: input.role });
-    }
-
-    const callerFirmRole = await this.resolveCallerFirmRole(input.firmId, user.id);
-    this.requireFirmRole(callerFirmRole, ['owner', 'admin']);
-
-    const normalizedEmail = input.email.trim().toLowerCase();
-
-    // Decision #10: invalidate any existing pending invite to this
-    // email for this firm before issuing a new one.
-    const existingPending = await this.firmInvitationRepository.findPendingByFirmAndEmail(
-      input.firmId,
-      normalizedEmail,
-    );
-
-    if (existingPending) {
-      await this.firmInvitationRepository.update(existingPending.id, {
-        status: 'revoked',
-        revoked_at: new Date().toISOString(),
+    if (error) {
+      throw new DatabaseError('Failed to find firm invitation by token', error, {
+        table: this.tableName,
       });
     }
 
-    // Decision #2: does this email match an existing user?
-    const matchingProfileId = await this.authUserRepository.findIdByEmail(normalizedEmail);
-
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + INVITATION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-    const token = this.generateToken();
-
-    const invitation = await this.firmInvitationRepository.create({
-      firm_id: input.firmId,
-      email: normalizedEmail,
-      profile_id: matchingProfileId,
-      role: input.role,
-      token,
-      status: 'pending',
-      invited_by: user.id,
-      expires_at: expiresAt.toISOString(),
-    });
-
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
-      action: 'firm_invitation.create',
-      target_id: invitation.id,
-      metadata: {
-        firmId: input.firmId,
-        email: normalizedEmail,
-        role: input.role,
-        existingProfile: matchingProfileId !== null,
-      },
-    });
-
-    // The token-link URL is only meaningful for the new-user path
-    // (Decision #3) -- an existing-profile invite is actioned through
-    // the in-app pending-list instead, so returning a link for it would
-    // be misleading rather than merely unused. resolveAppUrl() is only
-    // called (and can only throw) in the branch that actually needs it.
-    const inviteUrl = matchingProfileId === null ? `${resolveAppUrl()}/signup?invite=${token}` : null;
-
-    return { invitation, inviteUrl };
+    return (data as FirmInvitationRow | null) ?? null;
   }
 
   /**
-   * Revokes a pending invitation. Owner/admin only, scoped to the
-   * invitation's own firm (Decision #9).
+   * Resolves the current PENDING invitation, if any, for a given
+   * (firmId, normalized email) pair — the re-invite lookup Decision
+   * #10 needs: before issuing a fresh invitation, the service layer
+   * must find and invalidate any existing pending one to the same
+   * email, rather than erroring on a partial unique index firing on
+   * insert. Direct analog of
+   * TeamInvitationRepository#findPendingByTeamAndProfile(), adjusted
+   * for firm_invitations' (firm_id, email) shape instead of
+   * (team_id, profile_id).
+   *
+   * Email is expected ALREADY NORMALIZED (trimmed + lowercased) by the
+   * caller — firm-invitation.service.ts normalizes before calling this
+   * method, so no case-insensitive comparison is applied here, matching
+   * that confirmed call site rather than re-normalizing defensively.
+   *
+   * `.maybeSingle()`: no pending invitation for this email is the
+   * common case, not an error. At most one 'pending' row is expected
+   * per (firm_id, email) — mirrors team_invitations'
+   * (team_id, profile_id) partial-unique-index precedent; the
+   * equivalent firm_invitations index was not independently re-pasted
+   * this session.
    */
-  async revokeInvitation(invitationId: string): Promise<void> {
-    const user = this.requireAuthentication();
+  async findPendingByFirmAndEmail(firmId: string, email: string): Promise<FirmInvitationRow | null> {
+    const { data, error } = await this.supabase
+      .from('firm_invitations')
+      .select('*')
+      .eq('firm_id', firmId)
+      .eq('email', email)
+      .eq('status', 'pending')
+      .maybeSingle();
 
-    const invitation = await this.firmInvitationRepository.findByIdOrThrow(invitationId);
-
-    const callerFirmRole = await this.resolveCallerFirmRole(invitation.firm_id, user.id);
-    this.requireFirmRole(callerFirmRole, ['owner', 'admin']);
-
-    if (invitation.status !== 'pending') {
-      throw new ConflictError('Only a pending invitation can be revoked.', {
-        currentStatus: invitation.status,
+    if (error) {
+      throw new DatabaseError('Failed to find pending firm invitation by firm id and email', error, {
+        table: this.tableName,
+        firmId,
       });
     }
 
-    await this.firmInvitationRepository.update(invitationId, {
-      status: 'revoked',
-      revoked_at: new Date().toISOString(),
-    });
-
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
-      action: 'firm_invitation.revoke',
-      target_id: invitationId,
-      metadata: { firmId: invitation.firm_id },
-    });
+    return (data as FirmInvitationRow | null) ?? null;
   }
 
   /**
-   * Accepts a pending invitation via the IN-APP PENDING-LIST path
-   * (Decision #3's second acceptance mechanism) -- this is the
-   * existing-profile path only. The token-link path for new-user
-   * invites is handled inside AuthService.signUp() directly
-   * (Decision #13), NOT here -- this method requires an already-
-   * authenticated caller, which a brand-new sign-up by definition is
-   * not yet.
+   * Returns every PENDING invitation addressed to a given profile —
+   * the in-app pending-invites list's query. Direct analog of
+   * TeamInvitationRepository#findPendingByProfileId(). UNLIKE the team
+   * version, this is only ONE of firm_invitations' two acceptance
+   * paths (Decision #3) — the token-link path (new-user signup) never
+   * touches this method at all, since a brand-new user has no
+   * `profile_id` yet at invite time.
    *
-   * Enforces Decision #8 (7-day expiration, enforced at accept time)
-   * explicitly here: an expired-but-still-'pending' row is rejected
-   * and transitioned to 'expired' on the way out, rather than silently
-   * accepted.
-   *
-   * FLAGGED, NOT YET HANDLED (new gap noticed reviewing this file, not
-   * fixed here -- out of scope for this pass per this project's
-   * deferred-until-asked discipline): no check for whether `user` is
-   * ALREADY a firm_members row for this firm before the create() call
-   * below. If firm_members has a uniqueness constraint on
-   * (firm_id, profile_id), a double-accept or already-a-member race
-   * would surface as a raw, unwrapped DB error here rather than a clean
-   * ConflictError. Left as-is, matching the file's prior state.
+   * Same `created_at asc` ordering default as every other list method
+   * in this module.
    */
-  async acceptFromList(invitationId: string): Promise<void> {
-    const user = this.requireAuthentication();
+  async findPendingByProfileId(profileId: string): Promise<FirmInvitationRow[]> {
+    const { data, error } = await this.supabase
+      .from('firm_invitations')
+      .select('*')
+      .eq('profile_id', profileId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
 
-    const invitation = await this.firmInvitationRepository.findByIdOrThrow(invitationId);
-
-    if (invitation.profile_id !== user.id) {
-      throw new AuthorizationError('This invitation is not addressed to you.');
-    }
-
-    if (invitation.status !== 'pending') {
-      throw new ConflictError('This invitation is no longer pending.', {
-        currentStatus: invitation.status,
+    if (error) {
+      throw new DatabaseError('Failed to list pending firm invitations by profile id', error, {
+        table: this.tableName,
+        profileId,
       });
     }
 
-    if (new Date(invitation.expires_at) < new Date()) {
-      await this.firmInvitationRepository.update(invitationId, { status: 'expired' });
-      throw new ConflictError('This invitation has expired.');
+    return (data ?? []) as FirmInvitationRow[];
+  }
+
+  /**
+   * Returns every invitation ever issued for a firm — pending AND
+   * historical — the query FirmInvitationService#listForFirm() needs.
+   * Direct analog of TeamInvitationRepository#findByTeamId(): same
+   * reasoning, deliberately unfiltered by status, since an owner/admin
+   * managing a firm's invitations plausibly wants the full history,
+   * not just what's currently outstanding.
+   */
+  async findByFirmId(firmId: string): Promise<FirmInvitationRow[]> {
+    const { data, error } = await this.supabase
+      .from('firm_invitations')
+      .select('*')
+      .eq('firm_id', firmId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new DatabaseError('Failed to list firm invitations by firm id', error, {
+        table: this.tableName,
+        firmId,
+      });
     }
 
-    await this.firmMemberRepository.create({
-      firm_id: invitation.firm_id,
-      profile_id: user.id,
-      role: invitation.role,
-    });
-
-    await this.firmInvitationRepository.update(invitationId, {
-      status: 'accepted',
-      accepted_at: new Date().toISOString(),
-    });
-
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
-      action: 'firm_invitation.accept',
-      target_id: invitationId,
-      metadata: { firmId: invitation.firm_id, role: invitation.role },
-    });
-  }
-
-  /**
-   * Lists every invitation (pending + historical) for a firm. Owner/
-   * admin only -- see migration header, assumption H, for why this is
-   * scoped narrower than firm-wide team-roster visibility.
-   */
-  async listForFirm(firmId: string) {
-    const user = this.requireAuthentication();
-
-    const callerFirmRole = await this.resolveCallerFirmRole(firmId, user.id);
-    this.requireFirmRole(callerFirmRole, ['owner', 'admin']);
-
-    return this.firmInvitationRepository.findByFirmId(firmId);
-  }
-
-  /**
-   * Lists the current user's own pending invitations -- the in-app
-   * pending-list read path (Decision #3).
-   */
-  async listPendingForCurrentUser() {
-    const user = this.requireAuthentication();
-
-    return this.firmInvitationRepository.findPendingByProfileId(user.id);
+    return (data ?? []) as FirmInvitationRow[];
   }
 }

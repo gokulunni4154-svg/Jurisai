@@ -3,9 +3,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getCurrentUser } from '@/core/auth/session';
 import { handleApiError } from '@/core/errors/error-handler';
 import { ValidationError } from '@/core/errors/app-error';
-import { buildProfessionalVerificationService } from '@/modules/professional-verification/professional-verification.factory';
+import { createProfessionalVerificationService } from '@/modules/professional-verification/professional-verification.factory';
 import type { VerificationStatus } from '@/modules/professional-verification/professional-verification.repository';
 
 const VALID_STATUSES: readonly VerificationStatus[] = [
@@ -26,11 +27,18 @@ const MAX_LIMIT = 100;
  * `requireRole('admin')` itself, same division of responsibility as
  * every other route in this project.
  *
- * FLAGGED, NEW CONVENTION — QUERY-PARAM PARSING: no admin/users route
- * source has been pasted THIS session, so I don't have its real
- * pagination convention (query-param names, defaults, response
- * envelope) to match against. Rather than assume it, this route
- * introduces its own, explicitly flagged shape:
+ * RECONCILED THIS SESSION (open item #4): session now resolved here via
+ * `getCurrentUser()` and passed into the factory, matching every other
+ * route in the project (Pattern 1) instead of the factory resolving it
+ * internally. `requireRole('admin')` still runs inside the Service, on
+ * this now-passed-in `currentUser` — the authorization check itself is
+ * unchanged, only where the user object comes from.
+ *
+ * FLAGGED, NEW CONVENTION — QUERY-PARAM PARSING (carried forward,
+ * unrelated to this session's change): no admin/users route source has
+ * been pasted this project's history, so this route's pagination shape
+ * (`limit`/`offset`/`status`) is a flagged, not-yet-reconciled guess —
+ * see below.
  *
  *   - `limit` (optional, default 20, capped at 100) — same style of
  *     defensive cap as `professional-verification.repository.ts`'s own
@@ -92,7 +100,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       statuses = statusParams as VerificationStatus[];
     }
 
-    const service = await buildProfessionalVerificationService();
+    const currentUser = await getCurrentUser();
+
+    const service = await createProfessionalVerificationService(currentUser);
 
     const result = await service.listForReview({ limit, offset, statuses });
 

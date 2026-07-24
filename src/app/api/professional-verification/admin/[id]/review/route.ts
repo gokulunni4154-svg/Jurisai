@@ -3,9 +3,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getCurrentUser } from '@/core/auth/session';
 import { handleApiError } from '@/core/errors/error-handler';
 import { ValidationError } from '@/core/errors/app-error';
-import { buildProfessionalVerificationService } from '@/modules/professional-verification/professional-verification.factory';
+import { createProfessionalVerificationService } from '@/modules/professional-verification/professional-verification.factory';
 import type { VerificationStatus } from '@/modules/professional-verification/professional-verification.repository';
 
 const DECISION_VALUES: readonly Extract<VerificationStatus, 'verified' | 'rejected'>[] = [
@@ -21,15 +22,21 @@ const DECISION_VALUES: readonly Extract<VerificationStatus, 'verified' | 'reject
  * `ProfessionalVerificationService#review()` itself, same division of
  * responsibility as every other route in this module.
  *
- * FLAGGED, JUDGMENT CALL (not explicitly confirmed): **method is POST**,
- * not PATCH. Chosen for consistency with `me/route.ts`'s POST-for-a-
- * state-transition convention (submit/resubmit is also POST, not PATCH,
- * on that route) rather than treating this as a REST-style partial
- * update. If the real project convention elsewhere uses PATCH for
- * single-resource state changes, this should change to match — no such
- * precedent has been pasted and confirmed in this session either way.
+ * RECONCILED THIS SESSION (open item #4): session now resolved here via
+ * `getCurrentUser()` and passed into the factory (Pattern 1), instead of
+ * the factory resolving it internally. Authorization itself is
+ * unchanged -- `requireRole('admin')` still runs inside the Service.
  *
- * FLAGGED, JUDGMENT CALL (not explicitly confirmed): **body shape** is
+ * FLAGGED, JUDGMENT CALL (carried forward, unrelated to this session's
+ * change): **method is POST**, not PATCH. Chosen for consistency with
+ * `me/route.ts`'s POST-for-a-state-transition convention (submit/
+ * resubmit is also POST, not PATCH, on that route) rather than treating
+ * this as a REST-style partial update. If the real project convention
+ * elsewhere uses PATCH for single-resource state changes, this should
+ * change to match — no such precedent has been pasted and confirmed
+ * either way.
+ *
+ * FLAGGED, JUDGMENT CALL (carried forward): **body shape** is
  * `{ decision: 'verified' | 'rejected' }`. `decision` is validated
  * against the real `Extract<VerificationStatus, 'verified' | 'rejected'>`
  * type `ProfessionalVerificationService#review()` actually accepts —
@@ -40,15 +47,15 @@ const DECISION_VALUES: readonly Extract<VerificationStatus, 'verified' | 'reject
  * the reviewing admin's id) — matches `review(verificationId, decision)`'s
  * first parameter, confirmed via `professional-verification.service.ts`.
  *
- * Next.js 14 route param handling: this project's confirmed convention
- * elsewhere has at least one prior params-related bug (PATCH
- * /api/notifications/[id]/read's Promise-wrapped params issue, still
- * open/unconfirmed-fixed) — `context.params` is destructured directly
- * here (NOT awaited) since no pasted-and-confirmed source this session
- * shows whether this specific Next.js version wraps route params in a
- * Promise for dynamic API routes. Flagged: if this doesn't compile or
- * `params` comes back as a Promise, that prior bug is the first thing
- * to check.
+ * Next.js route param handling (RESOLVED THIS SESSION, item #5):
+ * `package.json` confirms `next: 14.2.35`. Next.js 14 does not
+ * Promise-wrap dynamic route params -- that change (`params` becoming a
+ * `Promise`, requiring `await context.params`) landed in Next.js 15.
+ * So `context.params` being destructured directly here, unawaited, is
+ * correct as written, not a latent bug. This also means the standing
+ * `PATCH /api/notifications/[id]/read` bug is NOT a Promise-wrapping
+ * issue after all -- whatever's actually wrong there is something else,
+ * worth a fresh look next time that route comes up.
  *
  * No maxDuration override — a single existing-row read plus a single
  * update, same reasoning used throughout this module.
@@ -74,7 +81,9 @@ export async function POST(
       );
     }
 
-    const service = await buildProfessionalVerificationService();
+    const currentUser = await getCurrentUser();
+
+    const service = await createProfessionalVerificationService(currentUser);
 
     const verification = await service.review(
       verificationId,

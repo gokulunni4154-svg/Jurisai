@@ -218,10 +218,11 @@ export class FirmInvitationService extends BaseService {
    * and transitioned to 'expired' on the way out, rather than silently
    * accepted.
    *
-   * FLAGGED, NOT YET HANDLED (still open): no check for whether `user`
-   * is ALREADY a firm_members row for this firm before the create()
-   * call below. See the continuation prompt's own note on fixing this
-   * together with team-invitation.service.ts's identical gap.
+   * FIXED THIS SESSION: previously flagged as no check for whether
+   * `user` is ALREADY a firm_members row for this firm before the
+   * create() call below. Now guarded via resolveCallerFirmRole(),
+   * fixed together with team-invitation.service.ts's identical gap per
+   * the continuation prompt's own note.
    */
   async acceptFromList(invitationId: string): Promise<void> {
     const user = this.requireAuthentication();
@@ -241,6 +242,20 @@ export class FirmInvitationService extends BaseService {
     if (new Date(invitation.expires_at) < new Date()) {
       await this.firmInvitationRepository.update(invitationId, { status: 'expired' });
       throw new ConflictError('This invitation has expired.');
+    }
+
+    // Previously flagged, now fixed: reuses the same
+    // resolveCallerFirmRole() helper createInvitation()/revokeInvitation()
+    // already call, so this isn't a new dependency -- just the same
+    // confirmed firmMemberRepository.findByFirmAndProfile() lookup,
+    // used here to guard against a duplicate firm_members row rather
+    // than to resolve a FirmRole for requireFirmRole().
+    const existingMembership = await this.resolveCallerFirmRole(invitation.firm_id, user.id);
+
+    if (existingMembership !== null) {
+      throw new ConflictError('You are already a member of this firm.', {
+        firmId: invitation.firm_id,
+      });
     }
 
     await this.firmMemberRepository.create({
