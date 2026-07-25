@@ -33,7 +33,7 @@
 // not discussed anywhere in any pasted source — flag if a different
 // ceiling/default is wanted.
 //
-// AMENDED, THIS SESSION — closes pending item #3 ("no total count").
+// AMENDED, A PRIOR SESSION — closes pending item #3 ("no total count").
 // findByFilter()'s return shape changes from a bare `AuditLogRow[]` to
 // `{ data: AuditLogRow[]; total: number }`. Uses Supabase's own
 // `{ count: 'exact' }` query option, which runs a real COUNT(*) against
@@ -43,12 +43,28 @@
 // doesn't currently justify trading accuracy for the planner-estimate
 // speedup those options exist for; revisit if audit_log ever grows
 // large enough for an exact count to become a real performance concern.
-// CONFIRMED, this session's own only caller of findByFilter is
-// audit-log.service.ts's three read methods (getMyAuditLog,
-// getFirmAuditLog, getAllAuditLog) — no other file in this module or
-// pasted elsewhere in this project calls it directly, so this return-
-// shape change has exactly one call site to update, done in that file
-// alongside this one.
+//
+// AMENDED, THIS SESSION — Case Timeline / Activity History support.
+// Two changes, both directly downstream of
+// 20260801000000_add_case_id_to_audit_log.sql (real, pasted-this-
+// session migration adding audit_log.case_id):
+//   1. `AuditLogFilter` gains `caseId?: string`, applied as a plain
+//      `.eq('case_id', ...)` — same shape as the existing `firmId`/
+//      `actorId` exact-match filters, no new query technique needed.
+//   2. `recordUserAction()` gains an optional `caseId` param, passed
+//      through to `create()`. The other two record methods
+//      (recordSystemAction/recordWebhookAction) are DELIBERATELY NOT
+//      widened here — no confirmed call site for a system- or webhook-
+//      initiated event that is also case-scoped exists anywhere in this
+//      project's pasted source (the hearing-reminder cron, this
+//      project's only confirmed system-actor example, records against
+//      firmId only). Add caseId to those two if/when a real case-scoped
+//      system/webhook event shows up — not invented speculatively here.
+// CONFIRMED, this session — recordUserAction's real call sites
+// (case.service.ts, task.service.ts, hearing.service.ts,
+// case-access-grant.service.ts, all amended this session) now all pass
+// caseId explicitly at every case-scoped mutation. See each of those
+// files' own headers for exactly which methods were instrumented.
 
 import 'server-only';
 
@@ -82,6 +98,15 @@ export interface AuditLogFilter {
   actorType?: AuditLogActorType;
   firmId?: string;
   /**
+   * NEW, THIS SESSION. Exact match on `case_id` — the filter
+   * CaseTimelineService's own read methods use to scope results to a
+   * single case. Requires 20260801000000_add_case_id_to_audit_log.sql
+   * to have been applied; database.types.ts must also be regenerated
+   * for this field to type-check against a real (not `never`) column —
+   * see that migration's own follow-up note.
+   */
+  caseId?: string;
+  /**
    * Exact match on `action`, e.g. 'billing.subscription.cancel'.
    * Not a prefix/LIKE filter — see actionPrefix below for whole-
    * namespace matching (e.g. all 'billing.*' events).
@@ -103,11 +128,10 @@ export interface AuditLogFilter {
 }
 
 /**
- * NEW, THIS SESSION. Return shape for findByFilter(), replacing a bare
- * AuditLogRow[]. `total` reflects the full count of rows matching the
- * filter BEFORE pagination (limit/offset) is applied — i.e. "how many
- * total events match this filter," not "how many rows came back on this
- * page" (that's just `data.length`).
+ * Return shape for findByFilter(). `total` reflects the full count of
+ * rows matching the filter BEFORE pagination (limit/offset) is applied —
+ * i.e. "how many total events match this filter," not "how many rows
+ * came back on this page" (that's just `data.length`).
  */
 export interface AuditLogFilterResult {
   data: AuditLogRow[];
@@ -133,10 +157,16 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
    * Convenience wrapper over the inherited create() for the common case of
    * a user-initiated event, so call sites don't have to spell out
    * actor_type: 'user' every time.
+   *
+   * AMENDED, THIS SESSION: gained an optional `caseId` param, passed
+   * through as the row's `case_id`. `null` when omitted, same "opportunistic
+   * context, absent means not applicable" posture as the existing
+   * `firmId` param right above it in this same signature.
    */
   async recordUserAction(params: {
     actorId: string;
     firmId?: string | null;
+    caseId?: string | null;
     action: string;
     resourceType?: string | null;
     resourceId?: string | null;
@@ -146,16 +176,21 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
       actor_type: 'user',
       actor_id: params.actorId,
       firm_id: params.firmId ?? null,
+      case_id: params.caseId ?? null,
       action: params.action,
       resource_type: params.resourceType ?? null,
       resource_id: params.resourceId ?? null,
       metadata: params.metadata ?? {},
-    });
+    } as never);
   }
 
   /**
    * Same as recordUserAction, for system-initiated events (e.g. the
    * hearing-reminder cron) where there is no AuthUser behind the action.
+   *
+   * NOT widened with caseId this session — see this file's own header
+   * comment on why that was deliberately left out rather than added
+   * speculatively.
    */
   async recordSystemAction(params: {
     action: string;
@@ -182,6 +217,9 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
    * distinct actor_type from 'system' — so the column doesn't collapse
    * two different facts ("we did this" vs "an external system told us
    * this happened") into one value.
+   *
+   * NOT widened with caseId this session, same reasoning as
+   * recordSystemAction above.
    */
   async recordWebhookAction(params: {
     action: string;
@@ -206,13 +244,10 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
    * the total count of rows matching that same filter before pagination.
    * Deliberately a bespoke query rather than reusing the inherited
    * findMany() — findMany() has no filtering beyond pagination, and
-   * audit_log's whole purpose requires filtering by actor/firm/action.
+   * audit_log's whole purpose requires filtering by actor/firm/case/action.
    *
-   * AMENDED, THIS SESSION: return shape changed from a bare
-   * `AuditLogRow[]` to `{ data, total }`. `count: 'exact'` runs a real
-   * COUNT(*) against the same filtered query in the same round trip,
-   * before `.range()` truncates the result set — `total` is always the
-   * full matching count, not the page size.
+   * AMENDED, THIS SESSION: added the `caseId` branch, same shape as the
+   * existing `firmId`/`actorId` exact-match branches.
    */
   async findByFilter(filter: AuditLogFilter): Promise<AuditLogFilterResult> {
     let query = this.supabase
@@ -228,6 +263,9 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
     }
     if (filter.firmId) {
       query = query.eq('firm_id', filter.firmId);
+    }
+    if (filter.caseId) {
+      query = query.eq('case_id' as never, filter.caseId as never);
     }
     if (filter.action) {
       query = query.eq('action', filter.action);

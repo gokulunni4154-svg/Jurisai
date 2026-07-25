@@ -79,4 +79,35 @@ export class CaseAccessGrantRepository extends BaseRepository<'case_access_grant
 
     return (data ?? []) as CaseAccessGrantRow[];
   }
+
+  /**
+   * NEW THIS SESSION. Returns every ACTIVE grant for a given profile,
+   * across all cases -- the query a "My Cases" dashboard needs (as
+   * opposed to findActiveGrantsForCase's per-case roster view).
+   *
+   * Confirmed against the real migration: case_access_grants.grantee_id
+   * references profiles(id) with no role distinction anywhere in the
+   * schema or RLS. This method therefore works identically whether
+   * profileId belongs to firm staff or a client (client.profile_id,
+   * once linked via signUpAsClient()) -- no client-specific branch or
+   * table needed. This is the basis for this session's client RLS-
+   * scoping finding: the existing grant mechanism already generalizes
+   * to clients once they have a linked profile.
+   */
+  async findActiveGrantsForProfile(profileId: string): Promise<CaseAccessGrantRow[]> {
+    const { data, error } = await this.supabase
+      .from('case_access_grants')
+      .select('*')
+      .eq('grantee_id', profileId)
+      .is('revoked_at', null)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new DatabaseError('Failed to list active case access grants for profile', error, {
+        profileId,
+      });
+    }
+
+    return (data ?? []) as CaseAccessGrantRow[];
+  }
 }

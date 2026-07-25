@@ -1,4 +1,17 @@
 // src/modules/user-management/firm-invitation.service.ts
+//
+// FIXED THIS SESSION: all three auditLogRepository writes
+// (createInvitation, revokeInvitation, acceptFromList) previously
+// called the inherited create() directly with actor_type: 'profile' —
+// NOT a valid value of the real audit_log_actor_type enum
+// ('user' | 'system' | 'webhook', confirmed via the real, pasted
+// audit-log.repository.ts). This would fail TypeScript's type check
+// against the real enum, and/or fail at the database level as an
+// invalid enum value at runtime. Replaced with the repository's own
+// purpose-built recordUserAction() wrapper (actor_type: 'user',
+// confirmed correct for an authenticated-caller-initiated event),
+// which also has a real resourceType/resourceId shape instead of the
+// non-existent target_id column this file was previously writing to.
 
 import 'server-only';
 import { randomBytes } from 'crypto';
@@ -151,13 +164,13 @@ export class FirmInvitationService extends BaseService {
       expires_at: expiresAt.toISOString(),
     });
 
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: input.firmId,
       action: 'firm_invitation.create',
-      target_id: invitation.id,
+      resourceType: 'firm_invitations',
+      resourceId: invitation.id,
       metadata: {
-        firmId: input.firmId,
         email: normalizedEmail,
         role: input.role,
         existingProfile: matchingProfileId !== null,
@@ -195,12 +208,12 @@ export class FirmInvitationService extends BaseService {
       revoked_at: new Date().toISOString(),
     });
 
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: invitation.firm_id,
       action: 'firm_invitation.revoke',
-      target_id: invitationId,
-      metadata: { firmId: invitation.firm_id },
+      resourceType: 'firm_invitations',
+      resourceId: invitationId,
     });
   }
 
@@ -269,12 +282,13 @@ export class FirmInvitationService extends BaseService {
       accepted_at: new Date().toISOString(),
     });
 
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: invitation.firm_id,
       action: 'firm_invitation.accept',
-      target_id: invitationId,
-      metadata: { firmId: invitation.firm_id, role: invitation.role },
+      resourceType: 'firm_invitations',
+      resourceId: invitationId,
+      metadata: { role: invitation.role },
     });
   }
 

@@ -17,6 +17,30 @@
 // (not just firmId/teamId) so it can check ownership directly --
 // issueGrant()/revokeGrant()/listGrantsForCase() all now fetch caseRow
 // first and pass it in, rather than passing firmId/teamId separately.
+//
+// UPDATED AGAIN THIS SESSION — Client RLS scoping. Confirmed real
+// finding: case_access_grants.grantee_id has no role distinction, so
+// this mechanism already extends to clients once a client has a linked
+// profile (via signUpAsClient()) -- no new schema/table needed. Two
+// decisions made this session:
+//   - Client-issued grants may be 'read_write', same as staff grants --
+//     issueGrant() deliberately NOT restricted by grantee type. No
+//     change was needed here since it already had no such restriction;
+//     recorded here so this isn't mistaken for an oversight.
+//   - Added listMyCases() -- the self-scoped "what cases do I have
+//     access to" query a client-portal (or staff) dashboard needs.
+//     findActiveGrantsForCase()/findActiveGrantForCaseAndProfile() are
+//     both per-case; neither answers "all of my cases" across the
+//     firm, which is the actual client-portal requirement.
+//
+// AMENDED, THIS SESSION — Case Timeline / Activity History. This file's
+// own recordUserAction() calls (issueGrant/revokeGrant) were the ONLY
+// confirmed audit_log writes anywhere in this project before this
+// session's instrumentation pass -- see PROJECT_PROGRESS's own scoping
+// discussion for that finding. Both calls now also pass `caseId`, so
+// grant events actually show up on the case's own timeline
+// (20260801000000_add_case_id_to_audit_log.sql), not just under
+// firmId. No other behavior changed in this file.
 
 import 'server-only';
 
@@ -55,12 +79,20 @@ export class CaseAccessGrantService extends BaseService {
    * unchanged from the original confirmed decision (scoping doc
    * sec3/sec4.3).
    *
+   * accessLevel is caller-supplied and unrestricted -- 'read_write' is
+   * permitted regardless of what kind of profile granteeId belongs to,
+   * including a client's profile once linked. Confirmed this session,
+   * not a new change (this method never restricted it).
+   *
    * FLAGGED, NOT VALIDATED: this method does not check that granteeId
    * is an actual member of the case's firm/team before granting --
    * mirrors document_set_members' own precedent of leaving that kind of
    * cross-entity validation unenforced until a real requirement
    * surfaces. Revisit if granting to an unrelated profile turns out to
    * need blocking.
+   *
+   * AMENDED, THIS SESSION: recordUserAction() call now also passes
+   * `caseId: input.caseId`.
    */
   async issueGrant(input: {
     caseId: string;
@@ -83,6 +115,7 @@ export class CaseAccessGrantService extends BaseService {
     await this.auditLogRepository.recordUserAction({
       actorId: user.id,
       firmId: caseRow.firm_id,
+      caseId: input.caseId,
       action: 'case.access_grant.issue',
       resourceType: 'case_access_grant',
       resourceId: grant.id,
@@ -97,6 +130,9 @@ export class CaseAccessGrantService extends BaseService {
    * delete, per the migration's own soft-revoke design. Same
    * authorization shape as issueGrant() -- case owner, team lead, or
    * firm admin/owner (Decision #60).
+   *
+   * AMENDED, THIS SESSION: recordUserAction() call now also passes
+   * `caseId`.
    */
   async revokeGrant(caseId: string, grantId: string): Promise<CaseAccessGrantRow> {
     const caseRow = await this.caseRepository.findByIdOrThrow(caseId);
@@ -114,6 +150,7 @@ export class CaseAccessGrantService extends BaseService {
     await this.auditLogRepository.recordUserAction({
       actorId: user.id,
       firmId: caseRow.firm_id,
+      caseId,
       action: 'case.access_grant.revoke',
       resourceType: 'case_access_grant',
       resourceId: grantId,
@@ -141,6 +178,42 @@ export class CaseAccessGrantService extends BaseService {
     await this.requireGrantManageAccess(caseRow);
 
     return this.caseAccessGrantRepository.findActiveGrantsForCase(caseId);
+  }
+
+  /**
+   * "My Cases" -- every case the CURRENT authenticated user has an
+   * active grant for. Self-scoped only (no profileId parameter) --
+   * unlike issueGrant()/revokeGrant()/listGrantsForCase(), which
+   * require case-owner/team-lead/firm-admin authorization, this needs
+   * no separate permission check: a profile listing its OWN grants
+   * needs no additional gate, same reasoning as a user listing their
+   * own firm_members rows.
+   *
+   * This is the real client-portal "My Cases" entry point once a client
+   * has completed signUpAsClient() and been issued a grant (both
+   * prerequisites, not enforced by this method itself). Works
+   * identically for firm-staff profiles with grants on cases they don't
+   * own -- no client-specific branch, per this session's confirmed
+   * finding that grantee_id carries no role distinction.
+   *
+   * FLAGGED -- N+1: fetches each case individually via
+   * caseRepository.findByIdOrThrow() in a loop. CaseRepository's real
+   * source has not been pasted this session beyond the findByIdOrThrow
+   * call already confirmed in issueGrant()/revokeGrant() -- no bulk
+   * findByIds()-shaped method is confirmed to exist, so one was not
+   * invented here. Fine for expected per-profile case volumes; revisit
+   * with a bulk fetch once CaseRepository's real source is available.
+   */
+  async listMyCases(): Promise<CaseRow[]> {
+    const user = this.requireAuthentication();
+
+    const grants = await this.caseAccessGrantRepository.findActiveGrantsForProfile(user.id);
+
+    const cases = await Promise.all(
+      grants.map((grant) => this.caseRepository.findByIdOrThrow(grant.case_id)),
+    );
+
+    return cases;
   }
 
   /**
