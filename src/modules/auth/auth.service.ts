@@ -23,6 +23,8 @@ import {
 import { FirmInvitationRepository } from '@/modules/user-management/firm-invitation.repository';
 import { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
+import { ClientInvitationRepository } from '@/modules/user-management/client-invitation.repository';
+import { ClientRepository } from '@/modules/user-management/client.repository';
 
 /**
  * The role assigned to every new sign-up today. There is deliberately no
@@ -32,6 +34,17 @@ import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
  * at inside this file.
  */
 const DEFAULT_SIGNUP_ROLE = 'individual' as const;
+
+/**
+ * NEW, Client Management (this session). The role assigned to every
+ * account created via signUpAsClient() — always `'client'`, never
+ * DEFAULT_SIGNUP_ROLE. Deliberately a SEPARATE constant, not a
+ * parameter on signUp() with a different default: a client account is
+ * never `'individual'` at any point, even transiently — see
+ * signUpAsClient()'s own doc comment for why this had to be a distinct
+ * method rather than a signUp() variant.
+ */
+const CLIENT_SIGNUP_ROLE = 'client' as const;
 
 /**
  * Translates a Supabase Auth SDK error into the appropriate AppError
@@ -258,14 +271,190 @@ export class AuthService {
         profile_id: data.user.id,
       });
 
-      await auditLogRepository.create({
-        actor_id: data.user.id,
-        actor_type: 'profile',
+      await auditLogRepository.recordUserAction({
+        actorId: data.user.id,
+        firmId: invitation.firm_id,
         action: 'firm_invitation.accept',
-        target_id: invitation.id,
-        metadata: { firmId: invitation.firm_id, role: invitation.role, viaSignUp: true },
+        resourceType: 'firm_invitations',
+        resourceId: invitation.id,
+        metadata: { role: invitation.role, viaSignUp: true },
       });
     }
+
+    return {
+      userId: data.user.id,
+      email: data.user.email ?? email,
+      emailConfirmationRequired: data.session === null,
+    };
+  }
+
+  /**
+   * NEW, Client Management (this session). Creates a new account via the
+   * client-portal token-link acceptance path
+   * (client_invitations, deviation #2 in
+   * 20260813000000_create_client_invitations_table.sql — TOKEN-LINK
+   * ONLY, no existing-profile branch).
+   *
+   * DELIBERATELY A SEPARATE METHOD FROM signUp(), not a parameter
+   * variant of it, for two real structural reasons found by re-reading
+   * signUp()'s own confirmed source, not assumed ahead of time:
+   *
+   * 1. ROLE ASSIGNMENT IS DIFFERENT, NOT ADDITIVE. signUp() always
+   *    assigns DEFAULT_SIGNUP_ROLE ('individual') first, and firm
+   *    membership (if any) is layered on top of that as a separate,
+   *    optional step — an account can validly be 'individual' with no
+   *    firm at all. A client account must never pass through
+   *    'individual' even momentarily; it is CLIENT_SIGNUP_ROLE
+   *    ('client') from the moment role-assignment succeeds. Reusing
+   *    signUp()'s DEFAULT_SIGNUP_ROLE constant here would be wrong, not
+   *    just redundant.
+   *
+   * 2. THIS IS AN UPDATE, NOT AN INSERT. signUp()'s firm-join step calls
+   *    firmMemberRepository.create({...}) — a brand-new firm_members
+   *    row, because firm membership doesn't exist until sign-up creates
+   *    it. The client analog is the opposite: the `clients` row already
+   *    exists (created by a team lead/firm admin BEFORE the invite was
+   *    ever sent — see the clients migration's own header and the
+   *    locked product decision this mirrors). So this method calls
+   *    clientRepository.update(invitation.client_id, { profile_id:
+   *    data.user.id }) — linking an existing record — never create().
+   *
+   * `inviteToken` is REQUIRED here, unlike signUp()'s optional one:
+   * there is no such thing as a self-registered client account with no
+   * invitation — every client_invitations row always targets a
+   * pre-existing clients row (deviation #1), so a client signup with no
+   * token is a caller-input error, not a valid "no firm" state the way
+   * an inviteToken-less signUp() call is.
+   *
+   * SAME ACCEPTED TRADE-OFF AS signUp()'s OWN FIRM-JOIN STEP, carried
+   * over deliberately, not overlooked: token validation happens AFTER
+   * the Supabase Auth account and role are already created, because
+   * `data.user.id` is needed first to link the clients row. If the
+   * token then turns out invalid/expired, a real 'client'-roled auth
+   * account now exists with no linked clients row — an orphaned-but-
+   * recoverable state, not a corrupted one, same class of accepted risk
+   * base.repository.ts's own class doc comment documents generally for
+   * this project's lack of a cross-call transaction primitive. Not
+   * re-litigated here; flagged per that comment's own instruction.
+   *
+   * DECIDED THIS SESSION (delegated: "u can decide") — reuses
+   * signUpSchema unmodified, deliberately NOT locking/pre-filling
+   * fullName or email against the invited clients row. Two real
+   * reasons, not just left-as-is by default:
+   *
+   *   1. The invite TOKEN is what actually establishes identity here —
+   *      clientRepository.update(invitation.client_id, { profile_id })
+   *      below links the account by token match alone, regardless of
+   *      what email/fullName was submitted at signup. Locking those
+   *      fields would add UI friction without closing any real gap in
+   *      how identity is established.
+   *   2. No email-sending mechanism keyed off clients.email is
+   *      confirmed to exist anywhere in this project — createInvitation()
+   *      only returns inviteUrl to its caller; nothing pasted or
+   *      confirmed this session actually emails it to clients.email.
+   *      Enforcing a match against clients.email would guard against a
+   *      risk (login email diverging from the firm's on-file email)
+   *      that has no confirmed real consequence today.
+   *
+   * Revisit if/when a real email-delivery path or a clients.email-
+   * dependent notification feature is built and pasted.
+   */
+  async signUpAsClient(
+    rawInput: unknown,
+    inviteToken: string,
+  ): Promise<{
+    userId: string;
+    email: string;
+    emailConfirmationRequired: boolean;
+  }> {
+    if (!inviteToken) {
+      throw new ValidationError('An invitation token is required to create a client account.');
+    }
+
+    const { email, password, fullName } = signUpSchema.parse(rawInput);
+
+    const { data, error } = await this.supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+      },
+    });
+
+    if (error) {
+      throw mapSupabaseAuthError(error);
+    }
+
+    if (!data.user) {
+      throw new ExternalServiceError(
+        'Supabase Auth',
+        'Sign-up succeeded but no user was returned.',
+      );
+    }
+
+    if (data.user.identities?.length === 0) {
+      throw new ConflictError('An account with this email address already exists.');
+    }
+
+    // Deliberate, reviewable use of the RLS-bypassing admin client --
+    // app_metadata cannot be set any other way. See class-level comment
+    // and signUp()'s own identical use of this pattern.
+    const admin = createAdminClient();
+    const { error: roleAssignmentError } = await admin.auth.admin.updateUserById(
+      data.user.id,
+      { app_metadata: { role: CLIENT_SIGNUP_ROLE } },
+    );
+
+    if (roleAssignmentError) {
+      throw new ExternalServiceError(
+        'Supabase Auth Admin API',
+        'Account was created but default role assignment failed. ' +
+          'This account cannot sign in until a role is assigned.',
+        roleAssignmentError,
+        { userId: data.user.id },
+      );
+    }
+
+    const clientInvitationRepository = new ClientInvitationRepository(admin);
+    const clientRepository = new ClientRepository(admin);
+    const auditLogRepository = new AuditLogRepository(admin);
+
+    const invitation = await clientInvitationRepository.findByToken(inviteToken);
+
+    if (!invitation) {
+      throw new ValidationError('This invitation link is invalid.', { inviteToken });
+    }
+
+    if (invitation.status !== 'pending') {
+      throw new ConflictError('This invitation is no longer valid.', {
+        currentStatus: invitation.status,
+      });
+    }
+
+    if (new Date(invitation.expires_at) < new Date()) {
+      await clientInvitationRepository.update(invitation.id, { status: 'expired' });
+      throw new ConflictError('This invitation has expired.');
+    }
+
+    // Links the EXISTING clients row to the new profile -- update(),
+    // never create(). See this method's own doc comment, reason #2.
+    await clientRepository.update(invitation.client_id, {
+      profile_id: data.user.id,
+    });
+
+    await clientInvitationRepository.update(invitation.id, {
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+    });
+
+    await auditLogRepository.recordUserAction({
+      actorId: data.user.id,
+      firmId: invitation.firm_id,
+      action: 'client_invitation.accept',
+      resourceType: 'client_invitations',
+      resourceId: invitation.id,
+      metadata: { clientId: invitation.client_id, viaSignUp: true },
+    });
 
     return {
       userId: data.user.id,

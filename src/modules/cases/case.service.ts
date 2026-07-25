@@ -22,12 +22,38 @@
 // by addDocumentToCase() to check for an active read_write grant. See
 // case.factory.ts's createCaseService() for how it's constructed (admin
 // client, same reasoning as case-access-grant.repository.ts's header).
+//
+// AMENDED, THIS SESSION (part 2) — case.factory.ts's createCaseService()
+// updated to construct and pass AuditLogRepository, confirmed against
+// the real, pasted case.factory.ts (which already did this correctly
+// for createCaseAccessGrantService(), just not yet for
+// createCaseService()).
+//
+// AMENDED, THIS SESSION — Case Timeline / Activity History
+// instrumentation. Constructor gains a second new dependency,
+// auditLogRepository (real, pasted this session -- same class
+// case-access-grant.service.ts already depends on, so this is not a
+// new pattern, just a new call site for it). createCase(),
+// addDocumentToCase(), and removeDocumentFromCase() each now write a
+// recordUserAction() event with caseId set, so
+// 20260801000000_add_case_id_to_audit_log.sql's new column actually
+// gets populated for case-lifecycle events, not just grant issue/revoke
+// (case-access-grant.service.ts's existing, pre-this-session calls).
+//
+// FLAGGED, NOT SOLVED HERE: same no-transaction-primitive caveat
+// base.repository.ts's own header documents and other Service methods
+// in this project already carry (e.g. FirmService#createFirm) — each
+// audit write below is a second, independent request after the primary
+// mutation succeeds. If the audit write itself fails, the primary
+// mutation is NOT rolled back; this is the same accepted, documented
+// characteristic as everywhere else in this project, not a new gap.
 
 import 'server-only';
 
 import type { AuthUser, FirmRole } from '@/core/auth/types';
 import { BaseService } from '@/core/services/base.service';
 import type { Database } from '@/core/supabase/database.types';
+import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import type { DocumentRepository } from '@/modules/documents/document.repository';
 import type { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 import type { TeamMemberRepository } from '@/modules/user-management/team-member.repository';
@@ -56,6 +82,7 @@ export class CaseService extends BaseService {
     private readonly firmMemberRepository: FirmMemberRepository,
     private readonly documentRepository: DocumentRepository,
     private readonly caseAccessGrantRepository: CaseAccessGrantRepository,
+    private readonly auditLogRepository: AuditLogRepository,
   ) {
     super(currentUser);
   }
@@ -69,6 +96,10 @@ export class CaseService extends BaseService {
    * also a firm admin/owner can create and own their own case. This
    * widens only the no-team path; team-scoped case creation is
    * unchanged.
+   *
+   * AMENDED, THIS SESSION: writes a 'case.create' audit event with
+   * caseId set to the newly-created case's own id -- the first event on
+   * that case's timeline.
    */
   async createCase(input: {
     firmId: string;
@@ -80,12 +111,24 @@ export class CaseService extends BaseService {
     // KNOWN FLAGGED MISMATCH, same idiom as DocumentSetService's create
     // methods: narrow input shape vs. the inherited create()'s
     // Database-derived Insert type.
-    return this.caseRepository.create({
+    const caseRow = await this.caseRepository.create({
       firm_id: input.firmId,
       team_id: input.teamId,
       owner_id: user.id,
       title: input.title,
     } as never);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: caseRow.firm_id,
+      caseId: caseRow.id,
+      action: 'case.create',
+      resourceType: 'case',
+      resourceId: caseRow.id,
+      metadata: { title: caseRow.title, teamId: caseRow.team_id },
+    });
+
+    return caseRow;
   }
 
   /**
@@ -120,6 +163,9 @@ export class CaseService extends BaseService {
    * already in the case owner's vault. Whether a grantee should be able
    * to attach the case owner's own documents is a separate, unconfirmed
    * question, deliberately not decided here.
+   *
+   * AMENDED, THIS SESSION: writes a 'case.document.add' audit event
+   * with caseId set.
    */
   async addDocumentToCase(caseId: string, documentId: string): Promise<void> {
     const user = this.requireAuthentication();
@@ -143,6 +189,16 @@ export class CaseService extends BaseService {
     this.requireOwnership(document.owner_id);
 
     await this.caseRepository.addMember(caseId, documentId);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: caseRow.firm_id,
+      caseId: caseRow.id,
+      action: 'case.document.add',
+      resourceType: 'document',
+      resourceId: documentId,
+      metadata: { caseId },
+    });
   }
 
   /**
@@ -152,14 +208,27 @@ export class CaseService extends BaseService {
    * grantees -- Decision #61 only covers adding documents; removal was
    * not part of that decision and stays owner-only until a separate
    * decision confirms otherwise.
+   *
+   * AMENDED, THIS SESSION: writes a 'case.document.remove' audit event
+   * with caseId set.
    */
   async removeDocumentFromCase(caseId: string, documentId: string): Promise<void> {
-    this.requireAuthentication();
+    const user = this.requireAuthentication();
 
     const caseRow = await this.caseRepository.findByIdOrThrow(caseId);
     this.requireOwnership(caseRow.owner_id);
 
     await this.caseRepository.removeMember(caseId, documentId);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: caseRow.firm_id,
+      caseId: caseRow.id,
+      action: 'case.document.remove',
+      resourceType: 'document',
+      resourceId: documentId,
+      metadata: { caseId },
+    });
   }
 
   /**

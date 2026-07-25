@@ -30,8 +30,20 @@
  * SAME elevated read access as Admin (see
  * 20260802000000_add_support_role_to_admin_policies.sql), a deliberate
  * product decision, not a default.
+ *
+ * AMENDMENT (Client Management, this session): added `'client'`. Unlike
+ * every other value here, a `'client'` account is deliberately NOT a
+ * firm-side account at all — it has no `firm_members` row, and its real
+ * firm relationship lives on `clients.firm_id`
+ * (20260812000000_create_clients_table.sql), a separate table from
+ * `firm_members` entirely (see that migration's own header for why
+ * `profiles.firm_id` and `clients.firm_id` are deliberately NOT the same
+ * relationship). This value was already assumed live by
+ * `clients_select_own`'s RLS policy in that same migration before this
+ * type was updated to match — this amendment closes that gap, it does
+ * not introduce new behavior.
  */
-export type UserRole = 'individual' | 'lawyer' | 'law_firm' | 'business' | 'admin' | 'support';
+export type UserRole = 'individual' | 'lawyer' | 'law_firm' | 'business' | 'admin' | 'support' | 'client';
 
 /**
  * A profile's role WITHIN a specific firm — independent of `UserRole`.

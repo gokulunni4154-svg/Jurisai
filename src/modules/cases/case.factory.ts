@@ -14,6 +14,16 @@
 // (see case.service.ts's addDocumentToCase() change, Decision #61) —
 // constructed here with the admin client, same reasoning as
 // case-access-grant.repository.ts's own header.
+//
+// AMENDED, THIS SESSION — Case Timeline / Activity History
+// instrumentation. createCaseService() now also constructs and passes
+// AuditLogRepository (admin client, same instance-construction pattern
+// already used for it in createCaseAccessGrantService() just below —
+// that function already did this correctly; only createCaseService()
+// needed catching up, since case.service.ts's own constructor gained
+// the auditLogRepository param this session). No other change to this
+// file — createCaseAccessGrantService() is unmodified from its real,
+// pasted source.
 
 import { createClient } from '@/core/supabase/server';
 import { createAdminClient } from '@/core/supabase/admin';
@@ -37,6 +47,7 @@ export async function createCaseService(currentUser: AuthUser | null): Promise<C
   const firmMemberRepository = new FirmMemberRepository(adminClient);
   const documentRepository = new DocumentRepository(supabase);
   const caseAccessGrantRepository = new CaseAccessGrantRepository(adminClient);
+  const auditLogRepository = new AuditLogRepository(adminClient);
 
   return new CaseService(
     currentUser,
@@ -45,6 +56,7 @@ export async function createCaseService(currentUser: AuthUser | null): Promise<C
     firmMemberRepository,
     documentRepository,
     caseAccessGrantRepository,
+    auditLogRepository,
   );
 }
 
