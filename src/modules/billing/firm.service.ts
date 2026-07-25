@@ -1,9 +1,9 @@
 import { BaseService } from '@/core/services/base.service';
 import { ConflictError } from '@/core/errors/app-error';
-import type { CreateFirmInput } from './billing.schemas';
+import type { CreateFirmInput, UpdateFirmInput } from './billing.schemas';
 import type { FirmRepository } from './firm.repository';
 import type { ProfileRepository } from './profile.repository';
-import type { AuthUser } from '@/core/auth/types';
+import type { AuthUser, FirmRole } from '@/core/auth/types';
 import type { Database } from '@/core/supabase/database.types';
 import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import type { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
@@ -12,6 +12,18 @@ import type { FirmMemberRepository } from '@/modules/user-management/firm-member
 // it, so it's redeclared here — same duplicated-type-level-convenience
 // trade-off billing.service.ts already accepts for SubscriptionRow/PlanRow.
 type FirmRow = Database['public']['Tables']['firms']['Row'];
+
+/**
+ * FLAGGED, NEW THIS SESSION (Org/Firm Settings): 'owner'/'admin' access
+ * gate, duplicated from firm-member.service.ts's own MANAGE_ROLES rather
+ * than imported — that constant is not exported there (confirmed via its
+ * pasted source), same non-export firm-dashboard.service.ts's own
+ * DASHBOARD_VIEW_ROLES comment already flagged and worked around the same
+ * way. Revisit if MANAGE_ROLES is ever exported from firm-member.service.ts
+ * — three separate copies of the same array (this one, that one, and
+ * firm-dashboard.service.ts's) is a real smell, not a coincidence.
+ */
+const FIRM_SETTINGS_MANAGE_ROLES: readonly FirmRole[] = ['owner', 'admin'];
 
 /**
  * FirmService
@@ -27,12 +39,15 @@ type FirmRow = Database['public']['Tables']['firms']['Row'];
  * getMyFirm() is NOT audited — a read, same reasoning
  * getDownloadUrl()/listNotifications() were excluded elsewhere.
  *
- * AMENDED, THIS SESSION — Phase 4, Enterprise & Collaboration. Product
- * decisions this session: (1) a profile may OWN at most one firm but be
- * a MEMBER of several ("multi-firm membership"), (2) direct-add
- * membership, no invitation step (this affects FirmMemberService, not
- * this file directly). Two real changes to createFirm() follow from
- * decision (1):
+ * AMENDED, Phase 4 — Enterprise & Collaboration. Product decisions this
+ * session: (1) a profile may OWN at most one firm but be a MEMBER of
+ * several ("multi-firm membership"), (2) direct-add membership, no
+ * invitation step (this affects FirmMemberService, not this file
+ * directly — FLAGGED, NOT independently re-confirmed this later session:
+ * a pasted firm-invitations revoke route now shows an invitation-based
+ * join flow also exists for firms, which may supersede or coexist with
+ * this decision. Not resolved here — out of this file's scope). Two real
+ * changes to createFirm() follow from decision (1):
  *
  *   a. The conflict guard changed from "profile.firm_id already set" to
  *      "profile already OWNS a firm" (via firmRepository.findByOwnerId(),
@@ -77,6 +92,16 @@ type FirmRow = Database['public']['Tables']['firms']['Row'];
  * retry/rollback logic that wasn't asked for, per that file's own
  * stated policy: flag new instances in the Service method's own doc
  * comment rather than re-litigating the general architecture choice.
+ *
+ * AMENDED, THIS SESSION — Org/Firm Settings. Two new methods,
+ * getFirmById() and updateFirm(), both gated to FIRM_SETTINGS_MANAGE_ROLES
+ * via a new private requireManageAccess() helper below — same pattern
+ * FirmMemberService's own requireManageAccess() already establishes
+ * (resolve caller's FirmRole via firmMemberRepository.findByFirmAndProfile(),
+ * assert via inherited requireFirmRole()). Duplicated rather than shared
+ * because the two Services don't share a base class beyond BaseService
+ * itself and neither exposes the other's private helper — same
+ * duplication trade-off already flagged for MANAGE_ROLES above.
  */
 export class FirmService extends BaseService {
   constructor(
@@ -158,17 +183,144 @@ export class FirmService extends BaseService {
    * in document.service.ts and listNotifications() was excluded in
    * notification.service.ts.
    *
-   * UNCHANGED, THIS SESSION: this checks OWNERSHIP only, same as before.
-   * Multi-firm membership (this session) doesn't change this method's
-   * own behavior — it still answers "which firm does this profile own,
-   * if any", not "which firms is this profile a member of" (that's
-   * FirmMemberService#listMembers()-adjacent territory, keyed by firmId
-   * not profileId — no "list my memberships across firms" method exists
-   * yet; not built here since nothing pasted in this project currently
-   * needs it).
+   * UNCHANGED: this checks OWNERSHIP only. Multi-firm membership doesn't
+   * change this method's own behavior — it still answers "which firm
+   * does this profile own, if any", not "which firms is this profile a
+   * member of" (that's FirmMemberService#listMembers()-adjacent
+   * territory, keyed by firmId not profileId). For settings, use the new
+   * getFirmById() below instead — that method is firmId-scoped and
+   * works for an admin-only-at-another-firm profile, which getMyFirm()
+   * deliberately cannot answer (see multi-firm reasoning above).
    */
   async getMyFirm(): Promise<FirmRow | null> {
     const user = this.requireAuthentication();
     return this.firmRepository.findByOwnerId(user.id);
+  }
+
+  /**
+   * NEW, THIS SESSION — Org/Firm Settings. Shared authorization helper
+   * for getFirmById() and updateFirm() below. Deliberate mirror of
+   * FirmMemberService#requireManageAccess() (confirmed via that file's
+   * own pasted source) — same resolve-then-assert shape, same
+   * FLAGGED duplication reasoning as FIRM_SETTINGS_MANAGE_ROLES above.
+   *
+   * FLAGGED, NEW DECISION: settings visibility is gated to owner/admin
+   * only, same as write access — there's no "read-only settings view"
+   * tier for plain employee/lawyer FirmRoles. This mirrors the Firm
+   * Dashboard's own visibility gate (`firm_members.role in ('owner',
+   * 'admin')` only, prior session, user-confirmed directly) rather than
+   * FirmMemberService#listMembers()'s broader "any member may read"
+   * gate. Not independently confirmed with you this session — flagging
+   * in case a read-only settings view for plain members turns out to be
+   * wanted later.
+   */
+  private async requireManageAccess(firmId: string): Promise<AuthUser> {
+    const user = this.requireAuthentication();
+    const callerRole = await this.firmMemberRepository.findByFirmAndProfile(firmId, user.id);
+    return this.requireFirmRole(callerRole, FIRM_SETTINGS_MANAGE_ROLES);
+  }
+
+  /**
+   * NEW, THIS SESSION — Org/Firm Settings. Resolves a firm by id for the
+   * settings screen, firmId-scoped (not self-scoped) — same forced
+   * design reasoning Firm Dashboard's own route already established:
+   * multi-firm membership means a profile can be admin/owner at more
+   * than one firm, so "my firm's settings" is ambiguous without an
+   * explicit firmId. Throws (via findByIdOrThrow, inherited on
+   * FirmRepository) if the firm doesn't exist; throws via
+   * requireManageAccess() above if the caller isn't owner/admin there.
+   */
+  async getFirmById(firmId: string): Promise<FirmRow> {
+    await this.requireManageAccess(firmId);
+    return this.firmRepository.findByIdOrThrow(firmId);
+  }
+
+  /**
+   * NEW, THIS SESSION — Org/Firm Settings. Returns a firm's membership
+   * roster enriched with each member's profile (currently: full_name,
+   * avatar_url, phone — whatever ProfileRepository's real Row type
+   * carries, confirmed via 20260711120000_create_profiles_table.sql's
+   * pasted source this session).
+   *
+   * FLAGGED, REAL LIMITATION, NOT CLOSED BY THIS METHOD: `profiles` has
+   * no email column at all (deliberate — see ProfileRepository's own
+   * class-level doc comment; email lives only on auth.users, reachable
+   * only via admin.ts). This means there is still no way to resolve an
+   * email address to a profileId anywhere in this project's pasted
+   * source, so "add member by searching for their email" remains
+   * unbuildable from current source. ProfileRepository#findAllForAdmin()
+   * does support name search, but is admin/support-gated (no RLS policy
+   * lets a firm owner/admin read arbitrary profiles) and would leak
+   * every profile on the platform, not just ones relevant to this firm —
+   * not a fit either, per that method's own updated doc comment. This
+   * method only solves DISPLAY (showing real names for people already
+   * on the roster) — it does not solve DISCOVERY (finding a person's
+   * profileId to add them in the first place). That gap stands.
+   *
+   * Deliberately built here on FirmService, not FirmMemberService —
+   * FirmService already has both firmMemberRepository and
+   * profileRepository as constructor dependencies (from createFirm()'s
+   * own needs), so no factory change was needed. Adding this to
+   * FirmMemberService instead would have required a new
+   * ProfileRepository constructor dependency there, a bigger, less
+   * targeted change for a Settings-screen-only need.
+   *
+   * Uses the same requireManageAccess() gate as getFirmById()/
+   * updateFirm() above — owner/admin only, consistent with the rest of
+   * the settings screen.
+   */
+  async getFirmMembersWithProfiles(firmId: string) {
+    await this.requireManageAccess(firmId);
+
+    const members = await this.firmMemberRepository.findByFirmId(firmId);
+    const profileIds = members.map((m) => m.profile_id);
+    const profiles = await this.profileRepository.findByIds(profileIds);
+    const profileById = new Map(profiles.map((p) => [p.id, p]));
+
+    return members.map((member) => ({
+      ...member,
+      profile: profileById.get(member.profile_id) ?? null,
+    }));
+  }
+
+  /**
+   * NEW, THIS SESSION — Org/Firm Settings. Renames a firm. Currently the
+   * ONLY settable field — firms table has no other client-facing
+   * columns (confirmed via 20260726000002_create_firms_table.sql's
+   * pasted source).
+   *
+   * AMENDED, THIS SESSION: input type is `UpdateFirmInput`, imported
+   * from billing.schemas.ts (real, pasted this session) — a Zod-derived
+   * type built on that file's own `updateFirmSchema`, which reuses the
+   * already-confirmed `firmNameSchema` (same schema `createFirmSchema`
+   * itself uses, matching the real `firms_name_length` CHECK constraint
+   * exactly). Replaces an earlier local stand-in interface written
+   * before billing.schemas.ts had been pasted — that stand-in is gone
+   * now, not left behind as dead code.
+   *
+   * Audited as 'firm.update', matching 'firm.create''s own audit
+   * convention on this same class. Not using firmRepository.update()'s
+   * return value blindly — BaseRepository's inherited update() is
+   * assumed (not re-confirmed this session) to return the full updated
+   * row, same assumption firm-member.service.ts's changeRole() already
+   * makes of the same inherited method on FirmMemberRepository.
+   */
+  async updateFirm(firmId: string, input: UpdateFirmInput): Promise<FirmRow> {
+    const user = await this.requireManageAccess(firmId);
+
+    const updated = await this.firmRepository.update(firmId, {
+      name: input.name,
+    });
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId,
+      action: 'firm.update',
+      resourceType: 'firm',
+      resourceId: firmId,
+      metadata: { name: input.name },
+    });
+
+    return updated as FirmRow;
   }
 }

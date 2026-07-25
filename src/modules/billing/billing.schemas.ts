@@ -93,6 +93,35 @@ export const createFirmSchema = z
 export type CreateFirmInput = z.infer<typeof createFirmSchema>;
 
 /**
+ * NEW — Org/Firm Settings. Validates PATCH /api/firms/[id]'s request
+ * body. Reuses firmNameSchema directly, the same schema createFirmSchema
+ * above already uses, since `name` is currently the ONLY client-facing
+ * settable column on `firms` (confirmed via
+ * 20260726000002_create_firms_table.sql's pasted source — id/owner_id/
+ * created_at/updated_at are all non-settings fields).
+ *
+ * Kept as its own separate schema/object rather than aliased directly to
+ * createFirmSchema, even though the shape is identical today — same
+ * reasoning this project already applies elsewhere to nominally-identical
+ * create/update schema pairs: the two validate semantically different
+ * operations (creation vs. partial update) and are free to diverge later
+ * (e.g. if update ever needs additional settings fields that creation
+ * doesn't) without one silently affecting the other.
+ *
+ * Replaces an ad hoc inline length-check that PATCH /api/firms/[id]'s
+ * route.ts and firm.service.ts's own UpdateFirmInput previously used —
+ * both written before this file had been pasted this session and
+ * flagged at the time as needing exactly this replacement once it was.
+ */
+export const updateFirmSchema = z
+  .object({
+    name: firmNameSchema,
+  })
+  .strict();
+
+export type UpdateFirmInput = z.infer<typeof updateFirmSchema>;
+
+/**
  * Validates the SUBSCRIPTION_STATUS_CHANGED webhook payload's relevant
  * subset. Shape confirmed against real Cashfree docs this session
  * (Subscriptions API, webhook version 2025-01-01):
