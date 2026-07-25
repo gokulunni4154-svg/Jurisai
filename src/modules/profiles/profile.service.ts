@@ -30,6 +30,9 @@ export interface ListProfilesResult {
  * RLS-bypassing admin client (File 17) instead of the RLS-respecting
  * server client (File 14), this service's own checks are still what
  * prevent one regular user from reading or modifying another's data.
+ *
+ * ONE DELIBERATE EXCEPTION to that mirroring rule: getPublicDisplayName()
+ * below. See its own header for why.
  */
 export class ProfileService extends BaseService {
   constructor(
@@ -67,10 +70,56 @@ export class ProfileService extends BaseService {
    * visible to prospective clients). That is a genuinely different access
    * pattern -- public marketplace-facing data belongs in its own table/view
    * with its own RLS policy, not a loosened version of this method.
+   *
+   * NOTE: as of Case Timeline (this session), that "genuinely different
+   * access pattern" need has arrived for a second, narrower case -- see
+   * getPublicDisplayName() below, which is the resolution for THAT need,
+   * not a change to this method. This method's ownership restriction is
+   * untouched.
    */
   async getProfileById(id: string) {
     this.requireOwnership(id, { allowRoles: ['admin'] });
     return this.profileRepository.findByIdOrThrow(id);
+  }
+
+  /**
+   * NEW — added this session to close Case Timeline open item #3
+   * (see PROJECT_PROGRESS.md). Returns ONLY { id, full_name } for id,
+   * callable by ANY authenticated user -- not just the profile's owner
+   * or an admin. This is a deliberate, scoped loosening, not an
+   * oversight, and it intentionally does NOT reuse getProfileById():
+   *
+   *   - Case Timeline shows every actor who touched a case a viewer has
+   *     access to (owner, or any active read/read_write grantee -- see
+   *     CaseTimelineService's own header). Most of those actors are NOT
+   *     the viewer and NOT the viewer looking at their own profile, so
+   *     getProfileById()'s ownership check would 403 for exactly the
+   *     common case this feature exists to serve.
+   *   - A display name is not sensitive the way phone / avatar_url /
+   *     the rest of the full profile row is. Returning ONLY
+   *     { id, full_name } -- never routing through the full
+   *     findByIdOrThrow() result unfiltered to the caller -- keeps this
+   *     narrow on purpose, so this method can't quietly become a
+   *     general-purpose "fetch anyone's full profile" bypass.
+   *   - Still requires authentication (requireAuthentication()): this is
+   *     "any logged-in user," not "public/unauthenticated." No case
+   *     access check happens here -- that's CaseTimelineService's job
+   *     (case owner / active grantee), enforced before this method is
+   *     ever called from that path.
+   *
+   * FLAGGED, NOT DECIDED: whether `profiles` RLS should also grow a
+   * column-level policy permitting cross-user reads of full_name alone
+   * is a separate, unconfirmed migration decision. Not made here. If
+   * this service is ever invoked via the RLS-respecting server client
+   * against a user who isn't the row owner, confirm RLS actually
+   * permits the read before relying on this in production.
+   */
+  async getPublicDisplayName(
+    id: string
+  ): Promise<{ id: string; full_name: string | null }> {
+    this.requireAuthentication();
+    const profile = await this.profileRepository.findByIdOrThrow(id);
+    return { id: profile.id, full_name: profile.full_name };
   }
 
   /**

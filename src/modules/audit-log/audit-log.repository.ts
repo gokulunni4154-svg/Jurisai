@@ -98,12 +98,13 @@ export interface AuditLogFilter {
   actorType?: AuditLogActorType;
   firmId?: string;
   /**
-   * NEW, THIS SESSION. Exact match on `case_id` — the filter
-   * CaseTimelineService's own read methods use to scope results to a
-   * single case. Requires 20260801000000_add_case_id_to_audit_log.sql
-   * to have been applied; database.types.ts must also be regenerated
-   * for this field to type-check against a real (not `never`) column —
-   * see that migration's own follow-up note.
+   * Exact match on `case_id` — the filter CaseTimelineService's own
+   * read methods use to scope results to a single case. Requires
+   * 20260801000000_add_case_id_to_audit_log.sql to have been applied —
+   * CONFIRMED this session, along with database.types.ts regeneration
+   * (real, pasted, confirmed): `case_id` now types correctly against
+   * `audit_log`'s real Row/Insert/Update shape, no `as never` cast
+   * needed anywhere in this file anymore.
    */
   caseId?: string;
   /**
@@ -161,7 +162,9 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
    * AMENDED, THIS SESSION: gained an optional `caseId` param, passed
    * through as the row's `case_id`. `null` when omitted, same "opportunistic
    * context, absent means not applicable" posture as the existing
-   * `firmId` param right above it in this same signature.
+   * `firmId` param right above it in this same signature. Types
+   * correctly now that database.types.ts is regenerated — no cast
+   * needed on the create() call below.
    */
   async recordUserAction(params: {
     actorId: string;
@@ -181,7 +184,7 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
       resource_type: params.resourceType ?? null,
       resource_id: params.resourceId ?? null,
       metadata: params.metadata ?? {},
-    } as never);
+    });
   }
 
   /**
@@ -265,7 +268,7 @@ export class AuditLogRepository extends BaseRepository<'audit_log'> {
       query = query.eq('firm_id', filter.firmId);
     }
     if (filter.caseId) {
-      query = query.eq('case_id' as never, filter.caseId as never);
+      query = query.eq('case_id', filter.caseId);
     }
     if (filter.action) {
       query = query.eq('action', filter.action);

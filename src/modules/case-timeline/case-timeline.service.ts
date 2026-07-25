@@ -1,6 +1,4 @@
-// Real path (best guess, matching this project's confirmed
-// src/modules/<module>/ flat convention -- see audit-log.repository.ts's
-// own header on how that convention was confirmed via cashfree.service.ts):
+// Real path (confirmed by user):
 // src/modules/case-timeline/case-timeline.service.ts
 //
 // NEW MODULE, THIS SESSION. Case Timeline / Activity History -- Phase 4.
@@ -20,9 +18,10 @@
 // access to case-scoped data (case-access-grant.service.ts's own
 // listGrantsForCase() gates by manage-access, not by grant level, but
 // that's a different operation -- viewing WHO has access, not viewing
-// case activity). FLAGGED AS THIS SESSION'S OWN JUDGMENT CALL, not a
-// re-confirmed decision: a read-only grantee can view the case timeline
-// but (per every other module's existing write-side checks) cannot
+// case activity). CONFIRMED as an explicit product decision (not
+// merely this session's own judgment call): owner + any active grantee
+// (read or read_write) can view the case timeline, but (per every other
+// module's existing write-side checks) a read-only grantee still cannot
 // create/update/delete the things that appear on it.
 //
 // RETURN SHAPE mirrors AuditLogService's own real, pasted
@@ -101,7 +100,7 @@ export class CaseTimelineService extends BaseService {
    * Case owner, OR any active grantee (read or read_write) -- see this
    * file's own header comment for why this is deliberately wider than
    * HearingService/TaskService's write-path checks, which require
-   * read_write specifically.
+   * read_write specifically. Confirmed as an explicit product decision.
    */
   private async requireTimelineReadAccess(caseId: string): Promise<AuthUser> {
     const user = this.requireAuthentication();
