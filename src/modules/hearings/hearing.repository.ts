@@ -5,7 +5,13 @@
 // base class doesn't provide (findByIdOrThrow/create/update/delete all
 // inherited unmodified). RLS-scoped client (not admin) -- hearings has
 // real client-writable RLS policies (hearings_select/insert/update/
-// delete), same reasoning as TaskRepository's own RLS-client choice.
+// delete), same reasoning as TaskRepository's own RLS-client choice --
+// WITH ONE NAMED EXCEPTION, same as case.repository.ts and
+// task.repository.ts's own new methods this session:
+// findUpcomingByFirmId() below, added for the Firm Dashboard (Phase 4,
+// this session), is intended to be called only from an instance
+// constructed against the admin client. See that method's own doc
+// comment for the full reasoning.
 //
 // NOT independently cross-checked against document.repository.ts's
 // findDueForHearingReminder(): that file was in this session's upload
@@ -75,6 +81,43 @@ export class HearingRepository extends BaseRepository<'hearings'> {
     if (error) {
       throw new DatabaseError('Failed to list upcoming hearings', error, {
         table: this.tableName,
+        fromDate,
+      });
+    }
+
+    return data ?? [];
+  }
+
+  /**
+   * NEW, Phase 4 — Firm Dashboard. Every upcoming hearing (hearing_date
+   * >= fromDate) for a given firm, soonest first -- the firm-wide
+   * counterpart to findUpcoming() above, which is session-RLS-scoped
+   * rather than firm-scoped. `fromDate` is still passed in from the
+   * Service layer, not defaulted here, same "repository doesn't own
+   * business defaults" posture as findUpcoming() itself.
+   *
+   * FLAGGED, NEW DECISION — same posture as
+   * case.repository.ts#findByFirmId() and
+   * task.repository.ts#findByFirmId(): hearings' RLS policies were not
+   * independently re-confirmed this session for a firm-wide,
+   * cross-member query shape. This method is intended to be called
+   * ONLY from a repository instance constructed against the ADMIN
+   * client (see firm-dashboard.factory.ts), with authorization
+   * enforced entirely at the Service layer (FirmDashboardService's own
+   * requireManageAccess(firmId) gate), not by RLS.
+   */
+  async findUpcomingByFirmId(firmId: string, fromDate: string): Promise<HearingRow[]> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .select('*')
+      .eq('firm_id', firmId)
+      .gte('hearing_date', fromDate)
+      .order('hearing_date', { ascending: true });
+
+    if (error) {
+      throw new DatabaseError('Failed to list upcoming hearings for firm', error, {
+        table: this.tableName,
+        firmId,
         fromDate,
       });
     }

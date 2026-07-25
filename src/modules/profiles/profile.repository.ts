@@ -69,6 +69,20 @@ export class ProfileRepository extends BaseRepository<
    * calling admin/firm-owner is entitled to this firmId before ever
    * calling this method, same division of responsibility as every
    * other findManyFor*-style method in this project.
+   *
+   * FLAGGED, CARRIED FROM 20260804000000_support_multi_firm_membership.sql
+   * (that migration's own assumption #3, confirmed via its pasted
+   * source): post-multi-firm, profiles.firm_id is a PRIMARY-firm pointer
+   * only, not the full membership record. This method now returns
+   * profiles whose PRIMARY firm is firmId — NOT the full roster (that's
+   * FirmMemberRepository#findByFirmId(), unaffected). Any caller
+   * treating this method's result as "everyone in this firm" will
+   * undercount non-primary members. Not fixed here — that migration's
+   * own note says Observability's own pass hasn't happened yet, and
+   * this session's Org/Firm Settings work does NOT use this method for
+   * roster purposes (uses findByIds() below instead, against
+   * firm_members' own profile_id list, which is unaffected by this
+   * gap).
    */
   async findByFirmId(firmId: string): Promise<ProfileRow[]> {
     const { data, error } = await this.supabase
@@ -80,6 +94,43 @@ export class ProfileRepository extends BaseRepository<
       throw new DatabaseError('Failed to list profiles by firm_id', error, {
         table: this.tableName,
         firmId,
+      });
+    }
+
+    return (data ?? []) as ProfileRow[];
+  }
+
+  /**
+   * NEW — Org/Firm Settings. Batch lookup by id, for enriching a firm's
+   * member roster (firm_members rows only carry profile_id, no name)
+   * without an N+1 query per member. No existing method on this
+   * repository fetches multiple profiles by an array of ids —
+   * findByFirmId() above filters by (and is scoped to the caveats of)
+   * profiles.firm_id, findAllForAdmin() below is paginated/admin-gated,
+   * neither fits this need.
+   *
+   * Plain `.in('id', ids)`, no ordering imposed — caller
+   * (FirmService#getFirmMembersWithProfiles()) matches rows back to
+   * their firm_members row by id itself, same division of
+   * responsibility findByFirmId()'s own doc comment establishes for
+   * firm-scoping being a query concern, not an authorization one.
+   *
+   * Returns an empty array for an empty input without querying —
+   * `.in('id', [])` is a valid but wasteful round trip for a firm with
+   * zero members, which getFirmMembersWithProfiles() will hit on every
+   * call for a brand-new firm.
+   */
+  async findByIds(ids: readonly string[]): Promise<ProfileRow[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.supabase.from('profiles').select('*').in('id', ids);
+
+    if (error) {
+      throw new DatabaseError('Failed to find profiles by ids', error, {
+        table: this.tableName,
+        ids,
       });
     }
 
@@ -129,6 +180,14 @@ export class ProfileRepository extends BaseRepository<
    * profiles_select_admin policy) — so in practice this method should
    * only ever be called with the admin.ts service-role client, or the
    * RLS-scoped client of an already-confirmed admin/support user.
+   *
+   * NOT REUSABLE for Org/Firm Settings' add-member search, even though
+   * it does support name search: this method is admin/support-gated by
+   * design (RLS has no policy for a firm owner/admin to read arbitrary
+   * profiles), and would return every profile on the platform rather
+   * than profiles relevant to one firm. Confirmed real limitation, not
+   * fixed by this session's work — see FirmService's own class-level
+   * doc comment for where this is flagged as a standing gap.
    */
   async findAllForAdmin(options: {
     readonly limit: number;
