@@ -138,33 +138,39 @@ function getActionMeta(action: string): { label: string; Icon: typeof FileText }
 function summarizeMetadata(action: string, metadata: Record<string, unknown> | null): string {
   if (!metadata) return '';
 
+  // FIX, tsc pass — every metadata.xxx access below was a TS4111
+  // (index-signature access requires bracket notation): `metadata` is
+  // typed Record<string, unknown> | null, which has an index signature,
+  // not a fixed set of named properties. Switched all 17 occurrences to
+  // bracket notation. No behavior change — same runtime lookup either
+  // way, this is purely a type-checking rule.
   switch (action) {
     case 'case.create':
-      return typeof metadata.title === 'string' ? `"${metadata.title}"` : '';
+      return typeof metadata['title'] === 'string' ? `"${metadata['title']}"` : '';
     case 'task.create':
-      return typeof metadata.title === 'string' ? `"${metadata.title}"` : '';
+      return typeof metadata['title'] === 'string' ? `"${metadata['title']}"` : '';
     case 'task.update':
-      return typeof metadata.status === 'string' ? `Status: ${metadata.status}` : '';
+      return typeof metadata['status'] === 'string' ? `Status: ${metadata['status']}` : '';
     case 'task.delete':
-      return typeof metadata.title === 'string' ? `"${metadata.title}"` : '';
+      return typeof metadata['title'] === 'string' ? `"${metadata['title']}"` : '';
     case 'hearing.create':
     case 'hearing.update': {
       const parts: string[] = [];
-      if (typeof metadata.hearingDate === 'string') {
-        parts.push(new Date(metadata.hearingDate).toLocaleDateString('en-IN', {
+      if (typeof metadata['hearingDate'] === 'string') {
+        parts.push(new Date(metadata['hearingDate']).toLocaleDateString('en-IN', {
           day: 'numeric',
           month: 'short',
           year: 'numeric',
         }));
       }
-      if (typeof metadata.outcome === 'string' && metadata.outcome) {
-        parts.push(`Outcome: ${metadata.outcome}`);
+      if (typeof metadata['outcome'] === 'string' && metadata['outcome']) {
+        parts.push(`Outcome: ${metadata['outcome']}`);
       }
       return parts.join(' · ');
     }
     case 'hearing.delete':
-      return typeof metadata.hearingDate === 'string'
-        ? new Date(metadata.hearingDate).toLocaleDateString('en-IN', {
+      return typeof metadata['hearingDate'] === 'string'
+        ? new Date(metadata['hearingDate']).toLocaleDateString('en-IN', {
             day: 'numeric',
             month: 'short',
             year: 'numeric',
@@ -172,8 +178,8 @@ function summarizeMetadata(action: string, metadata: Record<string, unknown> | n
         : '';
     case 'case.access_grant.issue':
     case 'case.access_grant.revoke':
-      return typeof metadata.accessLevel === 'string'
-        ? `Level: ${metadata.accessLevel.replace('_', ' ')}`
+      return typeof metadata['accessLevel'] === 'string'
+        ? `Level: ${(metadata['accessLevel'] as string).replace('_', ' ')}`
         : '';
     default:
       return '';

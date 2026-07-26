@@ -111,8 +111,26 @@ async function extractErrorMessage(res: Response): Promise<string> {
   }
 }
 
-function formatDueDate(dateString: string): string {
+// FLAGGED — NOT VERIFIED AGAINST REAL SOURCE: this session's progress
+// notes describe a shared parseIsoDateParts() helper (introduced for
+// tasks/mine/page.tsx, reused in cases/[id]/page.tsx) that validates
+// the split date components are all defined before use and throws for
+// a malformed date string rather than silently coercing — but the
+// helper's own file/module path was not re-pasted this session, so its
+// real implementation and real import path are unconfirmed. Reproduced
+// inline here matching that description. If a shared helper already
+// exists at a known path, this should be replaced with a real import
+// instead of this local copy.
+function parseIsoDateParts(dateString: string): { year: number; month: number; day: number } {
   const [year, month, day] = dateString.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) {
+    throw new Error(`Malformed ISO date string: "${dateString}"`);
+  }
+  return { year, month, day };
+}
+
+function formatDueDate(dateString: string): string {
+  const { year, month, day } = parseIsoDateParts(dateString);
   return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short',

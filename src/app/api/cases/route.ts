@@ -1,39 +1,47 @@
 // src/app/api/cases/route.ts
 //
-// DRAFT — built from CASE_ACCESS_GRANTS_SCOPING.md / the continuation
-// prompt's SUMMARY of case.service.ts and case.factory.ts, not from
-// real pasted source for either file. Per the Source Verification Rule,
-// confirm buildCaseService()'s real signature and CaseService's real
-// method names/params before merging. Import paths below are best
-// guesses at this project's module layout, not confirmed.
+// Thin Route Handler; all logic in the Service.
+// handleApiError() is the majority error-handling pattern.
+// context.params.id destructured directly, no `await` (Next
+// 14.2.35, not Next 15's Promise-wrapped params).
 //
-// Conventions applied, per the continuation prompt's description of
-// what's already real in this project:
-//   - Thin Route Handler; all logic in the Service.
-//   - handleApiError() is the majority error-handling pattern.
-//   - context.params.id destructured directly, no `await` (Next
-//     14.2.35, not Next 15's Promise-wrapped params).
+// FIXED — session 55 (tsc pass): GET was calling
+// caseService.listCases({ firmId, teamId }), but the real,
+// pasted case.service.ts confirms listCases() takes ZERO
+// arguments — it relies entirely on RLS via findManyVisible()
+// to scope results to the caller, with no firmId/teamId filter
+// param at all. Query-param parsing removed since it had no
+// consumer once the filter object was dropped.
+//
+// FIXED, session 55 continued: removing the searchParams parsing
+// above left GET's `request` param unused (only createCaseService()
+// and listCases() are called, neither of which reads it) — tsc's
+// noUnusedParameters flagged it (TS6133). Prefixed with `_`, same
+// convention used across every other route this session
+// (grants/route.ts's GET, etc.).
+//
+// FLAGGED, NOT RESOLVED HERE: GET /api/cases has no server-side way
+// to filter by firm or team — a caller visible into multiple firms
+// gets everything RLS allows, undifferentiated. May be intentional
+// (client-side filtering) or a real gap if the frontend needs a
+// firm/team-scoped view. Not decided here.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/core/auth/session';
 import { handleApiError } from '@/core/errors/error-handler';
-import { createCaseService } from '@/modules/cases/case.factory'; // 
+import { createCaseService } from '@/modules/cases/case.factory';
 
 /**
  * GET /api/cases
  * Lists cases visible to the caller (owner, active grantee, or firm
  * admin — per CaseService#listCases()'s RLS-backed scoping).
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    const currentUser = await getAuthUser(request);
-    const caseService = await buildCaseService(currentUser);
+    const currentUser = await getCurrentUser();
+    const caseService = await createCaseService(currentUser);
 
-    const { searchParams } = new URL(request.url);
-    const firmId = searchParams.get('firmId') ?? undefined;
-    const teamId = searchParams.get('teamId') ?? undefined;
-
-    const cases = await caseService.listCases({ firmId, teamId });
+    const cases = await caseService.listCases();
 
     return NextResponse.json({ data: cases });
   } catch (error) {
@@ -51,18 +59,16 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    
-const currentUser = await getCurrentUser();               // ✅ new
-const caseService = await createCaseService(currentUser); // ✅ new
+    const currentUser = await getCurrentUser();
+    const caseService = await createCaseService(currentUser);
 
     const body = await request.json();
-    const { firmId, teamId, title, status } = body;
+    const { firmId, teamId, title } = body;
 
     const newCase = await caseService.createCase({
       firmId,
       teamId,
       title,
-      status,
     });
 
     return NextResponse.json({ data: newCase }, { status: 201 });

@@ -62,7 +62,7 @@ export async function POST(
  * decision #7) and throws AuthorizationError otherwise.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string; teamId: string } },
 ): Promise<NextResponse> {
   try {

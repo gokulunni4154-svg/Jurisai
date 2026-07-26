@@ -27,7 +27,7 @@ interface RouteContext {
  * otherwise) but does not independently re-check visibility beyond
  * that -- RLS (hearings_select) already scopes what comes back.
  */
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = context.params;
     const currentUser = await getCurrentUser();

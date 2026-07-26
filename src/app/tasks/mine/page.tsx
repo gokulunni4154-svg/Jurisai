@@ -98,8 +98,27 @@ async function extractErrorMessage(res: Response): Promise<string> {
   }
 }
 
-function formatDueDate(dateString: string): string {
+// FIX, tsc pass — dateString.split('-').map(Number) destructured
+// directly into year/month/day was TS(2532/18048)-class: with
+// noUncheckedIndexedAccess on, each destructured element is typed
+// `number | undefined`, so `month - 1` doesn't compile against
+// Date.UTC's `number` parameter. Shared helper validates all three
+// parts are real numbers once, used by both formatDueDate() and
+// isOverdue() below instead of duplicating the same parse+guard twice.
+// Throws for a malformed date string rather than silently coercing —
+// `due_date` is expected to always be a real ISO 'YYYY-MM-DD' string
+// from the API, so a malformed value here would indicate a real data
+// problem worth surfacing, not one to mask.
+function parseIsoDateParts(dateString: string): { year: number; month: number; day: number } {
   const [year, month, day] = dateString.split('-').map(Number);
+  if (year === undefined || month === undefined || day === undefined) {
+    throw new Error(`Invalid ISO date string: "${dateString}"`);
+  }
+  return { year, month, day };
+}
+
+function formatDueDate(dateString: string): string {
+  const { year, month, day } = parseIsoDateParts(dateString);
   return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short',
@@ -115,7 +134,7 @@ function formatDueDate(dateString: string): string {
 // in v1, so this is purely a client-side, non-persisted highlight, not
 // a claim that the backend tracks overdue status.
 function isOverdue(dateString: string): boolean {
-  const [year, month, day] = dateString.split('-').map(Number);
+  const { year, month, day } = parseIsoDateParts(dateString);
   const due = Date.UTC(year, month - 1, day);
   const now = new Date();
   const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());

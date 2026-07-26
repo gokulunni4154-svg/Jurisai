@@ -17,7 +17,7 @@ import { createClientInvitationService } from '@/modules/user-management/client-
  * POST /api/firms/[id]/client-invitations/[invitationId]/revoke
  */
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string; invitationId: string } },
 ): Promise<NextResponse> {
   try {

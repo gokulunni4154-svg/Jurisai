@@ -207,7 +207,7 @@ import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repositor
 import type { CashfreeService } from './cashfree.service';
 import type { FirmRepository } from './firm.repository';
 import type { PlanRepository } from './plan.repository';
-import type { ProfileRepository } from './profile.repository';
+import { ProfileRepository } from '../profiles/profile.repository';
 import type { SubscriptionRepository } from './subscription.repository';
 
 // subscription.repository.ts defines this same alias locally but doesn't

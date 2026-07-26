@@ -34,7 +34,7 @@ import { getCurrentUser } from '@/core/auth/session';
  * envelope.
  */
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string; teamId: string } },
 ): Promise<NextResponse> {
   try {

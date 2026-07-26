@@ -35,7 +35,7 @@ import { createFirmService } from '@/modules/billing/firm.factory';
  * inherited from that file's own confirmation.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

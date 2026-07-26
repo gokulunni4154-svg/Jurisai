@@ -64,6 +64,22 @@ interface CreateTeamInvitationInput {
  * see this class's own note on that dependency below), and
  * AuditLogRepository (same project-wide convention every other service
  * here follows).
+ *
+ * FLAGGED / FIXED — session 55 (tsc pass): all three audit writes below
+ * (createInvitation, revokeInvitation, acceptInvitation) previously
+ * called the inherited auditLogRepository.create() directly with
+ * `actor_type: 'profile'` (not a valid audit_log_actor_type value —
+ * confirmed real enum is 'user' | 'system' | 'webhook') and a
+ * `target_id` field that, per firm-invitation.service.ts's own header
+ * comment (which already fixed the identical pattern there), is NOT a
+ * real column on audit_log at all — the real columns are
+ * resource_type/resource_id. Switched to the repository's
+ * recordUserAction() wrapper, matching FirmInvitationService's already-
+ * fixed convention exactly: actor_type is implicitly 'user' (correct
+ * for an authenticated-caller-initiated event), resourceType/resourceId
+ * replace the non-existent target_id. Not an independent guess — this
+ * mirrors a fix already proven correct in the sibling file this same
+ * session.
  */
 export class TeamInvitationService extends BaseService {
   constructor(
@@ -155,12 +171,13 @@ export class TeamInvitationService extends BaseService {
       expires_at: expiresAt.toISOString(),
     });
 
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId,
       action: 'team_invitation.create',
-      target_id: invitation.id,
-      metadata: { teamId: input.teamId, firmId, profileId: input.profileId },
+      resourceType: 'team_invitations',
+      resourceId: invitation.id,
+      metadata: { teamId: input.teamId, profileId: input.profileId },
     });
 
     return { invitation };
@@ -190,12 +207,13 @@ export class TeamInvitationService extends BaseService {
       revoked_at: new Date().toISOString(),
     });
 
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId,
       action: 'team_invitation.revoke',
-      target_id: invitationId,
-      metadata: { teamId: invitation.team_id, firmId },
+      resourceType: 'team_invitations',
+      resourceId: invitationId,
+      metadata: { teamId: invitation.team_id },
     });
   }
 
@@ -220,6 +238,18 @@ export class TeamInvitationService extends BaseService {
    * this purpose, per its own doc comment ("exists purely for delete()'s
    * id requirement" -- this is the second real use of it, an existence
    * check, not a delete-id lookup, but the same method serves both).
+   *
+   * FLAGGED / FIXED — session 55: audit write below switched to
+   * recordUserAction(), same class-level fix as createInvitation()/
+   * revokeInvitation() above. NOTE: unlike those two, this method never
+   * resolves firmId (acceptInvitation() only has invitation.team_id in
+   * scope, and resolving firmId would mean an extra
+   * teamRepository.findByIdOrThrow() call solely for audit metadata) —
+   * recordUserAction()'s firmId parameter is optional elsewhere in this
+   * project (e.g. notification.service.ts's calls omit it too), so it's
+   * left out here rather than adding a new DB round-trip just to
+   * populate an optional audit field. Revisit if firmId on this
+   * specific audit entry turns out to matter.
    */
   async acceptInvitation(invitationId: string): Promise<void> {
     const user = this.requireAuthentication();
@@ -268,11 +298,11 @@ export class TeamInvitationService extends BaseService {
       accepted_at: new Date().toISOString(),
     });
 
-    await this.auditLogRepository.create({
-      actor_id: user.id,
-      actor_type: 'profile',
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
       action: 'team_invitation.accept',
-      target_id: invitationId,
+      resourceType: 'team_invitations',
+      resourceId: invitationId,
       metadata: { teamId: invitation.team_id },
     });
   }

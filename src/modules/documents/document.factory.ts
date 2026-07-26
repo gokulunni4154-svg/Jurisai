@@ -82,14 +82,23 @@ export async function buildDocumentService(): Promise<DocumentService> {
 
   const documentRepository = new DocumentRepository(supabase);
 
-  const notificationRepository = new NotificationRepository(supabase);
-  const notificationService = new NotificationService(currentUser, notificationRepository);
-
   // Deliberately a DIFFERENT client instance from `supabase` above — see
   // this file's Amendment #15 doc comment. createAdminClient() is a
   // cached module-level singleton (admin.ts), not request-scoped.
   const adminClient = createAdminClient();
   const auditLogRepository = new AuditLogRepository(adminClient);
+
+  // FIX, tsc pass — this call previously passed only (currentUser,
+  // notificationRepository), two arguments. The real NotificationService
+  // constructor (notification.service.ts, confirmed via real pasted
+  // source) requires THREE: (currentUser, notificationRepository,
+  // auditLogRepository) — NotificationService writes its own
+  // 'notifications.create'/'notifications.mark_read' audit entries, so
+  // it needs the same auditLogRepository DocumentService itself uses.
+  // Moved auditLogRepository's construction above this line so it can be
+  // shared by both, rather than built twice.
+  const notificationRepository = new NotificationRepository(supabase);
+  const notificationService = new NotificationService(currentUser, notificationRepository, auditLogRepository);
 
   return new DocumentService(currentUser, documentRepository, notificationService, auditLogRepository);
 }

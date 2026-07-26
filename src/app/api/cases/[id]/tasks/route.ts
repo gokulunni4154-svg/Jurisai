@@ -54,7 +54,7 @@ interface RouteContext {
  * comes back, same "RLS is the backstop" posture as
  * CaseService#listCaseDocuments's own route.
  */
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = context.params;
     const currentUser = await getCurrentUser();

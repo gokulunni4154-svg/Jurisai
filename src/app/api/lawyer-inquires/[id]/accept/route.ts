@@ -42,10 +42,24 @@
 // supabase client modules exist in this project. Not resolved -- flagged
 // for whoever next touches route files that still import from
 // `@/lib/supabase/server` directly.
+//
+// FLAGGED / FIXED — session 55 (tsc pass):
+//   1. `AppError('...', { statusCode: 400 })` was a two-arg call against
+//      a constructor never independently confirmed this session — swapped
+//      to `ValidationError('...', { ... })`, a shape already compiler-
+//      confirmed working in two OTHER real files this session
+//      (firms/[id]/members/[profileId]/route.ts and the
+//      client-invitations route.ts), both of which use the identical
+//      (message, context) call shape with no tsc error. Not a blind
+//      guess, but AppError's own real constructor still hasn't been
+//      independently pasted/confirmed this session — revisit if that
+//      surfaces and contradicts this.
+//   2. `request` param was unused (only `params` is read) — prefixed
+//      with `_` per this project's established convention.
 
 import { NextResponse } from 'next/server';
 
-import { AppError } from '@/core/errors/app-error';
+import { ValidationError } from '@/core/errors/app-error';
 import { handleApiError } from '@/core/errors/error-handler';
 import { getCurrentUser } from '@/core/auth/session';
 import { buildLawyerInquiryService } from '@/modules/lawyer-inquiries/lawyer-inquiry.factory';
@@ -54,15 +68,12 @@ interface RouteParams {
   params: { id: string };
 }
 
-export async function POST(request: Request, { params }: RouteParams): Promise<NextResponse> {
+export async function POST(_request: Request, { params }: RouteParams): Promise<NextResponse> {
   try {
     const { id: inquiryId } = params;
 
     if (!inquiryId) {
-      // FLAGGED: AppError constructor shape (message, { statusCode })
-      // is a guess carried from every other file this session --
-      // still not independently confirmed against real AppError source.
-      throw new AppError('Inquiry id is required.', { statusCode: 400 });
+      throw new ValidationError('Inquiry id is required.', { received: inquiryId });
     }
 
     const currentUser = await getCurrentUser();

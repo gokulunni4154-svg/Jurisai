@@ -28,7 +28,7 @@ import { createLawyerDashboardService } from '@/modules/lawyer-dashboard/lawyer-
  * they can see. 403s via handleApiError() if the caller's UserRole
  * isn't 'lawyer' -- see LawyerDashboardService#requireLawyerRole().
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const currentUser = await getCurrentUser();
     const lawyerDashboardService = await createLawyerDashboardService(currentUser);

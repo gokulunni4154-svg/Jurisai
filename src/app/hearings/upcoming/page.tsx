@@ -42,6 +42,17 @@
 // expand/collapse widget added -- kept simple, revisit if a real
 // per-day detail view is wanted); "Today" is outlined, not filled, to
 // stay distinct from a selected/active state that doesn't exist here.
+//
+// FLAGGED / FIXED — session 55 (tsc pass): the sort loop over
+// hearingsByDay previously iterated `Object.keys(map)` and indexed back
+// into `map[key]` — under this project's `noUncheckedIndexedAccess`
+// tsconfig setting, that indexed access is typed `Hearing[] | undefined`
+// even though the key just came from the map's own keys (TypeScript
+// can't statically connect the two). Switched to iterating
+// `Object.values(map)` directly, which is already correctly typed as
+// `Hearing[]` with no `undefined` in the union — same runtime behavior
+// (every array in the map still gets sorted in place), just without the
+// indexed-access round-trip that triggered the type error.
 
 'use client';
 
@@ -190,8 +201,11 @@ export default function UpcomingHearingsPage() {
       const key = dateKey(new Date(h.hearing_date));
       (map[key] ??= []).push(h);
     }
-    for (const key of Object.keys(map)) {
-      map[key].sort((a, b) => a.hearing_date.localeCompare(b.hearing_date));
+    // FLAGGED / FIXED — session 55 (tsc pass): iterate Object.values()
+    // directly instead of Object.keys() + indexed re-access — see file
+    // header note. Same in-place sort behavior for every array in map.
+    for (const dayHearings of Object.values(map)) {
+      dayHearings.sort((a, b) => a.hearing_date.localeCompare(b.hearing_date));
     }
     return map;
   }, [hearings]);

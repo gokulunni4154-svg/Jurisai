@@ -12,13 +12,18 @@
 // confirmed correct for an authenticated-caller-initiated event),
 // which also has a real resourceType/resourceId shape instead of the
 // non-existent target_id column this file was previously writing to.
+//
+// FLAGGED / FIXED — session 55 (tsc pass): `NotFoundError` was imported
+// but never thrown anywhere in this file (every error path here uses
+// ValidationError/AuthorizationError/ConflictError instead) — dropped
+// from the import. No other change.
 
 import 'server-only';
 import { randomBytes } from 'crypto';
 
 import { BaseService } from '@/core/services/base.service';
 import type { AuthUser, FirmRole } from '@/core/auth/types';
-import { AuthorizationError, ConflictError, NotFoundError, ValidationError } from '@/core/errors/app-error';
+import { AuthorizationError, ConflictError, ValidationError } from '@/core/errors/app-error';
 import { clientEnv } from '@/core/config/env';
 
 import { FirmInvitationRepository } from './firm-invitation.repository';

@@ -32,7 +32,7 @@ import { createCaseAccessGrantService } from '@/modules/cases/case.factory';
  *
  * No :id / firmId param — self-scoped by design, see file header.
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
     const currentUser = await getCurrentUser();
 

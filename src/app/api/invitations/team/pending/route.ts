@@ -16,7 +16,7 @@ import { createTeamInvitationService } from '@/modules/user-management/team-invi
  * invitation ever has (Decision #12: no token/new-user path exists for
  * teams at all).
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
     const currentUser = await getCurrentUser();
 

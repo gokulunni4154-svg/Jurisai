@@ -83,7 +83,7 @@ export async function POST(
  * AuthorizationError otherwise.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

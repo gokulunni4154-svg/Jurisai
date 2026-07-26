@@ -21,11 +21,11 @@ interface RouteContext {
  * Unlinks a document from a case (does not delete the document
  * itself — case_documents is a join table).
  */
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const { id, documentId } = context.params;
-   const currentUser = await getCurrentUser();               // ✅ new
-const caseService = await createCaseService(currentUser); // ✅ new
+    const currentUser = await getCurrentUser();               // ✅ new
+    const caseService = await createCaseService(currentUser); // ✅ new
 
     await caseService.removeDocumentFromCase(id, documentId);
 

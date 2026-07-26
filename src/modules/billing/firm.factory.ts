@@ -2,7 +2,7 @@ import { createAdminClient } from '@/core/supabase/admin';
 import type { AuthUser } from '@/core/auth/types';
 
 import { FirmRepository } from './firm.repository';
-import { ProfileRepository } from './profile.repository';
+import { ProfileRepository } from '../profiles/profile.repository';
 import { FirmService } from './firm.service';
 import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
@@ -39,6 +39,16 @@ import { FirmMemberRepository } from '@/modules/user-management/firm-member.repo
  * changes... are service-layer operations only"), so it's constructed
  * against the same adminClient already in scope here, same reasoning as
  * every other repository in this factory.
+ *
+ * FLAGGED / CORRECTED — session 55 (tsc regression fix): the
+ * ProfileRepository import below was previously './profile.repository',
+ * on the assumption that it lived in this same module folder
+ * (src/modules/billing/). The user has now confirmed the real, on-disk
+ * location is src/modules/profiles/profile.repository.ts. Import
+ * corrected accordingly. This does NOT change which client
+ * ProfileRepository is constructed against here (still adminClient,
+ * per this file's own paragraph above) — only the import's source path
+ * was wrong.
  */
 export function createFirmService(currentUser: AuthUser | null): FirmService {
   const adminClient = createAdminClient();

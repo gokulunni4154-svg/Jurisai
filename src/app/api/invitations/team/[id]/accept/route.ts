@@ -17,7 +17,7 @@ import { createTeamInvitationService } from '@/modules/user-management/team-invi
  * teams in the first place.
  */
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

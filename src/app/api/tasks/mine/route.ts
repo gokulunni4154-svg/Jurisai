@@ -12,7 +12,7 @@ import { getCurrentUser } from '@/core/auth/session';
 import { handleApiError } from '@/core/errors/error-handler';
 import { createTaskService } from '@/modules/tasks/task.factory';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const currentUser = await getCurrentUser();
     const taskService = await createTaskService(currentUser);
