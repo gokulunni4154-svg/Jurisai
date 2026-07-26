@@ -22,6 +22,14 @@
 // against any real pasted route for client-invitations specifically —
 // no such route exists yet in the project. Correct this if a different
 // shape turns out to already exist or gets decided instead.
+//
+// FLAGGED / FIXED — session 55 (tsc pass): POST's `context` param and
+// GET's `request` param were both genuinely unused (see each handler's
+// own body — POST never reads context.params.id, per this file's own
+// header note above; GET never reads the request object, only
+// context.params.id). Both prefixed with `_` below, same mechanical
+// fix already applied across the Group 3 batch of route files. No
+// other change to either handler.
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -39,7 +47,7 @@ import { createClientInvitationService } from '@/modules/user-management/client-
  */
 export async function POST(
   request: NextRequest,
-  context: { params: { id: string } },
+  _context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {
     const currentUser = await getCurrentUser();
@@ -65,7 +73,7 @@ export async function POST(
  * (pending + historical) for this firm.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

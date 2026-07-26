@@ -1,74 +1,12 @@
 // src/app/audit-log/admin/page.tsx
-// Same conventions as audit-log/firm/page.tsx: 'use client',
-// useCallback/useEffect fetch pattern, extractErrorMessage() helper
-// reused verbatim, loading/error/empty states, Tailwind classes,
-// back-button ArrowLeft-to-/documents pattern.
-//
-// SOURCE-VERIFIED AGAINST, A PRIOR SESSION:
-//   - GET /api/audit-log/admin: no required params, returns
-//     `{ data: AuditLogRow[] }` at 200. Accepts optional limit/offset/
-//     actionPrefix/actorType query params.
-//   - Server-side silent-drop on an unrecognized actorType (fixed in a
-//     later session — see route.ts's own header) avoided from this
-//     page's own UI by using a fixed <select> with only the three real
-//     enum values plus an explicit "All" empty option — no free-text
-//     actorType input exists here.
-//   - audit_log's real Row shape (database.types.ts) — firm_id is NOT
-//     hidden here (unlike the firm-owner page, already scoped to one
-//     firm) since this page spans every firm; shown as a truncated UUID
-//     for the same "no lookup endpoint exists" reason actor_id is.
-//
-// RESOLVED, THIS SESSION — closes the client-side role-check gap.
-// GENUINELY NEW PATTERN: no auth hook, context, or client-side
-// role-check primitive exists anywhere in this project (confirmed via
-// the real, pasted src/core/supabase/client.ts — a bare
-// createBrowserClient() factory, nothing wrapping it). Built directly
-// against that file: on mount, calls createClient().auth.getUser() and
-// checks `user.app_metadata?.role === 'admin'` — mirroring, not
-// reinventing, the same source of truth the real, pasted
-// profiles_select_admin RLS policy already trusts
-// (`(auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'`,
-// 20260711120000_create_profiles_table.sql). `AuthUser`
-// (src/core/auth/types.ts) was deliberately NOT reused here — only
-// AuthUser.email has ever been confirmed via real pasted source; its
-// full shape (whether it exposes `.role` client-side at all) has not,
-// so raw Supabase user.app_metadata is used directly instead of
-// guessing at a type that might not fit.
-//
-// THIS IS UX ONLY, NOT THE REAL GUARD: GET /api/audit-log/admin's own
-// server-side requireRole('admin') remains the actual enforcement,
-// unchanged. A client-side check can be bypassed by anyone editing
-// their own browser state, so its only job is to avoid flashing a
-// confusing error/empty-table UI at a non-admin before the network
-// request comes back — never to be the security boundary itself.
-//
-// FLAGGED, NOT RESOLVED: no redirect-on-fail is wired in (e.g. to
-// /documents or a dedicated "not authorized" route) — this session
-// renders an in-page message instead, since no precedent exists yet in
-// this project for where an unauthorized client should be sent. A
-// future session can wire a redirect once that's decided.
-//
-// FLAGGED, UNCHANGED: actor_id/firm_id are both rendered as truncated
-// raw UUIDs — no lookup endpoint exists for either. Still open.
-//
-// AMENDED, THIS SESSION — closes pending item #3 ("no total count").
-// GET /api/audit-log/admin's response now includes a real `total` field
-// (see route.ts's own amendment) — this page reads it instead of
-// inferring "next page exists" from getting back a full page. Closes
-// the minor pagination UX rough edge (the Next button could previously
-// show once too many, e.g. on exactly the last full page).
-
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, Loader2, ScrollText, ShieldAlert } from 'lucide-react';
 
-// NEW, THIS SESSION — see file header. No auth hook/context exists yet
-// in this project; using the bare browser client factory directly.
 import { createClient } from '@/core/supabase/client';
 
-// Real columns confirmed via database.types.ts, pasted a prior session.
 type ActorType = 'user' | 'system' | 'webhook';
 
 interface AuditLogRow {
@@ -82,8 +20,6 @@ interface AuditLogRow {
   resource_type: string | null;
 }
 
-// AMENDED, THIS SESSION: `total` added, matching route.ts's own new
-// response field.
 interface GetAuditLogResponse {
   data: AuditLogRow[];
   total: number;
@@ -91,8 +27,6 @@ interface GetAuditLogResponse {
 
 const PAGE_SIZE = 20;
 
-// Reused verbatim from billing/subscription/page.tsx and
-// audit-log/firm/page.tsx before it.
 async function extractErrorMessage(res: Response): Promise<string> {
   try {
     const json = await res.json();
@@ -118,8 +52,6 @@ const ACTOR_TYPE_LABELS: Record<ActorType, string> = {
   webhook: 'Webhook',
 };
 
-// Fixed set, not free text — see file header on why this avoids the
-// silent-drop edge case entirely rather than working around it.
 const ACTOR_TYPE_OPTIONS: Array<{ value: ActorType | ''; label: string }> = [
   { value: '', label: 'All actor types' },
   { value: 'user', label: 'User' },
@@ -127,10 +59,6 @@ const ACTOR_TYPE_OPTIONS: Array<{ value: ActorType | ''; label: string }> = [
   { value: 'webhook', label: 'Webhook' },
 ];
 
-// NEW, THIS SESSION. Not a reusable hook (no precedent for one in this
-// project yet) — kept local to this page, deliberately not extracted,
-// since a second real caller would be the natural trigger to promote
-// this into a shared hook rather than guessing at that shape now.
 type RoleCheckStatus = 'checking' | 'authorized' | 'unauthorized';
 
 export default function AdminAuditLogPage() {
@@ -180,17 +108,19 @@ export default function AdminAuditLogPage() {
     [],
   );
 
-  // NEW, THIS SESSION. UX-only pre-check — see file header. Doesn't
-  // block or replace the real fetch/error handling below; a failure
-  // here just renders a friendlier message than the raw 403 that would
-  // otherwise come back from GET /api/audit-log/admin.
   useEffect(() => {
     let isMounted = true;
     const supabase = createClient();
 
     supabase.auth.getUser().then(({ data, error: authError }) => {
       if (!isMounted) return;
-      const role = data.user?.app_metadata?.role;
+      // FLAGGED / FIXED -- session 55 (tsc pass): bracket notation.
+      // Supabase's real User.app_metadata type is a loose index-signature
+      // object, and this project's tsconfig has
+      // noPropertyAccessFromIndexSignature enabled, which requires
+      // bracket access for index-signature properties. No behavior
+      // change -- same runtime value, same admin-role check.
+      const role = data.user?.app_metadata?.['role'];
       if (authError || role !== 'admin') {
         setRoleStatus('unauthorized');
       } else {
@@ -215,8 +145,6 @@ export default function AdminAuditLogPage() {
     setAppliedActorType(actorType);
   };
 
-  // AMENDED, THIS SESSION: now driven by the real `total` from the API
-  // response instead of inferring from `events.length === PAGE_SIZE`.
   const hasNextPage = offset + events.length < total;
   const hasPrevPage = offset > 0;
 

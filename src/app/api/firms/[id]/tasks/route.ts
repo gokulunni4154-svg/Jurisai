@@ -44,7 +44,7 @@ interface RouteContext {
  * GET /api/firms/[id]/tasks
  * Lists standalone (non-case) tasks for the firm.
  */
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = context.params;
     const currentUser = await getCurrentUser();

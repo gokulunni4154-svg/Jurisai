@@ -42,11 +42,18 @@
 // BillingService, matching that Service's own new constructor signature
 // (createCheckoutSession() now derives customerName/customerPhone from
 // the caller's own profile instead of accepting them from the client).
-// Import path CONFIRMED this session via billing.service.ts's own real,
-// pasted source (`import type { ProfileRepository } from
-// './profile.repository';`) — it lives in this same module folder
-// (src/modules/billing/profile.repository.ts), not a separate `profiles`
-// module as an earlier draft of this file guessed.
+//
+// FLAGGED / CORRECTED — session 55 (tsc regression fix): the import
+// path below was previously './profile.repository', on the assumption
+// (per this file's own earlier header note) that ProfileRepository
+// lives in this same module folder (src/modules/billing/). That
+// assumption was WRONG. The user has now confirmed the real, on-disk
+// location is src/modules/profiles/profile.repository.ts — a separate
+// `profiles` module, not a file inside `billing/`. Import corrected to
+// the relative path from src/modules/billing/ to src/modules/profiles/.
+// The client-choice reasoning in the paragraph below (RLS-respecting
+// client, confirmed via profiles_select_own) is unaffected by this —
+// only the import's source path was wrong, not which client to use.
 //
 // Constructed against the RLS-respecting `supabase` client (same group
 // as planRepository/firmRepository above), NOT the admin client.
@@ -75,7 +82,7 @@ import { BillingService } from './billing.service';
 import { CashfreeService } from './cashfree.service';
 import { FirmRepository } from './firm.repository';
 import { PlanRepository } from './plan.repository';
-import { ProfileRepository } from './profile.repository';
+import { ProfileRepository } from '../profiles/profile.repository';
 import { SubscriptionRepository } from './subscription.repository';
 
 export async function buildBillingService(): Promise<BillingService> {

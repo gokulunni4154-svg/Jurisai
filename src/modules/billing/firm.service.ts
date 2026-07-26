@@ -2,7 +2,7 @@ import { BaseService } from '@/core/services/base.service';
 import { ConflictError } from '@/core/errors/app-error';
 import type { CreateFirmInput, UpdateFirmInput } from './billing.schemas';
 import type { FirmRepository } from './firm.repository';
-import type { ProfileRepository } from './profile.repository';
+import { ProfileRepository } from '../profiles/profile.repository';
 import type { AuthUser, FirmRole } from '@/core/auth/types';
 import type { Database } from '@/core/supabase/database.types';
 import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';

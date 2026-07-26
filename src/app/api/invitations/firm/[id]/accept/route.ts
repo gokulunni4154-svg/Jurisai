@@ -25,7 +25,7 @@ import { createFirmInvitationService } from '@/modules/user-management/firm-invi
  * which service to call without querying both tables first.
  */
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

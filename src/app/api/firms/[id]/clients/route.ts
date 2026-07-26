@@ -68,7 +68,7 @@ export async function POST(
  * firm-wide).
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

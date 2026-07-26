@@ -81,7 +81,7 @@ export async function PATCH(
  * to match the confirmed precedent.)
  */
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string; profileId: string } },
 ): Promise<NextResponse> {
   try {

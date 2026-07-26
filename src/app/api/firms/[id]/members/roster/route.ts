@@ -29,7 +29,7 @@ import { createFirmService } from '@/modules/billing/firm.factory';
  * updateFirm() already use.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

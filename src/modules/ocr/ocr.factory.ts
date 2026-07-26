@@ -5,6 +5,10 @@ import { getCurrentUser } from '@/core/auth/session';
 import { createClient } from '@/core/supabase/server';
 import { DocumentRepository } from '@/modules/documents/document.repository';
 import { DocumentService } from '@/modules/documents/document.service';
+import { createAdminClient } from '@/core/supabase/admin';
+import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
+import { NotificationRepository } from '@/modules/notifications/notification.repository';
+import { NotificationService } from '@/modules/notifications/notification.service';
 
 import { GoogleVisionOCRProvider } from './providers/google-vision.provider';
 import { OCRExtractionRepository } from './ocr-extraction.repository';
@@ -56,7 +60,25 @@ export async function buildOcrService(): Promise<OCRService> {
   const ocrExtractionRepository = new OCRExtractionRepository(supabase);
 
   const documentRepository = new DocumentRepository(supabase);
-  const documentService = new DocumentService(currentUser, documentRepository);
+
+  // FIX, tsc pass — AuditLogRepository has no RLS policy (confirmed via
+  // document.factory.ts's own Amendment #15 pattern), so it's built with
+  // the cached admin client, not the request-scoped `supabase` used
+  // everywhere else in this factory. Shared by NotificationService and
+  // DocumentService below — one audit-write path for both, same as
+  // document.factory.ts.
+  const adminClient = createAdminClient();
+  const auditLogRepository = new AuditLogRepository(adminClient);
+
+  const notificationRepository = new NotificationRepository(supabase);
+  const notificationService = new NotificationService(currentUser, notificationRepository, auditLogRepository);
+
+  const documentService = new DocumentService(
+    currentUser,
+    documentRepository,
+    notificationService,
+    auditLogRepository,
+  );
 
   return new OCRService(currentUser, ocrExtractionRepository, ocrProvider, documentService);
 }

@@ -20,11 +20,11 @@ interface RouteContext {
  * project's existing pattern of not leaking existence to unauthorized
  * callers (same posture as documents/document_sets).
  */
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = context.params;
     const currentUser = await getCurrentUser();               // ✅ new
-const caseService = await createCaseService(currentUser); // ✅ new
+    const caseService = await createCaseService(currentUser); // ✅ new
 
     const caseRecord = await caseService.getCaseById(id);
 

@@ -5,6 +5,10 @@ import { getCurrentUser } from '@/core/auth/session';
 import { createClient } from '@/core/supabase/server';
 import { DocumentRepository } from '@/modules/documents/document.repository';
 import { DocumentService } from '@/modules/documents/document.service';
+import { createAdminClient } from '@/core/supabase/admin';
+import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
+import { NotificationRepository } from '@/modules/notifications/notification.repository';
+import { NotificationService } from '@/modules/notifications/notification.service';
 
 import { DocumentAnalysisRepository } from './document-analysis.repository';
 import { DocumentAnalysisService } from './document-analysis.service';
@@ -45,15 +49,14 @@ import { DocumentAnalysisService } from './document-analysis.service';
  * DocumentService's and DocumentAnalysisRepository's visibility models
  * depend on that.
  *
- * FLAGGED, NOT YET FIXED (confirmed this session): the DocumentService
- * construction below passes only (currentUser, documentRepository) —
- * two arguments. The real DocumentService constructor (document.service.ts,
- * File 48, Amendment #15) requires FOUR: (currentUser, documentRepository,
- * notificationService, auditLogRepository). As written, this file does
- * not compile against the real DocumentService. Left as-is per the
- * standing instruction to track flagged-but-not-fixed items rather than
- * proactively fix them — needs notificationService and auditLogRepository
- * constructed and passed here before this factory is usable.
+ * FIXED, tsc pass (previously flagged, not yet fixed) — the
+ * DocumentService construction below previously passed only
+ * (currentUser, documentRepository), two arguments, against the real
+ * four-argument constructor (document.service.ts, Amendment #15:
+ * currentUser, documentRepository, notificationService,
+ * auditLogRepository). Now constructs notificationService and
+ * auditLogRepository inline, mirroring document.factory.ts's own
+ * confirmed pattern, and passes all four.
  */
 export async function buildDocumentAnalysisService(): Promise<DocumentAnalysisService> {
   const currentUser = await getCurrentUser();
@@ -62,7 +65,25 @@ export async function buildDocumentAnalysisService(): Promise<DocumentAnalysisSe
   const analysisRepository = new DocumentAnalysisRepository(supabase);
 
   const documentRepository = new DocumentRepository(supabase);
-  const documentService = new DocumentService(currentUser, documentRepository);
+
+  // FIX, tsc pass — AuditLogRepository has no RLS policy (confirmed via
+  // document.factory.ts's own Amendment #15 pattern), so it's built with
+  // the cached admin client, not the request-scoped `supabase` used
+  // everywhere else in this factory. Shared by NotificationService and
+  // DocumentService below — one audit-write path for both, same as
+  // document.factory.ts.
+  const adminClient = createAdminClient();
+  const auditLogRepository = new AuditLogRepository(adminClient);
+
+  const notificationRepository = new NotificationRepository(supabase);
+  const notificationService = new NotificationService(currentUser, notificationRepository, auditLogRepository);
+
+  const documentService = new DocumentService(
+    currentUser,
+    documentRepository,
+    notificationService,
+    auditLogRepository,
+  );
 
   return new DocumentAnalysisService(currentUser, analysisRepository, documentService);
 }

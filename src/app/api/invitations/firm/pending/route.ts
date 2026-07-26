@@ -20,7 +20,7 @@ import { createFirmInvitationService } from '@/modules/user-management/firm-invi
  * two shapes into one response, working against that separation instead
  * of following it.
  */
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
     const currentUser = await getCurrentUser();
 

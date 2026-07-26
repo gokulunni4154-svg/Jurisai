@@ -1,10 +1,15 @@
 // src/modules/observability/observability.service.ts
 // JurisAI Observability module — Phase 3
+//
+// FLAGGED / FIXED — session 55 (tsc pass): `AuthorizationError` was
+// imported but never thrown anywhere in this file (the only throw here
+// is `NotFoundError`, in getFirmRunHistory()) — dropped from the
+// import. No other change.
 
 import 'server-only';
 
 import type { AuthUser } from '@/core/auth/types';
-import { AuthorizationError, NotFoundError } from '@/core/errors/app-error';
+import { NotFoundError } from '@/core/errors/app-error';
 import { BaseService } from '@/core/services/base.service';
 
 import type { ProfileRepository } from '@/modules/profiles/profile.repository';
@@ -97,13 +102,6 @@ export interface ObservabilityRun {
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
-  /**
-   * Present (non-null) whenever the caller's query path resolved
-   * document context — always populated for the admin view (embedded
-   * directly in the query), and populated for the firm-owner view too,
-   * since that path already has every document's title in hand from
-   * its own four-hop chain and can attach it without an extra query.
-   */
   documentTitle: string | null;
   documentOwnerId: string | null;
 }
@@ -235,14 +233,6 @@ export class ObservabilityService extends BaseService {
       this.chatConversationRepository.findManyForAnalysisIds(analysisIds),
     ]);
 
-    /**
-     * Attaches document title/owner_id to a firm-view row by walking
-     * document_analysis_id -> document_id -> document, reusing data
-     * already fetched in this same call rather than issuing another
-     * query. Returns { title: null, ownerId: null } if either hop can't
-     * be resolved (should not happen for rows genuinely reached via the
-     * chain above, but not assumed to be impossible).
-     */
     const resolveDocumentInfo = (
       documentAnalysisId: string,
     ): { title: string | null; ownerId: string | null } => {
@@ -349,14 +339,6 @@ export class ObservabilityService extends BaseService {
   }
 }
 
-/**
- * Shared shape every one of the seven true run-lifecycle modules'
- * entity types has in common — status/error_message/provider_used/
- * completed_at, all with each module's own specific enum for `status`
- * (widened to `string` here, see ObservabilityRun's own doc comment).
- * Not exported — an internal structural type this file uses purely to
- * write one mapper instead of seven near-identical ones.
- */
 interface RunLifecycleRow {
   id: string;
   document_analysis_id: string;
@@ -388,17 +370,6 @@ function mapRunLifecycleRow(
   };
 }
 
-/**
- * Chat's own mapper, kept separate rather than forced through
- * mapRunLifecycleRow — see this file's ObservabilityRun doc comment and
- * ChatConversationRepository#findManyForAnalysisIds' own doc comment for
- * the full reasoning: chat_conversations has no status/error_message/
- * provider_used-at-the-conversation-level columns at all, confirmed
- * against the real database.types.ts. `status`/`errorMessage`/
- * `providerUsed` are set to null here — not derived, not guessed —
- * and `completedAt` is likewise null; `createdAt` is the conversation's
- * real created_at.
- */
 function mapChatRow(
   row: { id: string; document_analysis_id: string; created_at: string },
   resolveDocumentInfo: (documentAnalysisId: string) => { title: string | null; ownerId: string | null },
@@ -419,11 +390,6 @@ function mapChatRow(
   };
 }
 
-// Re-exported so the Route layer / Factory can reference these entity
-// types without importing each module's own entity file directly,
-// mirroring the re-export convention already established by every
-// module repository file (e.g. CreateRiskDetectionInput from
-// risk-detection.repository.ts).
 export type {
   RiskDetection,
   AiLegalInsight,

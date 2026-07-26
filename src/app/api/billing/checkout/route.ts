@@ -29,6 +29,28 @@ import { createCheckoutSchema } from '@/modules/billing/billing.schemas';
 export const maxDuration = 60;
 
 /**
+ * FLAGGED / FIXED — session 55 (tsc pass): CreateCheckoutSessionInput
+ * requires a `returnUrl: string` that createCheckoutSchema does not
+ * validate (deliberately — see billing.schemas.ts). User confirmed this
+ * session: returnUrl is SERVER-COMPUTED, not client-supplied — avoids
+ * the open-redirect surface a client-controlled redirect target would
+ * introduce, and the client never needed control over it in the first
+ * place.
+ *
+ * Built from `request.nextUrl.origin` (the actual scheme+host the
+ * request arrived on — correct in both local dev and every deployed
+ * environment without needing a separate base-URL env var) plus a
+ * fixed success-page path.
+ *
+ * FLAGGED, UNCONFIRMED: the path itself, '/billing/success', is a
+ * placeholder — no real frontend route for a post-checkout success
+ * page has been pasted or confirmed this session. Swap this string for
+ * the real page path once it's confirmed; nothing else about this fix
+ * depends on the exact path chosen.
+ */
+const CHECKOUT_SUCCESS_PATH = '/billing/success';
+
+/**
  * POST /api/billing/checkout
  *
  * FIXED — this route previously called createCheckoutSchema.safeParse()
@@ -55,7 +77,13 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
-    const input = createCheckoutSchema.parse(body);
+    const parsed = createCheckoutSchema.parse(body);
+
+    // FLAGGED / FIXED — see this file's CHECKOUT_SUCCESS_PATH comment
+    // above: returnUrl is computed here, server-side, never taken from
+    // the client.
+    const returnUrl = new URL(CHECKOUT_SUCCESS_PATH, request.nextUrl.origin).toString();
+    const input = { ...parsed, returnUrl };
 
     const billingService = await buildBillingService();
     const session = await billingService.createCheckoutSession(input);

@@ -12,6 +12,22 @@
 // established precedent (Audit Log Phase 3 File 11) — audit write happens
 // AFTER the real mutation (and, for updateDocument, after the existing
 // notification write) has already succeeded.
+//
+// FLAGGED / FIXED — session 55 (tsc pass): updateDocument()'s
+// `input.hearingDate.toISOString()` call (below) was flagged by tsc as
+// "possibly undefined", but this is a TypeScript narrowing limitation,
+// not a real logic bug — `'hearingDate' in input` was computed into a
+// separate `hearingDateFieldPresent` const rather than checked inline,
+// and TypeScript does not propagate `in`-narrowing through an
+// intermediate boolean variable across an `if` block. At runtime, by
+// the time this line runs, hearingDateFieldPresent already guarantees
+// the field is present — the only two real possibilities are `null`
+// (explicit clear) or a real `Date`. Changed `=== null` to `== null`
+// (loose equality) so the ternary's else-branch narrowing excludes both
+// `null` and `undefined` at the type level too, matching what's already
+// true at runtime. No behavior change: `undefined` cannot reach this
+// branch given hearingDateFieldPresent is true, so treating it the same
+// as `null` here is a no-op in practice, not a new code path.
 
 import 'server-only';
 
@@ -341,7 +357,13 @@ export class DocumentService extends BaseService {
     let newHearingDateIso: string | null = existing.hearing_date;
 
     if (hearingDateFieldPresent) {
-      newHearingDateIso = input.hearingDate === null ? null : input.hearingDate.toISOString();
+      // FLAGGED / FIXED — session 55 (tsc pass): `=== null` changed to
+      // `== null` so the else-branch narrows out `undefined` as well as
+      // `null` — see this file's header note. TypeScript can't see that
+      // hearingDateFieldPresent (an `in`-check hoisted into a separate
+      // const) already guarantees this field is present; at runtime,
+      // undefined cannot reach this branch, so the behavior is unchanged.
+      newHearingDateIso = input.hearingDate == null ? null : input.hearingDate.toISOString();
       updatePayload.hearing_date = newHearingDateIso;
     }
 

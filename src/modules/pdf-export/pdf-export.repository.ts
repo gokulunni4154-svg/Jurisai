@@ -17,19 +17,30 @@
 // inferred from a description — every name below is copied from one of
 // those three files.
 //
+// FIXED — session 55 (tsc pass): findById/findByIdOrThrow were
+// originally left un-overridden (see the old deviation note this
+// replaces) on the reasoning that "there is no divergence from base
+// behavior to close" for pdf_exports. That reasoning had a real gap:
+// pdf-export.entity.ts's own header notes `status` is a plain string
+// column (text+check, not a native Postgres enum), so
+// BaseRepository<'pdf_exports'>'s generic Row type carries
+// `status: string`, not the narrowed PdfExportStatus union PdfExport
+// declares. Every OTHER method in this class already compensates with
+// an `as PdfExportRow as PdfExport` cast (findByDocumentAnalysisId,
+// findLatestByDocumentAnalysisId, applyTransition) — findById/
+// findByIdOrThrow were the one gap, since they were inherited unchanged
+// rather than overridden, which tsc caught via
+// PdfExportService#getPdfExportById's return type mismatch. Both are
+// now overridden below with the same cast convention, no new pattern
+// introduced.
+//
 // DELIBERATE DEVIATION FROM FILE 64's SHAPE, flagged not silent:
-// File 64 overrides findById/findByIdOrThrow ONLY because
-// document_analyses.result is an opaque jsonb column that needs
-// validating against documentAnalysisResultSchema on every read. File
-// 163's own header is explicit that pdf_exports has no result field and
-// no companion schemas.ts — every column here is a plain scalar that
-// maps 1:1 onto the PdfExport interface. File 64's own stated logic for
-// NOT overriding findMany/count/delete ("nothing... suggests a filter
-// default beyond plain pagination, so the base class's behavior is
-// assumed correct as-is") applies here to findById/findByIdOrThrow too:
-// there is no divergence from base behavior to close, so this class
-// does not override them. Confirmed with the user directly before
-// writing this rather than assumed.
+// File 64 overrides findById/findByIdOrThrow because
+// document_analyses.result is an opaque jsonb column needing schema
+// validation on every read (a parseRow() step). pdf_exports has no such
+// field — every column here is a plain scalar — so the override below
+// is narrower than File 64's: a type-narrowing cast only, no schema
+// validation, since there is nothing here for a validator to check.
 //
 // CARRIED-FORWARD ASSUMPTION (same one File 64 flags for itself):
 // `extends BaseRepository<'pdf_exports'>` only compiles if
@@ -85,8 +96,9 @@ const EXPORTS_BUCKET = 'legal-vault-exports';
  * flag File 64 raises for itself, deferred to File 165's actual call
  * site rather than blocked on here.
  *
- * findById/findByIdOrThrow are NOT overridden — see deviation note
- * above. Both are inherited directly from BaseRepository.
+ * findById/findByIdOrThrow ARE overridden (see FIXED note above) — a
+ * type-narrowing cast only, no schema validation needed (no jsonb
+ * column on this table).
  *
  * findMany/count/delete are NOT overridden — File 162's migration has
  * no DELETE RLS policy at all ("nothing in this session's scope calls
@@ -104,6 +116,29 @@ const EXPORTS_BUCKET = 'legal-vault-exports';
 export class PdfExportRepository extends BaseRepository<'pdf_exports'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'pdf_exports');
+  }
+
+  /**
+   * Overrides BaseRepository#findById — narrows `status` from the raw
+   * column type (`string`) to PdfExportStatus via cast, same convention
+   * every other method in this class already uses. No schema validation
+   * step (unlike File 64's parseRow()) — nothing here needs it.
+   */
+  override async findById(id: string): Promise<PdfExport | null> {
+    const row = await super.findById(id);
+    return row ? (row as PdfExportRow as PdfExport) : null;
+  }
+
+  /**
+   * Overrides BaseRepository#findByIdOrThrow — calls this class's own
+   * findById() override... actually calls super.findByIdOrThrow()
+   * directly (not this.findById()) since there's no polymorphic-dispatch
+   * concern here (no subclass of this one exists), then applies the same
+   * narrowing cast.
+   */
+  override async findByIdOrThrow(id: string): Promise<PdfExport> {
+    const row = await super.findByIdOrThrow(id);
+    return row as PdfExportRow as PdfExport;
   }
 
   /**
@@ -252,12 +287,6 @@ export class PdfExportRepository extends BaseRepository<'pdf_exports'> {
    * less justified than the base class's generic-T case — kept for
    * consistency with the established project pattern rather than
    * fighting it in one isolated spot.
-   *
-   * No parseRow() step here, unlike File 64's applyTransition — see
-   * deviation note above. The row returned by Postgrest already matches
-   * the PdfExport shape field-for-field (given the database.types.ts
-   * assumption flagged above), so it's returned directly rather than
-   * routed through a validator that would have nothing to validate.
    */
   private async applyTransition(
     id: string,

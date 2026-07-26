@@ -352,11 +352,15 @@ export class CashfreeService {
     input: ManageCashfreeSubscriptionInput,
   ): Promise<CashfreeSubscriptionResponse> {
     const actionDetails: Record<string, string> = {};
+    // FIX, tsc pass — both assignments below were TS4111 (index-signature
+    // access requires bracket notation): actionDetails is typed
+    // Record<string, string>, which has an index signature. No behavior
+    // change — same runtime assignment either way.
     if (input.planId !== undefined) {
-      actionDetails.plan_id = input.planId;
+      actionDetails['plan_id'] = input.planId;
     }
     if (input.nextScheduledTime !== undefined) {
-      actionDetails.next_scheduled_time = input.nextScheduledTime;
+      actionDetails['next_scheduled_time'] = input.nextScheduledTime;
     }
 
     const body = {

@@ -42,7 +42,7 @@ import { buildDocumentService } from '@/modules/documents/document.factory';
  * ever becomes a real requirement.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {

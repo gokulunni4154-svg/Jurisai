@@ -16,6 +16,18 @@
 // module's confirmed scope requires cross-tenant reads). Every method
 // below relies on document_set_analyses' own RLS (the EXISTS-join-to-
 // document_sets policies from this table's migration) for visibility.
+//
+// FIXED — session 55 (tsc pass): create() was never overridden and was
+// falling through to BaseRepository#create(), which returns the raw
+// Database-derived Row (`result: Json`), not the narrowed
+// DocumentSetAnalysis domain type every other method here returns. This
+// caused a Json-vs-DocumentSetAnalysisResult mismatch at the call site
+// in document-set.service.ts's createSetAnalysis(). Added a create()
+// override, same narrowing-via-parseRow() reasoning as the
+// findById()/findByIdOrThrow() overrides below — reuses super.create()
+// for the actual insert, since (unlike findById) create() isn't called
+// internally by any other method here, so there's no polymorphic-
+// dispatch reason to duplicate the Postgrest call itself.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -29,6 +41,7 @@ import {
 } from '@/modules/document-sets/document-set-analysis.schemas';
 
 type DocumentSetAnalysisRow = Database['public']['Tables']['document_set_analyses']['Row'];
+type DocumentSetAnalysisInsert = Database['public']['Tables']['document_set_analyses']['Insert'];
 
 /**
  * Domain type for a document_set_analyses row, with `result` narrowed
@@ -44,6 +57,17 @@ export type DocumentSetAnalysis = Omit<DocumentSetAnalysisRow, 'result'> & {
 export class DocumentSetAnalysisRepository extends BaseRepository<'document_set_analyses'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'document_set_analyses');
+  }
+
+  /**
+   * Overrides BaseRepository#create — routes the inserted row through
+   * parseRow() so `result` comes back narrowed to
+   * DocumentSetAnalysisResult | null instead of the raw Json column
+   * type. Reuses super.create() for the actual insert.
+   */
+  override async create(input: DocumentSetAnalysisInsert): Promise<DocumentSetAnalysis> {
+    const row = await super.create(input);
+    return this.parseRow(row);
   }
 
   /**

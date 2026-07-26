@@ -4,7 +4,7 @@
 import 'server-only';
 
 import type { AuthUser } from '@/core/auth/types';
-import { AuthorizationError } from '@/core/errors/app-error';
+import { AuthorizationError, ValidationError } from '@/core/errors/app-error';
 import { BaseService } from '@/core/services/base.service';
 import type { Database } from '@/core/supabase/database.types';
 import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
@@ -98,6 +98,22 @@ export class NotificationService extends BaseService {
    * AMENDED, THIS SESSION: writes a 'notifications.create' audit entry
    * as the last step, after the real insert succeeds. Not wrapped in a
    * try/catch — see class-level doc comment.
+   *
+   * FLAGGED / FIXED — session 55 (tsc pass): createNotificationSchema's
+   * `hearingDateSnapshot` is typed `Date | undefined` at the schema
+   * level (genuinely optional, since 'lawyer_inquiry_received'
+   * notifications don't use it at all) — the schema's own `.refine()`
+   * enforces at RUNTIME that it's present for 'hearing_date_set'/
+   * 'hearing_date_reminder', but a Zod `.refine()` doesn't narrow the
+   * TypeScript-inferred type based on which branch applies, so
+   * `input.hearingDateSnapshot` is still statically `Date | undefined`
+   * here even on a call path where it's runtime-guaranteed present.
+   * Added an explicit guard below — converts a theoretical `undefined`
+   * into a clear ValidationError (matching this project's established
+   * convention elsewhere for required-conditional-field checks) instead
+   * of an unguarded `.toISOString()` throwing a confusing TypeError if
+   * this method's own "hearing_date_set path only" scoping (see
+   * class-level doc comment) is ever violated by a future caller.
    */
   async createNotification(rawInput: unknown): Promise<NotificationRow> {
     const user = this.requireAuthentication();
@@ -107,6 +123,13 @@ export class NotificationService extends BaseService {
       throw new AuthorizationError(
         'Cannot create a notification addressed to a different user.',
         { expectedUserId: user.id, actualUserId: input.userId },
+      );
+    }
+
+    if (input.hearingDateSnapshot === undefined) {
+      throw new ValidationError(
+        'hearingDateSnapshot is required for this notification type.',
+        { type: input.type },
       );
     }
 

@@ -59,7 +59,7 @@ export async function POST(
  * read access) and throws AuthorizationError otherwise.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: { id: string } },
 ): Promise<NextResponse> {
   try {

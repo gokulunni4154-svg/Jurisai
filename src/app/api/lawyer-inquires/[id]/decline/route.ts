@@ -37,10 +37,15 @@
 // `@/lib/supabase/server`; the real session.ts uses
 // `@/core/supabase/server`) -- moot here since createClient is no
 // longer called directly, but flagged for the same reason.
+//
+// FLAGGED / FIXED — session 55 (tsc pass): same two fixes as
+// accept/route.ts's own header note — (1) `AppError` two-arg call
+// swapped to `ValidationError`, same compiler-confirmed shape reasoning;
+// (2) unused `request` param prefixed with `_`.
 
 import { NextResponse } from 'next/server';
 
-import { AppError } from '@/core/errors/app-error';
+import { ValidationError } from '@/core/errors/app-error';
 import { handleApiError } from '@/core/errors/error-handler';
 import { getCurrentUser } from '@/core/auth/session';
 import { buildLawyerInquiryService } from '@/modules/lawyer-inquiries/lawyer-inquiry.factory';
@@ -49,13 +54,12 @@ interface RouteParams {
   params: { id: string };
 }
 
-export async function POST(request: Request, { params }: RouteParams): Promise<NextResponse> {
+export async function POST(_request: Request, { params }: RouteParams): Promise<NextResponse> {
   try {
     const { id: inquiryId } = params;
 
     if (!inquiryId) {
-      // FLAGGED: same AppError constructor-shape guess as accept/route.ts.
-      throw new AppError('Inquiry id is required.', { statusCode: 400 });
+      throw new ValidationError('Inquiry id is required.', { received: inquiryId });
     }
 
     const currentUser = await getCurrentUser();

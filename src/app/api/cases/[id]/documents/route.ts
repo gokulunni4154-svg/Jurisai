@@ -2,6 +2,15 @@
 //
 // DRAFT — see cases/route.ts's header comment re: Source Verification
 // Rule. Same caveats apply.
+//
+// FLAGGED / FIXED — session 55 (tsc pass):
+//   1. GET's `request` param was unused (only context.params.id is
+//      read) — prefixed with `_`, same convention as every other route
+//      this session.
+//   2. POST still called the never-existent `getAuthUser(request)` /
+//      `buildCaseService(currentUser)` pair — GET in this same file had
+//      already been fixed to `getCurrentUser()` / `createCaseService()`.
+//      POST brought in line to match.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/core/auth/session';
@@ -15,11 +24,11 @@ interface RouteContext {
  * GET /api/cases/[id]/documents
  * Lists documents linked to a case via case_documents.
  */
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = context.params;
-    const currentUser = await getCurrentUser();               // ✅ new
-const caseService = await createCaseService(currentUser);
+    const currentUser = await getCurrentUser();
+    const caseService = await createCaseService(currentUser);
     const documents = await caseService.listCaseDocuments(id);
 
     return NextResponse.json({ data: documents });
@@ -46,8 +55,8 @@ const caseService = await createCaseService(currentUser);
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { id } = context.params;
-    const currentUser = await getAuthUser(request);
-    const caseService = await buildCaseService(currentUser);
+    const currentUser = await getCurrentUser();
+    const caseService = await createCaseService(currentUser);
 
     const body = await request.json();
     const { documentId } = body;
