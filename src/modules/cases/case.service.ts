@@ -59,7 +59,7 @@ import type { FirmMemberRepository } from '@/modules/user-management/firm-member
 import type { TeamMemberRepository } from '@/modules/user-management/team-member.repository';
 
 import type { CaseAccessGrantRepository } from './case-access-grant.repository';
-import type { CaseRepository } from './case.repository';
+import type { CaseRepository, CaseRowWithClient } from './case.repository';
 
 type CaseRow = Database['public']['Tables']['cases']['Row'];
 type DocumentRow = Database['public']['Tables']['documents']['Row'];
@@ -137,6 +137,22 @@ export class CaseService extends BaseService {
   async listCases(): Promise<CaseRow[]> {
     this.requireAuthentication();
     return this.caseRepository.findManyVisible();
+  }
+
+  /**
+   * NEW, Matters Page (Lawyer Terminal Task 2). Same RLS-scoped
+   * visibility as listCases() above -- an additive method, not a
+   * replacement, so GET /api/cases and every other existing
+   * listCases() caller keep their current (no client info) response
+   * shape. Backs GET /api/cases/matters. See
+   * CaseRepository#findManyVisibleWithClient()'s own doc comment for
+   * the real, unmodified clients-RLS caveat this inherits (client name
+   * only visible to a firm owner/admin, a personal-org lawyer, or
+   * platform admin -- not every case owner/grantee).
+   */
+  async listMatters(): Promise<CaseRowWithClient[]> {
+    this.requireAuthentication();
+    return this.caseRepository.findManyVisibleWithClient();
   }
 
   /**

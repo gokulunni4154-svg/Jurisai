@@ -28,6 +28,16 @@ import type { Database } from '@/core/supabase/database.types';
 type CaseRow = Database['public']['Tables']['cases']['Row'];
 type DocumentRow = Database['public']['Tables']['documents']['Row'];
 
+/**
+ * A visible case row with its linked client's name flattened onto it,
+ * where the caller's RLS permits reading that client row -- see
+ * findManyVisibleWithClient()'s own doc comment for the exact
+ * visibility caveat (clients_select_firm_manage restricts this to
+ * firm owner/admin, the client's own linked profile, or platform
+ * admin -- NOT every case owner/grantee).
+ */
+export type CaseRowWithClient = CaseRow & { client_full_name: string | null };
+
 export class CaseRepository extends BaseRepository<'cases'> {
   constructor(supabase: SupabaseClient<Database>) {
     super(supabase, 'cases');
@@ -41,6 +51,62 @@ export class CaseRepository extends BaseRepository<'cases'> {
    */
   async findManyVisible(): Promise<CaseRow[]> {
     return this.findMany();
+  }
+
+  /**
+   * NEW, Matters Page (Lawyer Terminal Task 2). Same RLS-scoped
+   * visibility as findManyVisible() above -- this is an ADDITIVE
+   * method, not a modification of it, so every existing caller
+   * (lawyer-dashboard.service.ts, case.service.ts#listCases()) is
+   * unaffected. Embeds the linked `clients` row's full_name via a
+   * single Postgrest join (`clients(full_name)`) rather than a
+   * separate per-case lookup, avoiding an N+1.
+   *
+   * FLAGGED, REAL RLS INTERACTION (not a bug, a deliberate consequence
+   * of existing, unmodified clients RLS -- see
+   * 20260812000000_create_clients_table.sql's clients_select_firm_manage
+   * policy): because this repository is always constructed with the
+   * RLS-respecting client (see file header), the embedded `clients`
+   * side of the join is ALSO subject to clients' own RLS. A firm
+   * owner/admin (or a personal-org lawyer, who is always their own
+   * org's sole owner) will see the real client name. A plain firm
+   * member who owns or was granted a case, but is not that firm's
+   * owner/admin, will get `client_full_name: null` for a case that
+   * genuinely has a client_id set -- not because the data doesn't
+   * exist, but because clients RLS doesn't grant that lawyer read
+   * access to the client record itself. This is intentionally NOT
+   * worked around here (no admin-client escape hatch) -- weakening
+   * clients RLS or bypassing it is out of scope for this task and
+   * would reopen a privacy boundary that module's own migration set
+   * deliberately. Callers must render a missing client name as "no
+   * client on file / not visible to you" rather than treating it as
+   * an error.
+   */
+  async findManyVisibleWithClient(): Promise<CaseRowWithClient[]> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .select('*, clients(full_name)')
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      throw new DatabaseError('Failed to list matters with client info', error, {
+        table: this.tableName,
+      });
+    }
+
+    // FLAGGED, UNVERIFIED SHAPE -- same accepted cast pattern as
+    // findMemberDocuments()/findMemberDocumentIds() above for an
+    // embedded Postgrest relation: `clients` comes back as a single
+    // nested object (client_id is a to-one FK) or null when client_id
+    // is null OR when clients RLS hides the row (see this method's own
+    // doc comment) -- Postgrest does not distinguish those two null
+    // cases in the response shape, and this repository doesn't need to.
+    return (data ?? []).map((row) => {
+      const { clients, ...caseFields } = row as unknown as CaseRow & {
+        clients: { full_name: string } | null;
+      };
+      return { ...caseFields, client_full_name: clients?.full_name ?? null };
+    });
   }
 
   /**
