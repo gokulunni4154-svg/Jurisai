@@ -5,16 +5,43 @@
 // imported but never thrown anywhere in this file (the only throw here
 // is `NotFoundError`, in getFirmRunHistory()) — dropped from the
 // import. No other change.
+//
+// SECURITY FIX — Foundation Task 3 (Security/RLS/Authorization Audit).
+// getFirmRunHistory() previously trusted `profiles.firm_id` alone as
+// its firm-scoping boundary. `profiles.firm_id` is a "primary firm"
+// convenience pointer (see 20260804000000_support_multi_firm_membership.sql)
+// updatable by the owning profile itself via the `profiles_update_own`
+// RLS policy (`using (id = auth.uid()) with check (id = auth.uid())` —
+// row-scoped only, NOT column-restricted, so a caller can set their own
+// `firm_id` to ANY firm's UUID via a plain client update). Combined with
+// this service's own factory constructing every repository against the
+// ADMIN client (RLS-bypassing, by design — see observability.factory.ts's
+// own header for why), a 'law_firm'-role caller could point their own
+// `firm_id` at a rival firm's id and pull that firm's entire cross-module
+// AI run history (document titles, provider used, error messages, risk/
+// compliance/health-score detail) without ever holding a `firm_members`
+// row there. `AuthorizationError` is re-added to the import below and
+// `FirmMemberRepository` is now injected so the resolved firmId is
+// verified against REAL firm_members standing (owner/admin — matching
+// FIRM_MANAGE_ROLES elsewhere in this project) before any admin-client
+// query runs, per the audit's Section 10 instruction: "Use actual
+// organization membership / ownership relationships as the security
+// source of truth." `profiles.firm_id` itself is left untouched, per
+// Foundation Task 1's own instruction not to modify its meaning.
 
 import 'server-only';
 
-import type { AuthUser } from '@/core/auth/types';
-import { NotFoundError } from '@/core/errors/app-error';
+import type { AuthUser, FirmRole } from '@/core/auth/types';
+import { AuthorizationError, NotFoundError } from '@/core/errors/app-error';
 import { BaseService } from '@/core/services/base.service';
 
 import type { ProfileRepository } from '@/modules/profiles/profile.repository';
 import type { DocumentRepository } from '@/modules/documents/document.repository';
 import type { DocumentAnalysisRepository } from '@/modules/document-analysis/document-analysis.repository';
+import type { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
+
+/** Mirrors FIRM_MANAGE_ROLES in case-access-grant.service.ts / firm-member.service.ts. */
+const FIRM_MANAGE_ROLES: readonly FirmRole[] = ['owner', 'admin'];
 
 import type {
   RiskDetectionRepository,
@@ -161,6 +188,7 @@ export class ObservabilityService extends BaseService {
     private readonly profileRepository: ProfileRepository,
     private readonly documentRepository: DocumentRepository,
     private readonly documentAnalysisRepository: DocumentAnalysisRepository,
+    private readonly firmMemberRepository: FirmMemberRepository,
     private readonly riskDetectionRepository: RiskDetectionRepository,
     private readonly aiLegalInsightRepository: AiLegalInsightRepository,
     private readonly aiRecommendationRepository: AIRecommendationRepository,
@@ -190,6 +218,20 @@ export class ObservabilityService extends BaseService {
    * the closest existing AppError type for this (no dedicated
    * "no firm associated" error class exists in what's been pasted this
    * session) — imprecise but not silently swallowed.
+   *
+   * SECURITY FIX, Foundation Task 3: `callerProfile.firm_id` is NOT
+   * trusted as an authorization boundary by itself anymore — see this
+   * file's class-level "SECURITY FIX" note above for the exploit this
+   * closes. Before any admin-client query runs, the resolved firmId is
+   * verified against a REAL `firm_members` row for (firmId, user.id)
+   * with an owner/admin role (FIRM_MANAGE_ROLES) — the same real
+   * membership/ownership relationship every other module in this
+   * project (case-access-grant.service.ts, firm-member.service.ts) uses
+   * as its actual security source of truth. An admin caller (role
+   * 'admin') still bypasses this check entirely and is unaffected —
+   * intentional, matches this method's pre-existing admin-override
+   * scope (see class-level doc comment above, "an admin can drill into
+   * a specific firm's view").
    */
   async getFirmRunHistory(): Promise<ObservabilityRun[]> {
     const user = this.requireRole('law_firm', 'admin');
@@ -201,6 +243,17 @@ export class ObservabilityService extends BaseService {
     }
 
     const firmId = callerProfile.firm_id;
+
+    if (user.role !== 'admin') {
+      const firmRole = await this.firmMemberRepository.findByFirmAndProfile(firmId, user.id);
+
+      if (!firmRole || !FIRM_MANAGE_ROLES.includes(firmRole)) {
+        throw new AuthorizationError(
+          'You do not have permission to view this firm\u2019s run history.',
+          { firmId, actualFirmRole: firmRole },
+        );
+      }
+    }
 
     const firmProfiles = await this.profileRepository.findByFirmId(firmId);
     const ownerIds = firmProfiles.map((p) => p.id);

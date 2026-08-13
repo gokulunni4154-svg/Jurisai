@@ -7,6 +7,7 @@ import { createAdminClient } from '@/core/supabase/admin';
 import { ProfileRepository } from '@/modules/profiles/profile.repository';
 import { DocumentRepository } from '@/modules/documents/document.repository';
 import { DocumentAnalysisRepository } from '@/modules/document-analysis/document-analysis.repository';
+import { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 import { RiskDetectionRepository } from '@/modules/risk-detection/risk-detection.repository';
 import { AiLegalInsightRepository } from '@/modules/ai-legal-insight/ai-legal-insight.repository';
 import { AIRecommendationRepository } from '@/modules/ai-recommendation/ai-recommendation.repository';
@@ -84,6 +85,16 @@ export async function buildObservabilityService(): Promise<ObservabilityService>
   const profileRepository = new ProfileRepository(supabase);
   const documentRepository = new DocumentRepository(supabase);
   const documentAnalysisRepository = new DocumentAnalysisRepository(supabase);
+  // SECURITY FIX, Foundation Task 3 — Security/RLS/Authorization Audit.
+  // Constructed against the same admin client as every other repository
+  // here (this factory's whole point is that ObservabilityService's own
+  // requireRole()/firm-membership checks ARE the authorization boundary,
+  // not the client). Used by ObservabilityService#getFirmRunHistory() to
+  // verify the caller actually holds an owner/admin firm_members row for
+  // the firm being queried, instead of trusting profiles.firm_id (a
+  // self-editable convenience pointer) alone — see that method's own
+  // "SECURITY FIX" doc comment for the cross-firm data leak this closes.
+  const firmMemberRepository = new FirmMemberRepository(supabase);
 
   const riskDetectionRepository = new RiskDetectionRepository(supabase);
   const aiLegalInsightRepository = new AiLegalInsightRepository(supabase);
@@ -99,6 +110,7 @@ export async function buildObservabilityService(): Promise<ObservabilityService>
     profileRepository,
     documentRepository,
     documentAnalysisRepository,
+    firmMemberRepository,
     riskDetectionRepository,
     aiLegalInsightRepository,
     aiRecommendationRepository,
