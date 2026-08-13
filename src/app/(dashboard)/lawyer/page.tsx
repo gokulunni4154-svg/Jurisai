@@ -76,6 +76,9 @@ import {
   Gavel,
   MapPin,
   X,
+  Sparkles,
+  MessageCircle,
+  ArrowRight,
 } from 'lucide-react';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
 
@@ -142,6 +145,30 @@ function urgencyLabel(days: number): string {
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
   return `In ${days} days`;
+}
+
+/**
+ * Today's Legal Briefing -- deterministic sentence built purely from
+ * counts already derived from the existing dashboard fetch (no AI call,
+ * no extra request). hearingsToday = hearings landing on today's date;
+ * pendingTasks reuses the same "overdue + due this week" definition
+ * already shown in the summary strip's "Tasks due within 7 days" card,
+ * so the sentence and the card can never disagree.
+ */
+function buildBriefing(hearingsToday: number, pendingTasks: number): string {
+  if (hearingsToday === 0 && pendingTasks === 0) {
+    return "You're all clear today. No hearings or urgent tasks are scheduled.";
+  }
+
+  const parts: string[] = [];
+  if (hearingsToday > 0) {
+    parts.push(`${hearingsToday} hearing${hearingsToday === 1 ? '' : 's'}`);
+  }
+  if (pendingTasks > 0) {
+    parts.push(`${pendingTasks} pending task${pendingTasks === 1 ? '' : 's'}`);
+  }
+
+  return `You have ${parts.join(' and ')} today.`;
 }
 
 /**
@@ -371,6 +398,29 @@ export default function LawyerDashboardPage() {
 
   const nextHearing = filteredHearings[0] ?? null;
 
+  // Today's Legal Briefing -- derived entirely from data already fetched
+  // by the existing GET /api/dashboard/lawyer call above (data.upcomingHearings,
+  // taskGroups). No additional request, no AI call. Uses the unfiltered
+  // dashboard data (not filteredHearings/filteredTasks) so the search box
+  // never changes what "today" reports.
+  const hearingsToday = useMemo(() => {
+    if (!data) return 0;
+    return data.upcomingHearings.filter((h) => daysUntil(h.hearing_date) === 0).length;
+  }, [data]);
+
+  // Unfiltered (not taskGroups, which is derived from the search-box-
+  // filtered list) -- the briefing should reflect the lawyer's real
+  // workload regardless of what they've typed into the search box.
+  const pendingTasksCount = useMemo(() => {
+    if (!data) return 0;
+    return data.myTasks.filter((t) => t.due_date !== null && daysUntil(t.due_date) <= 7).length;
+  }, [data]);
+
+  const briefing = useMemo(
+    () => buildBriefing(hearingsToday, pendingTasksCount),
+    [hearingsToday, pendingTasksCount],
+  );
+
   const handleCaseCreated = (newCase: CaseRow) => {
     setData((prev) => (prev ? { ...prev, myCases: [newCase, ...prev.myCases] } : prev));
     setIsNewCaseOpen(false);
@@ -507,6 +557,36 @@ export default function LawyerDashboardPage() {
             </div>
           ) : data ? (
             <div className="space-y-10">
+              {/* Today's Legal Briefing + Ask JurisAI */}
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-5 py-4 lg:col-span-2">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
+                    <Sparkles className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Today&apos;s legal briefing
+                    </p>
+                    <p className="mt-1 text-[15px] text-foreground">{briefing}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => router.push('/documents')}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4 text-left transition-colors hover:bg-muted"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
+                    <MessageCircle className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-medium text-foreground">Ask JurisAI</p>
+                    <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                      Chat about a document&apos;s analysis
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+                </button>
+              </div>
+
               {/* Summary strip */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
