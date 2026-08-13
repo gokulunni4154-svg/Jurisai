@@ -8,6 +8,15 @@ import type { Database } from '@/core/supabase/database.types';
 import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import type { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 
+/**
+ * FOUNDATION TASK 1 fallback display name for a personal organization
+ * when the owning profile has no `full_name` set yet (`profiles.full_name`
+ * is nullable — confirmed via 20260711120000_create_profiles_table.sql).
+ * Matches firms_name_length's own CHECK constraint (1–255 chars), so this
+ * never risks violating it regardless of what a real name would have been.
+ */
+const DEFAULT_PERSONAL_ORG_NAME = 'My Workspace';
+
 // firm.repository.ts defines this same alias locally but doesn't export
 // it, so it's redeclared here — same duplicated-type-level-convenience
 // trade-off billing.service.ts already accepts for SubscriptionRow/PlanRow.
@@ -195,6 +204,97 @@ export class FirmService extends BaseService {
   async getMyFirm(): Promise<FirmRow | null> {
     const user = this.requireAuthentication();
     return this.firmRepository.findByOwnerId(user.id);
+  }
+
+  /**
+   * NEW, FOUNDATION TASK 1 — Organization Architecture.
+   *
+   * Returns the caller's own PERSONAL organization, creating it on
+   * first call if it doesn't exist yet. This is the method that closes
+   * the architecture audit's single biggest flagged gap (P0: "no
+   * data-model path for an independent lawyer who is not a member of
+   * any firm to own a matter") — WITHOUT touching `cases`, `hearings`,
+   * or `tasks` at all: those tables already accept any `firms.id` as
+   * their `firm_id`, so an independent lawyer's personal organization
+   * id is a completely ordinary value to them. No schema or service
+   * change was needed on that side — see the migration's own header for
+   * the full reasoning.
+   *
+   * Idempotent by design: safe to call on every "enter the Lawyer
+   * Terminal" request once that terminal exists (a later task, not this
+   * one — see Section 21's stop condition). Checks for an existing
+   * personal org first via findPersonalOrgByOwnerId() (organization_type-
+   * scoped, so this is unaffected by the caller also owning an unrelated
+   * 'firm'-type row) rather than relying solely on the migration's
+   * `firms_one_personal_org_per_owner` unique index to reject a
+   * duplicate — that index is the DB-level backstop, this check is what
+   * makes repeated calls a normal, expected no-op instead of a thrown
+   * ConflictError on every call after the first.
+   *
+   * Mirrors createFirm()'s own three-step shape (create firm row ->
+   * create the owner's firm_members row -> conditionally set
+   * profiles.firm_id) with ONE deliberate difference: profiles.firm_id
+   * is NEVER set here, even when currently null. profiles.firm_id is
+   * documented (20260804000000_support_multi_firm_membership.sql,
+   * assumption #1) as a "primary/default firm" pointer that other,
+   * unrelated modules already read assuming it means Lawyer-Firms-plan
+   * membership (billing, reports, observability, team/client
+   * modules — confirmed via a repo-wide grep this session). Pointing it
+   * at a personal organization would silently change what every one of
+   * those call sites means for a solo lawyer, which is exactly the kind
+   * of unrelated-module side effect Foundation Task 1 is scoped to
+   * avoid (Section 18). FLAGGED, NOT SOLVED HERE: a caller who owns
+   * neither a 'firm'-type row nor has profiles.firm_id set still has no
+   * "primary firm" pointer at all after calling this method — that's
+   * correct under the current, narrower meaning of that column, but
+   * worth surfacing explicitly for whoever picks up the next task.
+   *
+   * Same non-transactional caveat as createFirm() (see that method's
+   * own doc comment and base.repository.ts's own header) — two
+   * sequential writes (firm, then firm_members), not wrapped in a DB
+   * transaction. A failure between them leaves an owner-less-in-
+   * firm_members personal org, which is inconsistent but recoverable
+   * (a retried call finds the existing firm row via
+   * findPersonalOrgByOwnerId() and would attempt to insert the missing
+   * firm_members row — FLAGGED, not fully closed by this method: that
+   * retry path does not currently re-check for a missing firm_members
+   * row on an already-existing personal org; it returns the existing
+   * row as-is. Real, low-probability gap, consistent with this
+   * project's existing accepted risk category for multi-step,
+   * non-transactional Service methods).
+   */
+  async getOrCreatePersonalOrganization(): Promise<FirmRow> {
+    const user = this.requireAuthentication();
+
+    const existing = await this.firmRepository.findPersonalOrgByOwnerId(user.id);
+    if (existing) {
+      return existing;
+    }
+
+    const profile = await this.profileRepository.findByIdOrThrow(user.id);
+
+    const firm = await this.firmRepository.create({
+      name: profile.full_name?.trim() || DEFAULT_PERSONAL_ORG_NAME,
+      owner_id: user.id,
+      organization_type: 'personal',
+    });
+
+    await this.firmMemberRepository.create({
+      firm_id: firm.id,
+      profile_id: user.id,
+      role: 'owner',
+    });
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: firm.id,
+      action: 'firm.create',
+      resourceType: 'firm',
+      resourceId: firm.id,
+      metadata: { name: firm.name, organizationType: 'personal' },
+    });
+
+    return firm;
   }
 
   /**

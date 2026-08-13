@@ -18,22 +18,28 @@ import type { User } from '@supabase/supabase-js';
  * means every new route — nested or not — is protected until someone
  * explicitly adds it below.
  *
- * KNOWN LIMITATION: none of these page routes exist in the codebase yet
- * — only their API counterparts do (src/app/api/auth/*, Files 36–40).
- * This list is a forward-looking placeholder anticipating the page
- * routes that will eventually render those flows (e.g. a future
- * `src/app/(auth)/sign-in/page.tsx`). It must be revisited — paths
- * confirmed, not just assumed — once those pages are actually built.
+ * KNOWN LIMITATION (partially resolved): this list was originally a
+ * forward-looking placeholder anticipating page routes that didn't exist
+ * yet, written before any of them were built. `/sign-in` is now CONFIRMED
+ * against real source — it renders via `src/app/(auth)/sign-in/page.tsx`,
+ * a Next.js route group, which is excluded from the URL path entirely.
+ * The original placeholder assumed a literal `/auth/sign-in` URL, which
+ * was wrong given the `(auth)` group; corrected here.
+ *
+ * `/auth/sign-up` and `/auth/request-password-reset` below are STILL
+ * unconfirmed placeholders — no corresponding page route has been pasted
+ * as real source yet. Do not assume they follow the same `(auth)` group
+ * convention as sign-in without confirming their actual file paths first.
  */
 const PUBLIC_ROUTES: readonly string[] = [
   '/',
-  '/auth/sign-in',
-  '/auth/sign-up',
+  '/sign-in',
+  '/sign-up',
   '/auth/request-password-reset',
 ];
 
 /** Where unauthenticated users are sent when hitting a protected page. */
-const SIGN_IN_ROUTE = '/auth/sign-in';
+const SIGN_IN_ROUTE = '/sign-in';
 
 /** Query param carrying the original destination, for post-login redirect. */
 const REDIRECT_PARAM = 'redirectTo';

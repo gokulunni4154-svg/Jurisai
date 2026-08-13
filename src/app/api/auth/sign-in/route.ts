@@ -3,6 +3,9 @@ import { handleApiError } from '@/core/errors/error-handler';
 import { ValidationError } from '@/core/errors/app-error';
 import { buildAuthService } from '@/modules/auth/auth.factory';
 import { buildAnonymousAnalysisService } from '@/modules/lawyer-inquiries/anonymous-analysis.factory';
+import { createClient } from '@/core/supabase/server';
+import { FirmRepository } from '@/modules/billing/firm.repository';
+import type { AuthUser } from '@/core/auth/types';
 
 /**
  * POST /api/auth/sign-in
@@ -56,6 +59,14 @@ import { buildAnonymousAnalysisService } from '@/modules/lawyer-inquiries/anonym
  * reattachSession() would fail silently from the client's perspective --
  * accepted for now given no logging/observability hook was pasted this
  * session to report it through instead.
+ *
+ * NEW, this session: response body now also includes `redirectTo`, the
+ * resolved post-sign-in dashboard destination -- see
+ * resolveDashboardRedirect()'s own doc comment below for the resolution
+ * order and rationale. This closes the continuation prompt's "Next
+ * steps" §2 gap (sign-in previously always sent every account to '/',
+ * regardless of role or firm ownership, since sign-in-form.tsx had
+ * nothing else to route on).
  */
 export async function POST(request: Request): Promise<NextResponse> {
   try {
@@ -70,10 +81,69 @@ export async function POST(request: Request): Promise<NextResponse> {
     const user = await service.signIn(rawInput);
 
     await tryReattachAnonymousSession(request, user.id);
+    const redirectTo = await resolveDashboardRedirect(user);
 
-    return NextResponse.json({ data: user });
+    return NextResponse.json({ data: user, redirectTo });
   } catch (error) {
     return handleApiError(error);
+  }
+}
+
+/**
+ * NEW. Resolves the post-sign-in dashboard destination, per the
+ * continuation prompt's "Next steps" §2 -- three destinations, checked
+ * in this priority order:
+ *
+ * 1. lawyer ('/lawyer') -- checked FIRST, deliberately. signUpAsLawyer()
+ *    (this session's earlier work) also creates a solo owner-role firm
+ *    for every lawyer account, so a solo lawyer literally owns a firm
+ *    via firms.owner_id too. Checking firm ownership before role would
+ *    misroute a lawyer to /firm/[firmId] instead of /lawyer -- this is
+ *    the one real ordering constraint here, not an arbitrary choice.
+ *    LawyerDashboardService's own confirmed role check (per the
+ *    resolved blocking issue) gates on this same top-level
+ *    UserRole -- consistent with that.
+ *
+ * 2. firm owner ('/firm/[firmId]'), via FirmRepository.findByOwnerId().
+ *    FLAGGED: FirmRepository lives in src/modules/billing/, per that
+ *    file's own header ("no firm-creation flow exists ... out of this
+ *    file's scope") -- reused here across modules since no dedicated
+ *    firm module exists yet. This is a deliberate, flagged cross-module
+ *    reuse, not a hidden coupling.
+ *
+ * 3. fallback ('/documents') -- CORRECTED, this turn: originally '/',
+ *    on the assumption no any-user destination existed yet. Confirmed
+ *    false via real pasted source: src/app/documents/page.tsx is a
+ *    fully real, working page (GET /api/documents, real upload flow,
+ *    navigation into /documents/[id], which per that file's own doc
+ *    comments already gates Legal Health Score -> AI Legal Insights ->
+ *    lawyer-inquiry contact -- the exact "any user" vision from the
+ *    continuation prompt). There is no missing dashboard to build here;
+ *    '/' was simply the wrong fallback, pointing at static marketing
+ *    content instead of this already-built page. Also the landing spot
+ *    for 'law_firm', 'business', 'client', 'admin', and 'support' roles
+ *    for now -- none of those were in scope for this session's redirect
+ *    work; only the three destinations the continuation prompt actually
+ *    specified are handled here.
+ *
+ * Failure while resolving firm ownership is swallowed to '/documents'
+ * rather than propagated -- matching this file's existing
+ * reattachment-error posture just above: a session was legitimately
+ * established, so a firm-lookup failure degrading the destination is
+ * preferable to failing the whole sign-in response over it.
+ */
+async function resolveDashboardRedirect(user: AuthUser): Promise<string> {
+  if (user.role === 'lawyer') {
+    return '/lawyer';
+  }
+
+  try {
+    const supabase = await createClient();
+    const firmRepository = new FirmRepository(supabase);
+    const firm = await firmRepository.findByOwnerId(user.id);
+    return firm ? `/firm/${firm.id}` : '/documents';
+  } catch {
+    return '/documents';
   }
 }
 

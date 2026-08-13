@@ -33,6 +33,30 @@ function sanitizeRedirectTarget(raw: string | null): string {
  * and falls back to a generic message. This should be verified against
  * File 37's real source and tightened once available — do not treat
  * the current fallback logic as confirmed-correct.
+ *
+ * NEW, this session: on success, the destination is no longer always
+ * '/'. Priority order: (1) an explicit ?redirectTo= query param, set
+ * by middleware's route-protection.ts when the user was bounced off a
+ * protected page pre-login — this is the user's own originally-
+ * intended destination and takes priority over anything else; (2) the
+ * server-resolved `redirectTo` now returned by POST /api/auth/sign-in
+ * (lawyer -> /lawyer, firm owner -> /firm/[firmId], else '/' — see
+ * that route's resolveDashboardRedirect() for the real logic); (3)
+ * '/', if neither is present or the response body isn't JSON. Both
+ * still pass through sanitizeRedirectTarget() below — the query-param
+ * source is user-controllable and needs it regardless of source, and
+ * running the server-resolved value through the same function too
+ * keeps this a single choke point rather than two.
+ *
+ * ROUTE CORRECTION: the "Sign up" link below was pointing at
+ * `/auth/sign-up`, a stale assumption from before the real route group
+ * structure was confirmed. `src/app/(auth)/sign-up/page.tsx` (a Next.js
+ * route group, excluded from the URL) actually serves at `/sign-up` —
+ * corrected here to match. The "Forgot password?" link still points at
+ * `/auth/request-password-reset`, which remains an UNCONFIRMED
+ * placeholder — no real page route has been verified for it yet. Do not
+ * assume it follows the same route-group convention as sign-in/sign-up
+ * without confirming its actual file path first.
  */
 export function SignInForm() {
   const router = useRouter();
@@ -68,7 +92,18 @@ export function SignInForm() {
         return;
       }
 
-      const redirectTarget = sanitizeRedirectTarget(searchParams.get('redirectTo'));
+      let responseBody: { redirectTo?: unknown } = {};
+      try {
+        responseBody = await response.json();
+      } catch {
+        // Response wasn't JSON — fall through to the '/' default inside
+        // sanitizeRedirectTarget() below.
+      }
+
+      const queryRedirect = searchParams.get('redirectTo');
+      const serverRedirect =
+        typeof responseBody.redirectTo === 'string' ? responseBody.redirectTo : null;
+      const redirectTarget = sanitizeRedirectTarget(queryRedirect ?? serverRedirect);
       router.push(redirectTarget);
       // Server Components and middleware read the session from cookies
       // per-request. router.push() alone can land on a destination
@@ -147,7 +182,7 @@ export function SignInForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         Don&rsquo;t have an account?{' '}
-        <Link href="/auth/sign-up" className="font-medium text-primary hover:underline">
+        <Link href="/sign-up" className="font-medium text-primary hover:underline">
           Sign up
         </Link>
       </p>

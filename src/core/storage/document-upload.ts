@@ -135,3 +135,99 @@ export async function uploadDocument(file: File, title: string): Promise<Uploade
   const json = await res.json();
   return json.data.document as UploadedDocument;
 }
+
+/**
+ * NEW — Documents page task, this session. Multi-file sibling of
+ * uploadDocument(), for the Documents page's "select multiple files"
+ * upload flow and the header's Bulk Upload quick action.
+ *
+ * SOURCE-VERIFIED AGAINST src/app/api/documents/bulk/route.ts
+ * (confirmed real, this session): request body is
+ * `{ documents: [{ title, storagePath, mimeType, sizeBytes }, ...] }`,
+ * response is `{ data: { created: [{ document }], failed: [{ error }],
+ * summary } }` — per-item outcomes are DATA, not HTTP errors, per that
+ * route's own doc comment.
+ *
+ * Each file is still uploaded to Storage individually first (same
+ * two-step, non-transactional caveat as uploadDocument() above), then
+ * all metadata rows are created in a single POST. A file that fails
+ * validation (bad type/size) is skipped before ever reaching Storage,
+ * and reported back the same shape as a server-side "failed" item so
+ * callers only need to handle one failure shape.
+ */
+export interface BulkUploadOutcome {
+  succeeded: UploadedDocument[];
+  failed: { fileName: string; error: string }[];
+}
+
+export async function uploadDocumentsBulk(files: File[]): Promise<BulkUploadOutcome> {
+  if (files.length === 0) return { succeeded: [], failed: [] };
+  if (files.length > 20) {
+    throw new UploadValidationError('At most 20 files can be uploaded at once.');
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    throw new Error('You need to be signed in to upload documents.');
+  }
+
+  const failed: { fileName: string; error: string }[] = [];
+  const items: { title: string; storagePath: string; mimeType: string; sizeBytes: number }[] = [];
+
+  for (const file of files) {
+    try {
+      validateFile(file);
+      const storagePath = `${user.id}/${crypto.randomUUID()}/${sanitizeFilename(file.name)}`;
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(storagePath, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw new Error(uploadError.message);
+      items.push({
+        title: titleFromFilenameLocal(file.name),
+        storagePath,
+        mimeType: file.type,
+        sizeBytes: file.size,
+      });
+    } catch (err) {
+      failed.push({
+        fileName: file.name,
+        error: err instanceof Error ? err.message : 'Upload failed.',
+      });
+    }
+  }
+
+  if (items.length === 0) return { succeeded: [], failed };
+
+  const res = await fetch('/api/documents/bulk', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ documents: items }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Could not save document metadata (status ${res.status}).`);
+  }
+
+  const json = await res.json();
+  const succeeded: UploadedDocument[] = (json.data.created ?? []).map(
+    (r: { document: UploadedDocument }) => r.document,
+  );
+  const serverFailed: { fileName: string; error: string }[] = (json.data.failed ?? []).map(
+    (r: { index: number; error: string }) => ({
+      fileName: items[r.index]?.title ?? 'Unknown file',
+      error: r.error,
+    }),
+  );
+
+  return { succeeded, failed: [...failed, ...serverFailed] };
+}
+
+function titleFromFilenameLocal(filename: string): string {
+  const withoutExt = filename.replace(/\.[^/.]+$/, '');
+  return withoutExt.trim().length > 0 ? withoutExt.trim() : filename;
+}

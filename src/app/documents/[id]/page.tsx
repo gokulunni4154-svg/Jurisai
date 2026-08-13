@@ -67,6 +67,11 @@ import {
   MessageCircle,
   Send,
   Brain,
+  Users,
+  Building2,
+  ChevronRight,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 
 // ---- Shapes, source-verified against the entities/schemas listed above ----
@@ -581,6 +586,33 @@ function describeMissingPrerequisite(message: string): string | null {
   return null;
 }
 
+// ---- NEW, THIS SESSION — Contact a Lawyer. Mirrors
+// LawyerDirectoryService's FirmListing/FirmMemberListing and
+// LawyerInquiryService's LawyerInquiryListing DTOs exactly (both real,
+// pasted source this session). ----
+
+interface FirmListing {
+  id: string;
+  name: string;
+}
+
+interface FirmMemberListing {
+  profileId: string;
+  fullName: string;
+  role: string;
+}
+
+interface LawyerInquiryListing {
+  id: string;
+  clientProfileId: string;
+  targetProfileId: string | null;
+  targetFirmId: string;
+  teamId: string | null;
+  status: 'pending' | 'accepted' | 'converted_to_case';
+  documentStoragePath: string;
+  analysisResult: unknown;
+}
+
 export default function DocumentAnalysisPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -662,6 +694,26 @@ export default function DocumentAnalysisPage() {
   const [hearingDateInput, setHearingDateInput] = useState('');
   const [isSavingHearingDate, setIsSavingHearingDate] = useState(false);
   const [hearingDateError, setHearingDateError] = useState<string | null>(null);
+
+  // NEW, THIS SESSION — Contact a Lawyer. Picker is a two-step drill-in
+  // (firm list -> that firm's roster), same inline-toggle shape as the
+  // hearing-date editor above (isEditingHearingDate), not a modal —
+  // this page has no modal precedent to follow (NotificationsPanel
+  // lives on documents/page.tsx, a genuinely separate component/page,
+  // not a pattern reused here).
+  const [isContactLawyerOpen, setIsContactLawyerOpen] = useState(false);
+  const [firms, setFirms] = useState<FirmListing[] | null>(null);
+  const [isLoadingFirms, setIsLoadingFirms] = useState(false);
+  const [firmsError, setFirmsError] = useState<string | null>(null);
+  const [selectedFirmId, setSelectedFirmId] = useState<string | null>(null);
+  const [firmMembers, setFirmMembers] = useState<FirmMemberListing[] | null>(null);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  // null = "contact the firm generally", not yet a specific person.
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [isSubmittingInquiry, setIsSubmittingInquiry] = useState(false);
+  const [inquiryError, setInquiryError] = useState<string | null>(null);
+  const [submittedInquiry, setSubmittedInquiry] = useState<LawyerInquiryListing | null>(null);
 
   const loadEverything = useCallback(async () => {
     setIsLoading(true);
@@ -1145,7 +1197,106 @@ export default function DocumentAnalysisPage() {
     }
   };
 
-  // NEW, THIS SESSION — starts a fresh conversation. Per route.ts's own
+  // NEW, THIS SESSION — Contact a Lawyer. Opens the picker and lazily
+  // loads the firm list on first open only (firms !== null guards
+  // against re-fetching every time the panel is toggled open/closed).
+  const handleOpenContactLawyer = async () => {
+    setIsContactLawyerOpen(true);
+    setSubmittedInquiry(null);
+    setInquiryError(null);
+
+    if (firms !== null) return;
+
+    setIsLoadingFirms(true);
+    setFirmsError(null);
+    try {
+      const res = await fetch('/api/lawyer-directory/firms', { credentials: 'include' });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      setFirms(json.data.firms);
+    } catch (err) {
+      setFirmsError(
+        err instanceof Error ? err.message : 'Could not load the list of firms.',
+      );
+    } finally {
+      setIsLoadingFirms(false);
+    }
+  };
+
+  const handleCloseContactLawyer = () => {
+    setIsContactLawyerOpen(false);
+    setSelectedFirmId(null);
+    setFirmMembers(null);
+    setSelectedProfileId(null);
+    setInquiryError(null);
+  };
+
+  // Drills into a firm's roster. selectedProfileId resets on every firm
+  // change — a member picked under a previously-selected firm has no
+  // meaning once the firm selection changes.
+  const handleSelectFirm = async (firmId: string) => {
+    setSelectedFirmId(firmId);
+    setSelectedProfileId(null);
+    setFirmMembers(null);
+    setMembersError(null);
+    setIsLoadingMembers(true);
+    try {
+      const res = await fetch(`/api/lawyer-directory/firms/${firmId}/members`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      setFirmMembers(json.data.members);
+    } catch (err) {
+      setMembersError(
+        err instanceof Error ? err.message : 'Could not load this firm\u2019s members.',
+      );
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  };
+
+  // NEW, THIS SESSION — submits the inquiry. Requires analysis + a
+  // completed health score, matching POST
+  // /api/documents/[id]/lawyer-inquiries' own server-side requirement
+  // exactly (that route throws ValidationError otherwise) — checked
+  // here too so the button can be disabled/explained before a wasted
+  // round trip, same "client-side check mirrors a real server-side one"
+  // idiom every other handler on this page already follows (see
+  // handleRunAILegalInsight's six prerequisite checks above).
+  const handleSubmitInquiry = async () => {
+    if (!analysis || !selectedFirmId) return;
+    if (healthScore?.status !== 'completed') {
+      setInquiryError('A completed Legal Health Score is required before contacting a lawyer.');
+      return;
+    }
+
+    setIsSubmittingInquiry(true);
+    setInquiryError(null);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/lawyer-inquiries`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          analysisId: analysis.id,
+          targetFirmId: selectedFirmId,
+          targetProfileId: selectedProfileId,
+        }),
+      });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      setSubmittedInquiry(json.data);
+    } catch (err) {
+      setInquiryError(
+        err instanceof Error ? err.message : 'Could not send the inquiry. Please try again.',
+      );
+    } finally {
+      setIsSubmittingInquiry(false);
+    }
+  };
+
+
   // comment, File 154's POST has no upstream prerequisite checks (unlike
   // every run-lifecycle handler above) — startConversation() only
   // validates the parent document/analysis and inserts one row, so

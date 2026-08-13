@@ -94,6 +94,7 @@ import { AuthorizationError, ConflictError, NotFoundError, ValidationError } fro
 import { BaseService } from '@/core/services/base.service';
 import type { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 import type { CaseService } from '@/modules/cases/case.service';
+import type { DocumentService } from '@/modules/documents/document.service';
 
 import type { LawyerInquiryRepository } from './lawyer-inquiry.repository';
 
@@ -124,9 +125,89 @@ export class LawyerInquiryService extends BaseService {
     currentUser: AuthUser | null,
     private readonly repository: LawyerInquiryRepository,
     private readonly firmMemberRepository: FirmMemberRepository,
-    private readonly caseService: CaseService
+    private readonly caseService: CaseService,
+    // NEW -- authenticated "contact a lawyer" flow. See createInquiry()
+    // below.
+    private readonly documentService: DocumentService
   ) {
     super(currentUser);
+  }
+
+  /**
+   * NEW -- authenticated "contact a lawyer" flow (documents/[id]
+   * frontend, real gap identified this session: this table's only
+   * prior write path was AnonymousAnalysisService#reattachSession(),
+   * which calls LawyerInquiryRepository.create() directly, bypassing
+   * this Service entirely -- there was no authenticated create path at
+   * all before this method).
+   *
+   * KEY DECISION -- mirrors every upstream synthesis module's own
+   * "take inputs explicitly, don't fetch them yourself" discipline
+   * (see e.g. ai-legal-insight.service.ts's runAiLegalInsight()):
+   * `analysisResult` is passed in by the caller (the Route layer),
+   * already combined from whichever upstream module(s)' results are
+   * relevant, rather than this method reaching into
+   * LegalHealthScoreService/AiLegalInsightService itself. This module
+   * has no existing dependency on either, and adding one here would
+   * mean re-deciding the same nine-collaborator sprawl question
+   * ai-legal-insight.factory.ts's own KEY DECISION already documents at
+   * length one layer up -- not worth repeating for a single write
+   * method. The Route layer already has to call
+   * AiLegalInsightService's getLatestCompletedXForAnalysis() passthroughs
+   * to render the page in the first place; combining and forwarding
+   * that same data here is not new work for it.
+   *
+   * KEY DECISION -- requires ownership of the document
+   * (requireOwnership(document.owner_id)), same posture as every
+   * upstream module's create-with-real-cost method (e.g.
+   * DocumentAnalysisService#createAnalysis()). Contacting a lawyer
+   * about a document is only meaningful for the document's own owner.
+   *
+   * KEY DECISION, FLAGGED JUDGMENT CALL -- does NOT verify
+   * targetProfileId (when supplied) actually belongs to targetFirmId
+   * before writing. assignInquiry() above performs that same check
+   * explicitly (judgment call #2 in this file's header) because an
+   * unconstrained targetProfileId there would let a firm admin hand an
+   * inquiry to an unrelated profile. Here, targetProfileId/targetFirmId
+   * both originate from LawyerDirectoryService's own picker (list a
+   * firm, then list that firm's real roster) -- a mismatched pair would
+   * require the client to deliberately construct a bad request, not
+   * something the normal UI flow can produce. lawyer_inquiries'
+   * real FK on target_firm_id (references firms(id)) still rejects an
+   * outright-nonexistent firm at the database level; there is no
+   * equivalent FK tying target_profile_id to target_firm_id
+   * specifically, so a deliberately malicious mismatched pair would be
+   * accepted as written. Flagged as a real, accepted gap for this first
+   * version, not silently guarded -- add the same
+   * firmMemberRepository.findByFirmAndProfile() check assignInquiry()
+   * already uses if this needs hardening later.
+   *
+   * No requireFirmRole()/firm-membership check on the CALLER, unlike
+   * assignInquiry() -- any authenticated client-side user (any
+   * UserRole) may contact any firm about their own document; this is
+   * the client-initiated half of the flow, not the firm-internal
+   * handoff half.
+   */
+  async createInquiry(
+    rawParams: unknown,
+    targetFirmId: string,
+    targetProfileId: string | null,
+    analysisResult: unknown
+  ): Promise<LawyerInquiryListing> {
+    const user = this.requireAuthentication();
+
+    const document = await this.documentService.getDocumentById(rawParams);
+    this.requireOwnership(document.owner_id);
+
+    const created = await this.repository.create({
+      clientProfileId: user.id,
+      targetProfileId,
+      targetFirmId,
+      documentStoragePath: document.storage_path,
+      analysisResult,
+    });
+
+    return toListing(created);
   }
 
   /**

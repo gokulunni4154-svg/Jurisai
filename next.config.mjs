@@ -29,6 +29,23 @@ function getSupabaseImageRemotePattern() {
 }
 
 /**
+ * Next.js dev mode (Fast Refresh / HMR / webpack's react-refresh runtime)
+ * relies on `eval()` and on injecting inline <script> tags at runtime.
+ * A strict `script-src 'self'` blocks both, which breaks ALL client-side
+ * hydration in `pnpm dev` -- not just one page (this is what caused
+ * sign-up's form to silently fall back to a native HTML GET submit:
+ * React's JS never executed on the page at all).
+ *
+ * This relaxation is dev-only. Production keeps the strict OWASP-aligned
+ * policy below with no 'unsafe-eval'/'unsafe-inline' on script-src.
+ */
+const isDev = process.env.NODE_ENV === 'development';
+
+const scriptSrc = isDev
+  ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
+  : "script-src 'self'";
+
+/**
  * OWASP-aligned security headers applied to every route.
  * @type {Array<{ key: string; value: string }>}
  */
@@ -61,7 +78,7 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self'",
+      scriptSrc,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",

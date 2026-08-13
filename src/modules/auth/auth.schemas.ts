@@ -49,6 +49,56 @@ export const signUpSchema = z
 export type SignUpInput = z.infer<typeof signUpSchema>;
 
 /**
+ * NEW -- three-way sign-up (this session). Individual lawyer sign-up.
+ *
+ * Deliberately a SEPARATE schema from signUpSchema, not an optional field
+ * added to it, mirroring the same reasoning signUpAsClient() vs signUp()
+ * already established in AuthService (a distinct signup type gets a
+ * distinct method, not a flag) -- the schema layer follows the same split
+ * as the service layer it feeds.
+ *
+ * `registrationNumber` is deliberately a bare nonEmptyStringSchema, not a
+ * format-validated bar-council-number pattern -- no real format has been
+ * confirmed/pasted for Indian bar registration numbers across states, and
+ * this value is only ever stored for manual admin review
+ * (professional_verifications.status starts 'pending'), not parsed or
+ * matched against anything programmatically. Over-validating an unverified
+ * format would reject legitimate input.
+ */
+export const signUpAsLawyerSchema = z
+  .object({
+    email: emailSchema,
+    password: passwordSchema,
+    fullName: profileFullNameSchema,
+    registrationNumber: nonEmptyStringSchema,
+  })
+  .strict();
+
+export type SignUpAsLawyerInput = z.infer<typeof signUpAsLawyerSchema>;
+
+/**
+ * NEW -- three-way sign-up (this session). Lawyer-firm sign-up.
+ *
+ * `firmName` is the real, given name for the new firms row -- unlike
+ * signUpAsLawyerSchema's solo-practice path, this name is never defaulted
+ * from fullName. No professional_verifications row is created for this
+ * path (see AuthService.signUpAsFirm()'s doc comment for why) -- the
+ * firm's registering owner may be an admin/managing partner rather than a
+ * practicing lawyer, so this schema deliberately has no
+ * registrationNumber field at all.
+ */
+export const signUpAsFirmSchema = z
+  .object({
+    email: emailSchema,
+    password: passwordSchema,
+    fullName: profileFullNameSchema,
+    firmName: nonEmptyStringSchema,
+  })
+  .strict();
+
+export type SignUpAsFirmInput = z.infer<typeof signUpAsFirmSchema>;
+
+/**
  * Sign-in payload.
  *
  * Deliberately does NOT run password through the full passwordSchema

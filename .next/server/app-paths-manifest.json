@@ -1,1 +1,10 @@
-{}
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/(dashboard)/lawyer/page": "app/(dashboard)/lawyer/page.js",
+  "/documents/page": "app/documents/page.js",
+  "/api/profiles/me/route": "app/api/profiles/me/route.js",
+  "/api/dashboard/lawyer/route": "app/api/dashboard/lawyer/route.js",
+  "/billing/subscription/page": "app/billing/subscription/page.js",
+  "/api/documents/route": "app/api/documents/route.js",
+  "/billing/firms/new/page": "app/billing/firms/new/page.js"
+}

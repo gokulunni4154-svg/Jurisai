@@ -70,6 +70,26 @@ export type UserRole = 'individual' | 'lawyer' | 'law_firm' | 'business' | 'admi
 export type FirmRole = 'owner' | 'admin' | 'employee' | 'lawyer';
 
 /**
+ * FOUNDATION TASK 1 -- Organization Architecture.
+ *
+ * Distinguishes the two kinds of `firms` row: `'firm'` (the existing,
+ * unchanged meaning -- a paying, potentially multi-member Lawyer Firms
+ * plan organization) and `'personal'` (new -- a private, single-member
+ * organization owned by an independent lawyer, giving them somewhere to
+ * own cases/hearings/tasks, all of which require a non-null `firm_id`,
+ * without requiring a real multi-seat firm). Backed by
+ * `firms.organization_type`
+ * (20260813035544_add_organization_type_to_firms.sql).
+ *
+ * Deliberately NOT a third product-experience concept (General Portal /
+ * Lawyer Terminal / Firm Terminal) -- those are UI/route surfaces, this
+ * is the underlying organization-ownership fact one `firms` row carries.
+ * A General Portal user has no organization at all (neither value
+ * applies); this type is only meaningful once a `firms` row exists.
+ */
+export type OrganizationType = 'personal' | 'firm';
+
+/**
  * The application's representation of an authenticated user.
  *
  * SECURITY: `role` must always be sourced from the Supabase user's

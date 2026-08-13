@@ -45,6 +45,19 @@
     --ring: 224 76% 48%;
 
     --radius: 0.5rem;
+
+    /* Sidebar — same 224° brand hue as --primary, taken dark, for the
+       app shell's navy nav rail (AppSidebar). Kept as its own token
+       group rather than reusing --primary directly so the sidebar's
+       dark surface can't accidentally get pulled into light-surface
+       components that reference --primary. */
+    --sidebar-background: 224 45% 13%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-muted: 222 30% 64%;
+    --sidebar-border: 224 35% 22%;
+    --sidebar-accent: 224 55% 22%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-ring: 224 76% 58%;
   }
 
   .dark {

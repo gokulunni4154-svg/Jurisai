@@ -1,79 +1,89 @@
 // src/app/documents/page.tsx
-// File 159 — JurisAI Frontend, Phase 3
+// REBUILT — Documents page task, this session.
 //
-// AMENDMENT (PRIOR SESSION):
-//   - Document row buttons previously had no onClick at all — clicking a
-//     document did nothing. Now navigates to /documents/[id] (File 160,
-//     confirmed real and already built this session's prior turns).
-//   - The Bell button in the left rail previously had no onClick and no
-//     badge — purely decorative. Now opens the new NotificationsPanel
-//     (src/shared/components/notifications/notifications-panel.tsx, new
-//     this session) and shows an unread-count badge, sourced from
-//     GET /api/notifications (confirmed real response shape this
-//     session — see notifications-panel.tsx's own header comment for the
-//     full source-verification trail).
+// Replaces the prior narrow-icon-rail Documents page with the full
+// Documents workspace from the reference image (header, summary cards,
+// tabs, filters, table, Storage Overview / Quick Actions / Recent
+// Uploads panel), now hosted on the new shared AppSidebar
+// (src/shared/components/layout/app-sidebar.tsx, new this session) —
+// the first page in the project to use it.
 //
-// FLAGGED (PRIOR SESSION): the unread count is only fetched once the
-// panel has been opened at least once (NotificationsPanel's own fetch is
-// gated on `isOpen`) — there is no independent "check for unread
-// notifications on page load" call here. This means the badge shows
-// 0/hidden until the user opens the panel for the first time in a given
-// page load, not a true "you have unread notifications" indicator from
-// the moment the page mounts. Flagged as a real, deliberate
-// scope-narrowing (avoids a second, redundant fetch pattern/polling
-// design this session hasn't been asked to build), not an oversight —
-// revisit if "notify without opening" becomes a real requirement.
+// REAL DATA, REAL GAPS — every number and column here is either
+// computed from GET /api/documents (confirmed real, includeDeleted
+// query param, `{ data: { documents, total, limit, offset } }` shape —
+// see documents.schemas.ts's listDocumentsQuerySchema) or explicitly
+// marked unavailable. Specifically NOT faked, because the schema
+// genuinely doesn't support them yet (confirmed via Supabase MCP
+// `list_tables` against the live `Juris` project, this session):
+//   - Matter/case linkage per document: case_documents is a many-to-many
+//     join table with no "get my case for this document" list endpoint
+//     anywhere in the API. The Matter column and Matter filter are
+//     rendered as an honest "not linked yet" state, not a fabricated
+//     case name.
+//   - Legal document "Type" (Pleading/Affidavit/Evidence/...): no such
+//     column exists on public.documents (only mime_type). The Type
+//     column shows a file-type badge derived from mime_type instead —
+//     a deliberate, flagged substitution, not the same thing the
+//     reference image shows.
+//   - Shared With Me / Favorites: no schema support (no favorites
+//     table, no document-level sharing — case_access_grants scopes
+//     cases, not documents). Rendered as real, clickable tabs with an
+//     honest "not available yet" panel, not a fake empty list dressed
+//     up as a real one.
+//   - Storage Overview total/available quota: no quota field on
+//     plans or subscriptions. Only "used" (sum of size_bytes, computed
+//     client-side) is shown as real; total/available are marked
+//     unavailable rather than hardcoded.
+//   - Trash restore / permanent delete: DELETE /api/documents/[id] is
+//     confirmed soft-delete only (see that route's own doc comment) —
+//     there is no restore or hard-delete route anywhere in the API.
+//     Trash lists real soft-deleted rows; Restore/Delete permanently
+//     are disabled with "Coming soon", not wired to nothing.
 //
-// AMENDED, THIS SESSION — closes part of the "no frontend consumes
-// either Audit Log route" open item. Added a new rail button, routing to
-// /audit-log/firm (Phase 3 File 33, this session) — the firm-owner audit
-// log view, same audience as the existing Billing button just above it.
+// PAGINATION, FLAGGED: fetches with limit=100 (MAX_PAGE_SIZE, confirmed
+// in common.schemas.ts) and includeDeleted=true once, then does all
+// tab/filter/search/summary-card work client-side against that set.
+// Fine while the account's real document count is low (0 rows in the
+// live Juris project as of this session) — will need real server-side
+// pagination + filtering once a firm's document count exceeds 100.
+// Flagged, not silently hidden.
 //
-// FLAGGED, DELIBERATE SCOPE CHOICE: does NOT also add a button for
-// /audit-log/admin (Phase 3 File 34, this session). This rail has no
-// role-awareness anywhere in its existing pattern (every button here is
-// shown to every caller regardless of role — see the Billing button's
-// own prior-session comment making the same observation about this
-// rail's lack of pathname-awareness), so adding an admin-only link here
-// would either be shown to non-admins who'd just hit a 403 clicking it,
-// or would require inventing a client-side role-check this rail has
-// never had. Left reachable by direct URL only, same "orphaned but
-// ready" posture billing/subscription/page.tsx's own firmId path already
-// carries. Revisit once/if this rail ever gains real role-awareness.
-//
-// FLAGGED, CARRIED FORWARD UNCHANGED FROM PRIOR SESSION: this rail is
-// inline JSX in this one page, not a shared layout — adding another
-// button here means it's only visible from /documents, not from any
-// other page in the app (documents/page.tsx's own prior-session comment
-// on the Billing button already made this same observation; it applies
-// identically to this session's new button). A real fix (extracting
-// this into a shared dashboard shell) wasn't done here since it wasn't
-// asked for and would touch working code well beyond one button.
+// AUTHOR NAME RESOLUTION, FLAGGED, SAME GAP AS (dashboard)/lawyer/
+// page.tsx's own header comment: GET /api/profiles/[id] 403s for
+// anyone but the profile's own owner or an admin (requireOwnership()),
+// so this page cannot resolve *other* users' display names client-side.
+// "Uploaded By" shows "You" for the caller's own documents and a short
+// id for anyone else's — not a fabricated name.
 
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search,
   Upload,
   FileText,
-  ChevronRight,
-  ChevronLeft,
-  Scale,
-  FolderOpen,
+  FileImage,
+  FileArchive,
+  File as FileIcon,
   Bell,
-  Settings,
   Loader2,
   AlertCircle,
   Inbox,
-  CreditCard,
-  ScrollText,
-  Tag,
-  Building2,
+  ChevronDown,
+  Trash2,
+  Download,
+  Eye,
+  MoreHorizontal,
+  FolderPlus,
+  FileUp,
+  ScanLine,
+  Settings2,
+  X,
 } from 'lucide-react';
-import { uploadDocument, UploadValidationError } from '@/core/storage/document-upload';
+import { uploadDocument, uploadDocumentsBulk, UploadValidationError } from '@/core/storage/document-upload';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 
 interface DocumentRow {
   id: string;
@@ -85,6 +95,7 @@ interface DocumentRow {
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+  hearing_date: string | null;
 }
 
 interface ListDocumentsResponse {
@@ -96,34 +107,66 @@ interface ListDocumentsResponse {
   };
 }
 
-const PAGE_SIZE = 20;
+interface MeProfile {
+  id: string;
+  full_name: string | null;
+}
 
-const MIME_LABELS: Record<string, string> = {
-  'application/pdf': 'PDF',
-  'application/msword': 'Word (.doc)',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word (.docx)',
-  'image/jpeg': 'JPEG',
-  'image/png': 'PNG',
-  'image/tiff': 'TIFF',
+type TabKey = 'all' | 'mine' | 'shared' | 'favorites' | 'trash';
+
+const FETCH_LIMIT = 100; // MAX_PAGE_SIZE, see file header.
+
+const MIME_META: Record<string, { label: string; group: string }> = {
+  'application/pdf': { label: 'PDF', group: 'pdf' },
+  'application/msword': { label: 'DOC', group: 'doc' },
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+    label: 'DOCX',
+    group: 'doc',
+  },
+  'image/jpeg': { label: 'JPEG', group: 'image' },
+  'image/png': { label: 'PNG', group: 'image' },
+  'image/tiff': { label: 'TIFF', group: 'image' },
 };
+
+function fileMeta(mime: string): { label: string; group: string } {
+  return MIME_META[mime] ?? { label: mime.split('/')[1]?.toUpperCase() ?? 'FILE', group: 'other' };
+}
+
+function FileTypeIcon({ mime }: { mime: string }) {
+  const { group } = fileMeta(mime);
+  const cls = 'h-[18px] w-[18px]';
+  switch (group) {
+    case 'image':
+      return <FileImage className={cls} strokeWidth={1.75} />;
+    case 'archive':
+      return <FileArchive className={cls} strokeWidth={1.75} />;
+    case 'pdf':
+    case 'doc':
+      return <FileText className={cls} strokeWidth={1.75} />;
+    default:
+      return <FileIcon className={cls} strokeWidth={1.75} />;
+  }
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const diffMs = Date.now() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function titleFromFilename(filename: string): string {
@@ -131,42 +174,49 @@ function titleFromFilename(filename: string): string {
   return withoutExt.trim().length > 0 ? withoutExt.trim() : filename;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export default function DocumentsPage() {
   const router = useRouter();
 
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [me, setMe] = useState<MeProfile | null>(null);
+
+  const [query, setQuery] = useState('');
+  const [tab, setTab] = useState<TabKey>('all');
+  const [fileTypeFilter, setFileTypeFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<'any' | '7d' | '30d' | '1y'>('any');
+
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Notifications panel open/closed + unread badge.
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const fetchDocuments = useCallback(async (nextOffset: number) => {
+  const [openActionsFor, setOpenActionsFor] = useState<string | null>(null);
+  const [busyDocId, setBusyDocId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+
+  const fetchDocuments = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        offset: String(nextOffset),
+        limit: String(FETCH_LIMIT),
+        offset: '0',
+        includeDeleted: 'true',
       });
-      const res = await fetch(`/api/documents?${params.toString()}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        throw new Error(`Request failed with status ${res.status}`);
-      }
+      const res = await fetch(`/api/documents?${params.toString()}`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
       const json: ListDocumentsResponse = await res.json();
       setDocuments(json.data.documents);
       setTotal(json.data.total);
-      setOffset(json.data.offset);
     } catch {
       setError('Could not load your documents. Try again in a moment.');
     } finally {
@@ -175,31 +225,129 @@ export default function DocumentsPage() {
   }, []);
 
   useEffect(() => {
-    fetchDocuments(0);
+    fetchDocuments();
   }, [fetchDocuments]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/profiles/me', { credentials: 'include' });
+        if (!res.ok) return;
+        const json = await res.json();
+        setMe(json.data as MeProfile);
+      } catch {
+        // Non-fatal — "Uploaded By" falls back to short ids.
+      }
+    })();
+  }, []);
+
+  // ---- Derived data ---------------------------------------------------
+
+  const active = useMemo(() => documents.filter((d) => !d.deleted_at), [documents]);
+  const trashed = useMemo(() => documents.filter((d) => !!d.deleted_at), [documents]);
+
+  const recentUploads7d = useMemo(
+    () => active.filter((d) => Date.now() - new Date(d.created_at).getTime() <= 7 * DAY_MS),
+    [active],
+  );
+
+  const expiringSoon = useMemo(
+    () =>
+      active.filter((d) => {
+        if (!d.hearing_date) return false;
+        const diff = new Date(d.hearing_date).getTime() - Date.now();
+        return diff >= 0 && diff <= 30 * DAY_MS;
+      }),
+    [active],
+  );
+
+  const fileTypes = useMemo(() => {
+    const set = new Set(active.map((d) => d.mime_type));
+    return Array.from(set);
+  }, [active]);
+
+  const tabDocuments = useMemo(() => {
+    switch (tab) {
+      case 'mine':
+        return me ? active.filter((d) => d.owner_id === me.id) : [];
+      case 'trash':
+        return trashed;
+      case 'shared':
+      case 'favorites':
+        return [];
+      case 'all':
+      default:
+        return active;
+    }
+  }, [tab, active, trashed, me]);
+
+  const filtered = useMemo(() => {
+    return tabDocuments.filter((doc) => {
+      if (query && !doc.title.toLowerCase().includes(query.toLowerCase())) return false;
+      if (fileTypeFilter !== 'all' && doc.mime_type !== fileTypeFilter) return false;
+      if (dateFilter !== 'any') {
+        const ageMs = Date.now() - new Date(doc.created_at).getTime();
+        const cutoff = dateFilter === '7d' ? 7 * DAY_MS : dateFilter === '30d' ? 30 * DAY_MS : 365 * DAY_MS;
+        if (ageMs > cutoff) return false;
+      }
+      return true;
+    });
+  }, [tabDocuments, query, fileTypeFilter, dateFilter]);
+
+  const recentUploadsPanel = useMemo(
+    () => [...active].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)).slice(0, 5),
+    [active],
+  );
+
+  const storageUsedBytes = useMemo(() => active.reduce((sum, d) => sum + d.size_bytes, 0), [active]);
+
+  const filtersActive = query !== '' || fileTypeFilter !== 'all' || dateFilter !== 'any';
+  const clearFilters = () => {
+    setQuery('');
+    setFileTypeFilter('all');
+    setDateFilter('any');
+  };
+
+  // ---- Upload -----------------------------------------------------------
 
   const handleUploadClick = () => {
     setUploadError(null);
+    setUploadNotice(null);
     fileInputRef.current?.click();
   };
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    // Reset the input immediately so selecting the same file twice in a
-    // row still fires a change event.
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
+    if (files.length === 0) return;
 
     setIsUploading(true);
     setUploadError(null);
+    setUploadNotice(null);
     try {
-      const uploaded = await uploadDocument(file, titleFromFilename(file.name));
-      setDocuments((prev) => [uploaded, ...prev]);
-      setTotal((prev) => prev + 1);
+      if (files.length === 1) {
+        const singleFile = files[0]!;
+        const uploaded = await uploadDocument(singleFile, titleFromFilename(singleFile.name));
+        setDocuments((prev) => [uploaded as unknown as DocumentRow, ...prev]);
+        setTotal((prev) => prev + 1);
+      } else {
+        const { succeeded, failed } = await uploadDocumentsBulk(files);
+        if (succeeded.length > 0) {
+          setDocuments((prev) => [...(succeeded as unknown as DocumentRow[]), ...prev]);
+          setTotal((prev) => prev + succeeded.length);
+        }
+        if (failed.length > 0) {
+          setUploadNotice(
+            `${succeeded.length} of ${files.length} uploaded. ${failed.length} failed: ${failed
+              .map((f) => f.fileName)
+              .join(', ')}.`,
+          );
+        } else {
+          setUploadNotice(`${succeeded.length} document${succeeded.length === 1 ? '' : 's'} uploaded.`);
+        }
+      }
     } catch (err) {
-      if (err instanceof UploadValidationError) {
-        setUploadError(err.message);
-      } else if (err instanceof Error) {
+      if (err instanceof UploadValidationError || err instanceof Error) {
         setUploadError(err.message);
       } else {
         setUploadError('Upload failed for an unknown reason.');
@@ -209,158 +357,98 @@ export default function DocumentsPage() {
     }
   };
 
-  const filtered = documents.filter((doc) =>
-    doc.title.toLowerCase().includes(query.toLowerCase()),
-  );
+  // ---- Row actions --------------------------------------------------------
 
-  const hasNextPage = offset + PAGE_SIZE < total;
-  const hasPrevPage = offset > 0;
+  const handleDownload = async (doc: DocumentRow) => {
+    setBusyDocId(doc.id);
+    setRowError(null);
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/download`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`Could not get a download link (status ${res.status}).`);
+      const json = await res.json();
+      window.open(json.data.url as string, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Download failed.');
+    } finally {
+      setBusyDocId(null);
+      setOpenActionsFor(null);
+    }
+  };
+
+  const handleTrash = async (doc: DocumentRow) => {
+    setBusyDocId(doc.id);
+    setRowError(null);
+    try {
+      const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok && res.status !== 204) throw new Error(`Could not move to trash (status ${res.status}).`);
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === doc.id ? { ...d, deleted_at: new Date().toISOString() } : d)),
+      );
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Could not move document to trash.');
+    } finally {
+      setBusyDocId(null);
+      setOpenActionsFor(null);
+    }
+  };
+
+  // ---- Render -------------------------------------------------------------
 
   return (
-    <div className="relative flex h-screen w-full bg-background font-sans text-foreground">
-      {/* Left rail */}
-      <aside className="flex w-16 flex-col items-center bg-primary py-5">
-        <div className="mb-8 flex h-9 w-9 items-center justify-center rounded-md bg-primary-foreground/15">
-          <Scale className="h-[18px] w-[18px] text-primary-foreground" strokeWidth={1.75} />
-        </div>
-        <nav className="flex flex-1 flex-col items-center gap-1">
-          <button
-            className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-foreground/10 text-primary-foreground"
-            aria-current="page"
-            aria-label="Documents"
-          >
-            <FolderOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          {/* AMENDED, PRIOR SESSION — was purely decorative (no onClick,
-              no badge). Now opens NotificationsPanel and shows an
-              unread-count badge. */}
-          <button
-            onClick={() => setIsNotificationsPanelOpen((prev) => !prev)}
-            className="relative flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Notifications"
-            aria-expanded={isNotificationsPanelOpen}
-          >
-            <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
-            {unreadCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-none text-destructive-foreground">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
-          {/* NEW, PRIOR SESSION — first nav link into the Billing module
-              from the main app rail. Static, like Settings below it (no
-              usePathname()-based active state) — this rail has no
-              pathname-awareness anywhere in its existing pattern (see
-              the hardcoded aria-current="page" on Documents above, which
-              was already like this before this change), so this button
-              doesn't introduce that pattern unilaterally either.
-              FLAGGED: this rail is inline JSX in this one page, not a
-              shared layout — adding this button here means it's only
-              visible from /documents, not from any other page in the
-              app. A real fix (extracting this into a shared dashboard
-              shell) wasn't done here since it wasn't asked for and
-              would touch working code well beyond this button. */}
-          <button
-            onClick={() => router.push('/billing/subscription')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Billing"
-          >
-            <CreditCard className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          {/* NEW, THIS SESSION — Billing nav (Item #70, carried forward
-              from prior sessions' addenda). Links in 2 of the 4
-              previously-unreachable Billing pages: /pricing and
-              /billing/firms/new. Deliberately NOT linking /billing/checkout
-              or /billing/checkout/return here — checkout is normally
-              arrived at with a plan already selected (via ?planSlug=,
-              confirmed this session against the real, pasted
-              pricing/page.tsx and billing/firms/new/page.tsx source, both
-              of which already assume that query param), not a page anyone
-              browses to cold from a nav link; checkout/return exists only
-              as Cashfree's own post-payment redirect target, never a page
-              a user should navigate to on purpose. Same static-button,
-              no-pathname-awareness posture as every other button in this
-              rail. */}
-          <button
-            onClick={() => router.push('/pricing')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Plans"
-          >
-            <Tag className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => router.push('/billing/firms/new')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Create firm"
-          >
-            <Building2 className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          {/* NEW, THIS SESSION — first nav link into the Audit Log module
-              from the main app rail. Points at /audit-log/firm (Phase 3
-              File 33), the firm-owner view — NOT /audit-log/admin (File
-              34), which stays reachable only by direct URL. See this
-              file's own header comment for why: this rail has no
-              role-awareness to gate an admin-only link behind, and
-              adding one unconditionally would surface a link every
-              non-admin caller would just get a 403 clicking. Same
-              static-button, no-active-state posture as Billing above —
-              not introducing pathname-awareness unilaterally here
-              either. */}
-          <button
-            onClick={() => router.push('/audit-log/firm')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Audit log"
-          >
-            <ScrollText className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/40"
-            aria-label="Settings"
-          >
-            <Settings className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-        </nav>
-      </aside>
+    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
+      <AppSidebar active="documents" />
 
-      {/* Notifications panel */}
-      <NotificationsPanel
-        isOpen={isNotificationsPanelOpen}
-        onClose={() => setIsNotificationsPanelOpen(false)}
-        onUnreadCountChange={setUnreadCount}
-      />
-
-      {/* Main column */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="flex items-center justify-between border-b border-border px-8 py-6">
-          <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              JurisAI
-            </p>
-            <h1 className="font-serif text-[26px] leading-none text-foreground">Documents</h1>
+        {/* Header */}
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-background px-8 py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" strokeWidth={1.75} />
+            </div>
+            <div>
+              <h1 className="text-[19px] font-semibold leading-tight text-foreground">Documents</h1>
+              <p className="text-[12.5px] text-muted-foreground">
+                Store, organize and manage your legal documents securely.
+              </p>
+            </div>
           </div>
+
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
               <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search documents"
-                className="w-48 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                placeholder="Search documents…"
+                className="w-52 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
               />
             </div>
+
+            <button
+              onClick={() => setIsNotificationsPanelOpen((v) => !v)}
+              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
+              aria-label="Notifications"
+            >
+              <Bell className="h-4 w-4" strokeWidth={1.75} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-none text-destructive-foreground">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
 
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.tiff"
               className="hidden"
-              onChange={handleFileSelected}
+              onChange={handleFilesSelected}
             />
             <button
               onClick={handleUploadClick}
               disabled={isUploading}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUploading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -372,104 +460,481 @@ export default function DocumentsPage() {
           </div>
         </header>
 
-        {uploadError && (
-          <div className="mx-8 mt-4 flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3 text-[13px] text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{uploadError}</span>
-            <button
-              onClick={() => setUploadError(null)}
-              className="ml-auto text-[12px] font-medium underline underline-offset-2"
-            >
-              Dismiss
-            </button>
+        <NotificationsPanel
+          isOpen={isNotificationsPanelOpen}
+          onClose={() => setIsNotificationsPanelOpen(false)}
+          onUnreadCountChange={setUnreadCount}
+        />
+
+        {(uploadError || uploadNotice || rowError) && (
+          <div className="mx-8 mt-4 space-y-2">
+            {uploadError && (
+              <Banner tone="destructive" onDismiss={() => setUploadError(null)}>
+                {uploadError}
+              </Banner>
+            )}
+            {uploadNotice && (
+              <Banner tone="info" onDismiss={() => setUploadNotice(null)}>
+                {uploadNotice}
+              </Banner>
+            )}
+            {rowError && (
+              <Banner tone="destructive" onDismiss={() => setRowError(null)}>
+                {rowError}
+              </Banner>
+            )}
           </div>
         )}
 
-        {/* Document list */}
         <main className="flex-1 overflow-y-auto px-8 py-6">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading documents…</p>
+          {/* Summary cards */}
+          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+            <SummaryCard
+              icon={<Inbox className="h-4 w-4" />}
+              label="Total Documents"
+              value={isLoading ? '—' : String(active.length)}
+              tone="primary"
+            />
+            <SummaryCard
+              icon={<Upload className="h-4 w-4" />}
+              label="Recent Uploads"
+              value={isLoading ? '—' : String(recentUploads7d.length)}
+              hint="Last 7 days"
+              tone="success"
+            />
+            <SummaryCard
+              icon={<FileText className="h-4 w-4" />}
+              label="Shared With Me"
+              value="—"
+              hint="Not available yet"
+              tone="muted"
+            />
+            <SummaryCard
+              icon={<AlertCircle className="h-4 w-4" />}
+              label="Expiring Soon"
+              value={isLoading ? '—' : String(expiringSoon.length)}
+              hint="Hearing date in 30 days"
+              tone="warning"
+            />
+            <SummaryCard
+              icon={<Trash2 className="h-4 w-4" />}
+              label="Trash"
+              value={isLoading ? '—' : String(trashed.length)}
+              tone="muted"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_300px]">
+            {/* Left: tabs, filters, table */}
+            <div>
+              {/* Tabs */}
+              <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-border">
+                <TabButton active={tab === 'all'} onClick={() => setTab('all')}>
+                  All Documents
+                </TabButton>
+                <TabButton active={tab === 'mine'} onClick={() => setTab('mine')}>
+                  My Documents
+                </TabButton>
+                <TabButton active={tab === 'shared'} onClick={() => setTab('shared')}>
+                  Shared With Me
+                </TabButton>
+                <TabButton active={tab === 'favorites'} onClick={() => setTab('favorites')}>
+                  Favorites
+                </TabButton>
+                <TabButton active={tab === 'trash'} onClick={() => setTab('trash')}>
+                  Trash {trashed.length > 0 ? `(${trashed.length})` : ''}
+                </TabButton>
+              </div>
+
+              {/* Filters */}
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <select
+                  disabled
+                  title="Matter linking isn't available yet — documents aren't currently attached to a case."
+                  className="cursor-not-allowed rounded-md border border-input bg-muted/40 px-2.5 py-1.5 text-[12.5px] text-muted-foreground"
+                >
+                  <option>All Matters (coming soon)</option>
+                </select>
+                <select
+                  value={fileTypeFilter}
+                  onChange={(e) => setFileTypeFilter(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-[12.5px] text-foreground"
+                >
+                  <option value="all">All File Types</option>
+                  {fileTypes.map((mime) => (
+                    <option key={mime} value={mime}>
+                      {fileMeta(mime).label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
+                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-[12.5px] text-foreground"
+                >
+                  <option value="any">Any time</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="1y">Last year</option>
+                </select>
+                {filtersActive && (
+                  <button
+                    onClick={clearFilters}
+                    className="ml-auto text-[12.5px] font-medium text-primary underline underline-offset-2"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Table */}
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background py-24 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <p className="text-[13px]">Loading documents…</p>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+                  <AlertCircle className="h-5 w-5" />
+                  <p className="text-[13px]">{error}</p>
+                  <button onClick={fetchDocuments} className="text-[13px] font-medium underline underline-offset-2">
+                    Retry
+                  </button>
+                </div>
+              ) : tab === 'shared' || tab === 'favorites' ? (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background py-24 text-center text-muted-foreground">
+                  <FileText className="h-6 w-6" />
+                  <p className="text-[13px]">
+                    {tab === 'shared' ? 'Document sharing' : 'Favorites'} isn&apos;t available yet.
+                  </p>
+                  <p className="max-w-xs text-[12px]">
+                    This needs a small schema addition we haven&apos;t built yet — flagged for a future
+                    session rather than shown with fake data.
+                  </p>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background py-24 text-muted-foreground">
+                  <Inbox className="h-6 w-6" />
+                  <p className="text-[13px]">
+                    {tabDocuments.length === 0
+                      ? tab === 'trash'
+                        ? 'Trash is empty.'
+                        : 'No documents yet.'
+                      : 'No documents match your search or filters.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border bg-background">
+                  <table className="w-full min-w-[860px] text-left text-[13px]">
+                    <thead>
+                      <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-muted-foreground">
+                        <th className="px-4 py-3 font-medium">Document Name</th>
+                        <th className="px-4 py-3 font-medium">Matter</th>
+                        <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 font-medium">Uploaded By</th>
+                        <th className="px-4 py-3 font-medium">Uploaded On</th>
+                        <th className="px-4 py-3 font-medium">Size</th>
+                        <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filtered.map((doc) => (
+                        <tr key={doc.id} className="hover:bg-muted/30">
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => router.push(`/documents/${doc.id}`)}
+                              className="flex items-center gap-3 text-left"
+                            >
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                <FileTypeIcon mime={doc.mime_type} />
+                              </span>
+                              <span className="truncate font-medium text-foreground hover:underline">
+                                {doc.title}
+                              </span>
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            <span className="text-[12px] italic" title="Documents aren't linked to a matter yet.">
+                              Not linked
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="rounded-full bg-secondary px-2 py-0.5 text-[11.5px] font-medium text-secondary-foreground">
+                              {fileMeta(doc.mime_type).label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {me && doc.owner_id === me.id ? 'You' : doc.owner_id.slice(0, 8)}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground" title={formatDateTime(doc.created_at)}>
+                            {formatDate(doc.created_at)}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">{formatFileSize(doc.size_bytes)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => router.push(`/documents/${doc.id}`)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                                aria-label="View"
+                                title="View"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDownload(doc)}
+                                disabled={busyDocId === doc.id || !!doc.deleted_at}
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40"
+                                aria-label="Download"
+                                title="Download"
+                              >
+                                {busyDocId === doc.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                              <div className="relative">
+                                <button
+                                  onClick={() => setOpenActionsFor((v) => (v === doc.id ? null : doc.id))}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                                  aria-label="More actions"
+                                >
+                                  <MoreHorizontal className="h-3.5 w-3.5" />
+                                </button>
+                                {openActionsFor === doc.id && (
+                                  <div className="absolute right-0 top-8 z-10 w-44 rounded-md border border-border bg-background py-1 shadow-lg">
+                                    <button
+                                      disabled
+                                      title="Document sharing isn't available yet."
+                                      className="flex w-full cursor-not-allowed items-center px-3 py-2 text-left text-[12.5px] text-muted-foreground/60"
+                                    >
+                                      Share (coming soon)
+                                    </button>
+                                    {!doc.deleted_at ? (
+                                      <button
+                                        onClick={() => handleTrash(doc)}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-destructive hover:bg-destructive/5"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                        Move to Trash
+                                      </button>
+                                    ) : (
+                                      <>
+                                        <button
+                                          disabled
+                                          title="Restore isn't available yet — no restore endpoint exists."
+                                          className="flex w-full cursor-not-allowed items-center px-3 py-2 text-left text-[12.5px] text-muted-foreground/60"
+                                        >
+                                          Restore (coming soon)
+                                        </button>
+                                        <button
+                                          disabled
+                                          title="Permanent delete isn't available yet."
+                                          className="flex w-full cursor-not-allowed items-center px-3 py-2 text-left text-[12.5px] text-muted-foreground/60"
+                                        >
+                                          Delete permanently (coming soon)
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {!isLoading && !error && tab !== 'shared' && tab !== 'favorites' && total > FETCH_LIMIT && (
+                <p className="mt-3 text-[12px] text-muted-foreground">
+                  Showing the first {FETCH_LIMIT} of {total} documents. Server-side pagination for larger
+                  document sets isn&apos;t built yet.
+                </p>
+              )}
             </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
-              <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{error}</p>
-              <button
-                onClick={() => fetchDocuments(offset)}
-                className="text-[13px] font-medium underline underline-offset-2"
-              >
-                Retry
-              </button>
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-24 text-muted-foreground">
-              <Inbox className="h-6 w-6" />
-              <p className="text-[13px]">No documents yet.</p>
-            </div>
-          ) : (
-            <>
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-[13px] text-muted-foreground">
-                  {total} document{total !== 1 ? 's' : ''}
+
+            {/* Right rail */}
+            <div className="space-y-4">
+              {/* Storage overview */}
+              <div className="rounded-lg border border-border bg-background p-4">
+                <p className="mb-3 text-[13px] font-semibold text-foreground">Storage Overview</p>
+                <p className="text-[22px] font-semibold text-foreground">
+                  {isLoading ? '—' : formatFileSize(storageUsedBytes)}
+                </p>
+                <p className="text-[12px] text-muted-foreground">
+                  Used across {active.length} document{active.length === 1 ? '' : 's'}
+                </p>
+                <p className="mt-2 text-[11.5px] italic text-muted-foreground/80">
+                  Plan storage limits aren&apos;t available yet — not shown.
                 </p>
               </div>
 
-              <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
-                {filtered.map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => router.push(`/documents/${doc.id}`)}
-                    className="group flex items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/50"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                      <FileText className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[14px] font-medium text-foreground">
-                        {doc.title}
-                      </p>
-                      <p className="mt-0.5 text-[12px] text-muted-foreground">
-                        {formatRelativeTime(doc.created_at)} ·{' '}
-                        {MIME_LABELS[doc.mime_type] ?? doc.mime_type} ·{' '}
-                        {formatFileSize(doc.size_bytes)}
-                      </p>
-                    </div>
-
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
-                  </button>
-                ))}
+              {/* Quick actions */}
+              <div className="rounded-lg border border-border bg-background p-4">
+                <p className="mb-3 text-[13px] font-semibold text-foreground">Quick Actions</p>
+                <div className="space-y-1">
+                  <QuickAction icon={<Upload className="h-4 w-4" />} label="Upload Document" onClick={handleUploadClick} />
+                  <QuickAction icon={<FileUp className="h-4 w-4" />} label="Bulk Upload" onClick={handleUploadClick} />
+                  <QuickAction icon={<FolderPlus className="h-4 w-4" />} label="Create Folder" disabled />
+                  <QuickAction icon={<FileText className="h-4 w-4" />} label="Request Document" disabled />
+                  <QuickAction icon={<ScanLine className="h-4 w-4" />} label="Scan Document" disabled />
+                  <QuickAction icon={<Settings2 className="h-4 w-4" />} label="Document Settings" disabled />
+                </div>
               </div>
 
-              {(hasPrevPage || hasNextPage) && (
-                <div className="mt-4 flex items-center justify-between text-[13px] text-muted-foreground">
+              {/* Recent uploads */}
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-foreground">Recent Uploads</p>
                   <button
-                    disabled={!hasPrevPage}
-                    onClick={() => fetchDocuments(Math.max(0, offset - PAGE_SIZE))}
-                    className="flex items-center gap-1 rounded-md px-2 py-1 disabled:opacity-30"
+                    onClick={() => {
+                      setTab('all');
+                      setDateFilter('any');
+                      setQuery('');
+                    }}
+                    className="text-[12px] font-medium text-primary"
                   >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                    Previous
-                  </button>
-                  <span>
-                    {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
-                  </span>
-                  <button
-                    disabled={!hasNextPage}
-                    onClick={() => fetchDocuments(offset + PAGE_SIZE)}
-                    className="flex items-center gap-1 rounded-md px-2 py-1 disabled:opacity-30"
-                  >
-                    Next
-                    <ChevronRight className="h-3.5 w-3.5" />
+                    View all
                   </button>
                 </div>
-              )}
-            </>
-          )}
+                {isLoading ? (
+                  <div className="flex justify-center py-4 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : recentUploadsPanel.length === 0 ? (
+                  <p className="text-[12.5px] text-muted-foreground">No uploads yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {recentUploadsPanel.map((doc) => (
+                      <button
+                        key={doc.id}
+                        onClick={() => router.push(`/documents/${doc.id}`)}
+                        className="flex w-full items-center gap-2.5 text-left"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                          <FileTypeIcon mime={doc.mime_type} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <p className="truncate text-[12.5px] font-medium text-foreground">{doc.title}</p>
+                          <p className="truncate text-[11px] text-muted-foreground">{formatDate(doc.created_at)}</p>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </main>
       </div>
+    </div>
+  );
+}
+
+// ---- Small presentational helpers ------------------------------------------
+
+function SummaryCard({
+  icon,
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  tone: 'primary' | 'success' | 'warning' | 'muted';
+}) {
+  const toneClasses: Record<string, string> = {
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-success/10 text-success',
+    warning: 'bg-warning/10 text-warning',
+    muted: 'bg-muted text-muted-foreground',
+  };
+  return (
+    <div className="rounded-lg border border-border bg-background p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className={`flex h-8 w-8 items-center justify-center rounded-md ${toneClasses[tone]}`}>{icon}</span>
+      </div>
+      <p className="text-[20px] font-semibold leading-tight text-foreground">{value}</p>
+      <p className="text-[12px] text-muted-foreground">{label}</p>
+      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground/70">{hint}</p>}
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`-mb-px border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors ${
+        active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function QuickAction({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={disabled ? 'Coming soon' : undefined}
+      className={`flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-[13px] ${
+        disabled ? 'cursor-not-allowed text-muted-foreground/50' : 'text-foreground hover:bg-muted'
+      }`}
+    >
+      <span className={disabled ? 'text-muted-foreground/50' : 'text-primary'}>{icon}</span>
+      {label}
+      {disabled && <ChevronDown className="ml-auto h-3 w-3 rotate-[-90deg] opacity-0" />}
+    </button>
+  );
+}
+
+function Banner({
+  tone,
+  children,
+  onDismiss,
+}: {
+  tone: 'destructive' | 'info';
+  children: React.ReactNode;
+  onDismiss: () => void;
+}) {
+  const toneClasses =
+    tone === 'destructive'
+      ? 'border-destructive/20 bg-destructive/5 text-destructive'
+      : 'border-info/20 bg-info/5 text-info';
+  return (
+    <div className={`flex items-center gap-2 rounded-md border px-4 py-3 text-[13px] ${toneClasses}`}>
+      <AlertCircle className="h-4 w-4 shrink-0" />
+      <span className="flex-1">{children}</span>
+      <button onClick={onDismiss} aria-label="Dismiss">
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }

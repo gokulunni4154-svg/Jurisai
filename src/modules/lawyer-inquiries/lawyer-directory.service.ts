@@ -63,4 +63,50 @@ export class LawyerDirectoryService {
       verifiedAt: row.verified_at,
     }));
   }
+
+  /**
+   * NEW -- authenticated "contact a lawyer" flow, picker step 1. No
+   * auth check -- same reasoning as listVerifiedLawyers() above; this
+   * service has no currentUser concept at all (see class-level FLAGGED
+   * comment). Called by an authenticated route in this case, but the
+   * service itself stays agnostic to that, matching its own established
+   * design.
+   */
+  async listFirms(): Promise<FirmListing[]> {
+    const rows = await this.deps.repository.listFirms();
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+    }));
+  }
+
+  /**
+   * NEW -- authenticated "contact a lawyer" flow, picker step 2.
+   * Returns the target firm's full roster (see
+   * LawyerDirectoryRepository#listFirmMembers()'s own doc comment for
+   * why this deliberately does NOT filter to FirmRole 'lawyer').
+   */
+  async listFirmMembers(firmId: string): Promise<FirmMemberListing[]> {
+    const rows = await this.deps.repository.listFirmMembers(firmId);
+
+    return rows.map((row) => ({
+      profileId: row.profile_id,
+      fullName: row.full_name,
+      role: row.role,
+    }));
+  }
+}
+
+/** NEW -- see listFirms() above. */
+export interface FirmListing {
+  id: string;
+  name: string;
+}
+
+/** NEW -- see listFirmMembers() above. */
+export interface FirmMemberListing {
+  profileId: string;
+  fullName: string;
+  role: string;
 }

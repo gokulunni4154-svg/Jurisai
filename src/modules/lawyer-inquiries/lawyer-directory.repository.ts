@@ -134,4 +134,101 @@ export class LawyerDirectoryRepository {
       verified_at: row.reviewed_at,
     }));
   }
+
+  /**
+   * NEW -- authenticated "contact a lawyer" flow. Lists every firm for
+   * the picker's first step. Real, confirmed columns only (id, name) --
+   * firm.repository.ts's own FirmRow type covers more, but this is a
+   * public-facing listing read, so only what's actually needed to
+   * display a pickable list is selected.
+   *
+   * FLAGGED, REAL SCOPING GAP, not solved here: unlike
+   * listVerifiedLawyers() above, there is no verification concept for
+   * FIRMS anywhere in this schema -- professional_verifications is 1:1
+   * on individual profiles only, and signUpAsFirm()'s own doc comment
+   * confirms no verification row is created for a firm signup. This
+   * method therefore returns EVERY firm, unfiltered -- there is nothing
+   * to filter on. Revisit if/when a firm-level verification concept is
+   * ever built.
+   *
+   * Admin client, same reasoning as every other method in this file --
+   * this is a public, pre-auth-safe read in principle (reused by the
+   * authenticated flow too), and no confirmed `firms` SELECT policy for
+   * an arbitrary caller was found in pasted source this session.
+   */
+  async listFirms(): Promise<FirmListingRow[]> {
+    const { data, error } = await this.client
+      .from('firms')
+      .select('id, name')
+      .order('name', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return (data ?? []) as FirmListingRow[];
+  }
+
+  /**
+   * NEW -- authenticated "contact a lawyer" flow. Lists a single firm's
+   * full member roster, for the picker's second step (drill into a
+   * firm to pick a specific person, or stop at the firm level).
+   *
+   * Deliberately does NOT go through FirmMemberRepository
+   * (findByFirmId()) even though that method already does almost
+   * exactly this -- FirmMemberRepository is constructed with the
+   * RLS-respecting client everywhere else in this project
+   * (firm_members_select_same_firm only lets a caller read rows
+   * sharing their OWN firm_id), which is wrong for this use case: the
+   * client browsing this picker is, by definition, not yet a member of
+   * the firm they're looking at. Same admin-client-bypass reasoning as
+   * every other method in this file, just applied to a different table.
+   *
+   * FLAGGED, DELIBERATE NON-FILTERING, real judgment call: does NOT
+   * filter to FirmRole 'lawyer'. signUpAsLawyer() (auth.service.ts,
+   * confirmed real source) gives a solo practitioner FirmRole 'owner',
+   * not 'lawyer' -- filtering this query to role = 'lawyer' would
+   * silently exclude every solo lawyer in the directory, which is
+   * almost certainly wrong for a "who can I contact at this firm"
+   * picker. Returns the full roster with each member's role attached
+   * instead, so the caller (frontend) can label each entry (e.g. "Jane
+   * Doe -- Owner", "John Smith -- Lawyer") and let the person judge who
+   * to contact, rather than this layer silently deciding for them.
+   */
+  async listFirmMembers(firmId: string): Promise<FirmMemberListingRow[]> {
+    const { data, error } = await this.client
+      .from('firm_members')
+      .select(
+        `
+        profile_id,
+        role,
+        profiles!inner ( full_name )
+      `
+      )
+      .eq('firm_id', firmId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return (data ?? []).map((row: any) => ({
+      profile_id: row.profile_id,
+      full_name: row.profiles?.full_name ?? '',
+      role: row.role,
+    }));
+  }
+}
+
+/** NEW -- see listFirms() above. */
+interface FirmListingRow {
+  id: string;
+  name: string;
+}
+
+/** NEW -- see listFirmMembers() above. */
+interface FirmMemberListingRow {
+  profile_id: string;
+  full_name: string;
+  role: string;
 }

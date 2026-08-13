@@ -16,6 +16,8 @@ import type { Database } from '@/core/supabase/database.types';
 import { clientEnv } from '@/core/config/env';
 import {
   signUpSchema,
+  signUpAsLawyerSchema,
+  signUpAsFirmSchema,
   signInSchema,
   requestPasswordResetSchema,
   updatePasswordSchema,
@@ -25,6 +27,15 @@ import { FirmMemberRepository } from '@/modules/user-management/firm-member.repo
 import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import { ClientInvitationRepository } from '@/modules/user-management/client-invitation.repository';
 import { ClientRepository } from '@/modules/user-management/client.repository';
+import { FirmRepository } from '@/modules/billing/firm.repository';
+import { ProfileRepository } from '@/modules/profiles/profile.repository';
+// FLAGGED, UNCONFIRMED IMPORT PATH: the pasted professional-verification
+// repository source had no module-path header comment the way
+// firm.repository.ts did ("// src/modules/billing/firm.repository.ts").
+// This path is assumed by this project's own confirmed convention
+// (cross-module imports use @/modules/<module>/<file>) -- correct if the
+// real module folder name differs.
+import { ProfessionalVerificationRepository } from '@/modules/professional-verification/professional-verification.repository';
 
 /**
  * The role assigned to every new sign-up today. There is deliberately no
@@ -32,6 +43,12 @@ import { ClientRepository } from '@/modules/user-management/client.repository';
  * will need either a distinct sign-up flow or a post-sign-up upgrade
  * path, both real product decisions left unmade here rather than guessed
  * at inside this file.
+ *
+ * AMENDED, three-way sign-up (this session): the "distinct sign-up flow"
+ * mentioned above now exists (signUpAsLawyer/signUpAsFirm below), but
+ * DEFAULT_SIGNUP_ROLE itself is UNCHANGED and is reused by both new
+ * methods -- see each method's own doc comment for why role and firm
+ * standing are deliberately kept as separate axes, not conflated.
  */
 const DEFAULT_SIGNUP_ROLE = 'individual' as const;
 
@@ -45,6 +62,35 @@ const DEFAULT_SIGNUP_ROLE = 'individual' as const;
  * method rather than a signUp() variant.
  */
 const CLIENT_SIGNUP_ROLE = 'client' as const;
+
+/**
+ * CORRECTED, this session. The role assigned by signUpAsLawyer() --
+ * always `'lawyer'`, never DEFAULT_SIGNUP_ROLE.
+ *
+ * This reverses signUpAsLawyer()'s original reasoning (see that
+ * method's own doc comment, kept below with a correction note rather
+ * than silently deleted, per this project's Source Verification Rule).
+ * The original reasoning -- that UserRole and firm standing are
+ * separate axes, so a solo lawyer only needs firm_members.role: 'owner'
+ * -- was sound in the abstract but wrong for THIS codebase specifically.
+ * Confirmed via real pasted source, not re-guessed:
+ *
+ *   - types.ts's real UserRole union already contains 'lawyer' as a
+ *     distinct top-level value, separate from FirmRole (types.ts's own
+ *     header documents this as two independent axes -- UserRole is NOT
+ *     meant to only ever be 'individual' outside of admin/support/client
+ *     accounts, as the original reasoning assumed).
+ *   - LawyerDashboardService#getDashboard() (real, pasted) calls
+ *     this.requireRole('lawyer') -- gated on AuthUser.role, i.e.
+ *     app_metadata.role, NOT firm_members.role. That file's own header,
+ *     decision #2, confirms this was a deliberate choice: "a dashboard
+ *     identity check is a UserRole question."
+ *
+ * A lawyer signing up via signUpAsLawyer() with role left at
+ * DEFAULT_SIGNUP_ROLE ('individual') would be 403'd from their own
+ * dashboard. This constant exists so that can't happen.
+ */
+const LAWYER_SIGNUP_ROLE = 'lawyer' as const;
 
 /**
  * Translates a Supabase Auth SDK error into the appropriate AppError
@@ -121,6 +167,23 @@ function mapSupabaseAuthError(error: AuthError): AppError {
  * constructed locally inside signUp() off the same `admin` client the
  * role-assignment step already reaches for -- not a new pattern, the
  * exact one this file already established for that step.
+ *
+ * AMENDED, three-way sign-up (this session). Two new methods,
+ * signUpAsLawyer() and signUpAsFirm(), follow the SAME "construct
+ * dependencies locally off the admin client inside the method" pattern
+ * as signUp()'s invite-token branch above -- deliberately NOT built by
+ * reusing FirmService.createFirm(), even though that method's real,
+ * pasted source does almost exactly what's needed here. FirmService
+ * extends BaseService and its createFirm() calls
+ * this.requireAuthentication() -- which requires an already-established
+ * session. At the point signUpAsLawyer()/signUpAsFirm() run, the
+ * Supabase Auth user may exist but no session is guaranteed yet (email
+ * confirmations are enabled per File 12, same as signUp() itself), so
+ * there is no currentUser for BaseService to resolve. The firm-creation
+ * SEQUENCE mirrors FirmService.createFirm() exactly (create firm ->
+ * create owner firm_members row -> set profiles.firm_id only if unset ->
+ * audit 'firm.create') since that sequence is real, confirmed, pasted
+ * source -- only the AUTHORIZATION MECHANISM differs, because it has to.
  */
 export class AuthService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
@@ -197,6 +260,7 @@ export class AuthService {
       password,
       options: {
         data: { full_name: fullName },
+        emailRedirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/callback`,
       },
     });
 
@@ -280,6 +344,294 @@ export class AuthService {
         metadata: { role: invitation.role, viaSignUp: true },
       });
     }
+
+    return {
+      userId: data.user.id,
+      email: data.user.email ?? email,
+      emailConfirmationRequired: data.session === null,
+    };
+  }
+
+  /**
+   * NEW -- three-way sign-up (this session). Individual (solo) lawyer
+   * sign-up.
+   *
+   * Steps 1-3 (create Supabase Auth user, detect the fake-user-already-
+   * registered case, assign a role) are otherwise identical to signUp()
+   * above, EXCEPT role assignment uses LAWYER_SIGNUP_ROLE ('lawyer'),
+   * not DEFAULT_SIGNUP_ROLE.
+   *
+   * CORRECTED, this session -- REVERSES this method's original
+   * reasoning, not an extension of it. The original doc comment here
+   * argued role should stay 'individual', on the theory that
+   * app_metadata.role and firm standing are separate axes in this
+   * codebase (true in general -- see signUp()'s inviteToken branch) and
+   * that firm_members.role: 'owner' alone is what should carry "this
+   * person runs a practice." That theory turned out not to hold for
+   * this specific role value: types.ts's real UserRole union already
+   * defines 'lawyer' as a distinct top-level value (separate from
+   * FirmRole), and LawyerDashboardService#getDashboard() (real, pasted)
+   * gates on exactly that -- this.requireRole('lawyer') checks
+   * AuthUser.role, not firm_members.role. Left at DEFAULT_SIGNUP_ROLE,
+   * a lawyer created by this method would be 403'd from /lawyer, their
+   * own dashboard, immediately after signing up. See
+   * LAWYER_SIGNUP_ROLE's own doc comment above for the full source
+   * citations. Kept this correction note rather than deleting the
+   * original reasoning silently, per this project's Source
+   * Verification Rule -- future sessions should see WHY this changed,
+   * not just that it did.
+   *
+   * Firm-creation SEQUENCE (steps 4-6) mirrors FirmService.createFirm()'s
+   * real, confirmed source exactly -- see class-level comment for why it
+   * can't literally call that method:
+   *   4. firmRepository.create({ name, owner_id }) -- a solo-practice
+   *      firm, name defaulted from the lawyer's own full name since
+   *      signUpAsLawyerSchema has no firmName field (unlike
+   *      signUpAsFirmSchema below).
+   *   5. firmMemberRepository.create({ firm_id, profile_id, role: 'owner' })
+   *      -- same owner-row-creation step createFirm() itself performs.
+   *   6. profileRepository.update(userId, { firm_id }) -- ALWAYS run
+   *      here, never conditional on an existing value, unlike
+   *      createFirm()'s "only if not already set" check. That
+   *      conditional exists in createFirm() to support a profile that
+   *      already has a primary firm from EXISTING membership elsewhere;
+   *      it cannot apply here because handle_new_user() (confirmed via
+   *      real pasted source) only ever inserts (id, full_name) --
+   *      profiles.firm_id is guaranteed null for a signup this method
+   *      just created moments ago.
+   *
+   * Step 7: professionalVerificationRepository.create() with
+   * status: 'pending' and the submitted registration_number. This is
+   * what actually gates lawyer-only features later -- NOT the account
+   * role, NOT firm_members.role. Deliberately leaves the `role` column
+   * on professional_verifications unset: its real accepted values were
+   * not confirmed/pasted this session (VerificationStatus, the sibling
+   * enum for `status`, IS confirmed; `role` is not), so setting it would
+   * be a guess this project's own Source Verification Rule exists to
+   * prevent.
+   *
+   * Step 8: one audit entry, action 'firm.create' (matching
+   * FirmService.createFirm()'s own convention exactly, since this is
+   * functionally the same event) with metadata noting `viaSignUp: true`
+   * and `solo: true` -- mirrors the `viaSignUp: true` marker signUp()'s
+   * own invite-token branch already uses to distinguish sign-up-time
+   * firm events from ones created via the authenticated FirmService
+   * route later.
+   *
+   * SAME non-transactional risk already accepted project-wide
+   * (BaseRepository has no transaction primitive) -- now a FIVE-step
+   * sequential chain (auth user -> role -> firm -> firm_members ->
+   * profile.firm_id -> verification -> audit) with no rollback if a
+   * later step fails. Flagged per this project's own stated policy
+   * (flag new instances in the method's own doc comment, not
+   * re-litigate the general architecture choice) -- not fixed here.
+   */
+  async signUpAsLawyer(rawInput: unknown): Promise<{
+    userId: string;
+    email: string;
+    emailConfirmationRequired: boolean;
+  }> {
+    const { email, password, fullName, registrationNumber } =
+      signUpAsLawyerSchema.parse(rawInput);
+
+    const { data, error } = await this.supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/callback`,
+      },
+    });
+
+    if (error) {
+      throw mapSupabaseAuthError(error);
+    }
+
+    if (!data.user) {
+      throw new ExternalServiceError(
+        'Supabase Auth',
+        'Sign-up succeeded but no user was returned.',
+      );
+    }
+
+    if (data.user.identities?.length === 0) {
+      throw new ConflictError('An account with this email address already exists.');
+    }
+
+    const admin = createAdminClient();
+    const { error: roleAssignmentError } = await admin.auth.admin.updateUserById(
+      data.user.id,
+      { app_metadata: { role: LAWYER_SIGNUP_ROLE } },
+    );
+
+    if (roleAssignmentError) {
+      throw new ExternalServiceError(
+        'Supabase Auth Admin API',
+        'Account was created but default role assignment failed. ' +
+          'This account cannot sign in until a role is assigned.',
+        roleAssignmentError,
+        { userId: data.user.id },
+      );
+    }
+
+    const firmRepository = new FirmRepository(admin);
+    const firmMemberRepository = new FirmMemberRepository(admin);
+    const profileRepository = new ProfileRepository(admin);
+    const professionalVerificationRepository = new ProfessionalVerificationRepository(admin);
+    const auditLogRepository = new AuditLogRepository(admin);
+
+    const firm = await firmRepository.create({
+      name: `${fullName} — Independent Practice`,
+      owner_id: data.user.id,
+    });
+
+    await firmMemberRepository.create({
+      firm_id: firm.id,
+      profile_id: data.user.id,
+      role: 'owner',
+    });
+
+    // Always set, never conditional -- see this method's own doc comment,
+    // step 6, for why createFirm()'s "only if not already set" guard
+    // doesn't apply to a profile this method just created.
+    await profileRepository.update(data.user.id, {
+      firm_id: firm.id,
+    });
+
+    await professionalVerificationRepository.create({
+      profile_id: data.user.id,
+      registration_number: registrationNumber,
+      status: 'pending',
+    });
+
+    await auditLogRepository.recordUserAction({
+      actorId: data.user.id,
+      firmId: firm.id,
+      action: 'firm.create',
+      resourceType: 'firm',
+      resourceId: firm.id,
+      metadata: { name: firm.name, viaSignUp: true, solo: true },
+    });
+
+    return {
+      userId: data.user.id,
+      email: data.user.email ?? email,
+      emailConfirmationRequired: data.session === null,
+    };
+  }
+
+  /**
+   * NEW -- three-way sign-up (this session). Lawyer-firm sign-up.
+   *
+   * Identical to signUpAsLawyer() above except:
+   *   - Firm name is the real, given `firmName` from
+   *     signUpAsFirmSchema, never defaulted from fullName (a firm
+   *     registering itself has a real name to give; a solo lawyer
+   *     often doesn't think of themselves as "a firm" and shouldn't be
+   *     forced to name one).
+   *   - NO professional_verifications row is created for the signing
+   *     user. Deliberate, not an oversight: the person registering a
+   *     firm account may be an office administrator or managing
+   *     partner, not a practicing lawyer themselves. Individual
+   *     lawyers at this firm are added afterward through the existing,
+   *     already-confirmed FirmMemberService/invitation flow, and each
+   *     of THEM would go through their own verification at that point
+   *     (a future concern, not solved by this method).
+   *
+   * CORRECTION NOTE, this session: signUpAsLawyer() above now assigns
+   * LAWYER_SIGNUP_ROLE ('lawyer') instead of DEFAULT_SIGNUP_ROLE -- see
+   * that method's doc comment and LAWYER_SIGNUP_ROLE's own comment for
+   * why. That change does NOT extend to this method: no confirmed
+   * source (this session or prior) establishes a comparable top-level
+   * 'law_firm' role requirement the way LawyerDashboardService did for
+   * 'lawyer' -- the person signing up here may not even be a lawyer
+   * (see the professional_verifications point above). signUpAsFirm()
+   * therefore still correctly uses DEFAULT_SIGNUP_ROLE ('individual'),
+   * unchanged. Revisit only if/when a real role-gated firm-owner/admin
+   * dashboard check is pasted and confirmed to require otherwise --
+   * don't infer this by analogy to the lawyer case.
+   *
+   * For every other step, this method mirrors signUpAsLawyer()'s
+   * firm-creation sequence (firm -> owner firm_members row ->
+   * unconditional profiles.firm_id set -> audit 'firm.create') and
+   * accepts the same non-transactional risk, flagged there, not
+   * re-litigated here.
+   */
+  async signUpAsFirm(rawInput: unknown): Promise<{
+    userId: string;
+    email: string;
+    emailConfirmationRequired: boolean;
+  }> {
+    const { email, password, fullName, firmName } = signUpAsFirmSchema.parse(rawInput);
+
+    const { data, error } = await this.supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/callback`,
+      },
+    });
+
+    if (error) {
+      throw mapSupabaseAuthError(error);
+    }
+
+    if (!data.user) {
+      throw new ExternalServiceError(
+        'Supabase Auth',
+        'Sign-up succeeded but no user was returned.',
+      );
+    }
+
+    if (data.user.identities?.length === 0) {
+      throw new ConflictError('An account with this email address already exists.');
+    }
+
+    const admin = createAdminClient();
+    const { error: roleAssignmentError } = await admin.auth.admin.updateUserById(
+      data.user.id,
+      { app_metadata: { role: DEFAULT_SIGNUP_ROLE } },
+    );
+
+    if (roleAssignmentError) {
+      throw new ExternalServiceError(
+        'Supabase Auth Admin API',
+        'Account was created but default role assignment failed. ' +
+          'This account cannot sign in until a role is assigned.',
+        roleAssignmentError,
+        { userId: data.user.id },
+      );
+    }
+
+    const firmRepository = new FirmRepository(admin);
+    const firmMemberRepository = new FirmMemberRepository(admin);
+    const profileRepository = new ProfileRepository(admin);
+    const auditLogRepository = new AuditLogRepository(admin);
+
+    const firm = await firmRepository.create({
+      name: firmName,
+      owner_id: data.user.id,
+    });
+
+    await firmMemberRepository.create({
+      firm_id: firm.id,
+      profile_id: data.user.id,
+      role: 'owner',
+    });
+
+    await profileRepository.update(data.user.id, {
+      firm_id: firm.id,
+    });
+
+    await auditLogRepository.recordUserAction({
+      actorId: data.user.id,
+      firmId: firm.id,
+      action: 'firm.create',
+      resourceType: 'firm',
+      resourceId: firm.id,
+      metadata: { name: firm.name, viaSignUp: true, solo: false },
+    });
 
     return {
       userId: data.user.id,
@@ -378,6 +730,7 @@ export class AuthService {
       password,
       options: {
         data: { full_name: fullName },
+        emailRedirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/callback`,
       },
     });
 

@@ -77,6 +77,9 @@ import { CaseAccessGrantRepository } from '@/modules/cases/case-access-grant.rep
 import { CaseRepository } from '@/modules/cases/case.repository';
 import { CaseService } from '@/modules/cases/case.service';
 import { DocumentRepository } from '@/modules/documents/document.repository';
+import { DocumentService } from '@/modules/documents/document.service';
+import { NotificationRepository } from '@/modules/notifications/notification.repository';
+import { NotificationService } from '@/modules/notifications/notification.service';
 import { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 import { TeamMemberRepository } from '@/modules/user-management/team-member.repository';
 
@@ -133,10 +136,37 @@ export async function buildLawyerInquiryService(
     auditLogRepository
   );
 
+  // NEW -- authenticated "contact a lawyer" flow (createInquiry()).
+  // DocumentService's real constructor (document.service.ts, confirmed
+  // this session) takes (currentUser, documentRepository,
+  // notificationService, auditLogRepository). Reuses the SAME
+  // documentRepository (rlsClient) and auditLogRepository (adminClient)
+  // instances already built above for CaseService, rather than
+  // constructing second copies -- matching ai-legal-insight.factory.ts's
+  // own established "share one instance across sibling dependencies
+  // within one request" discipline. notificationRepository/
+  // notificationService are new instances, built the same way
+  // ai-legal-insight.factory.ts builds them (RLS-respecting client, not
+  // admin) -- notifications have real client-write RLS, unlike
+  // lawyer_inquiries.
+  const notificationRepository = new NotificationRepository(rlsClient);
+  const notificationService = new NotificationService(
+    currentUser,
+    notificationRepository,
+    auditLogRepository
+  );
+  const documentService = new DocumentService(
+    currentUser,
+    documentRepository,
+    notificationService,
+    auditLogRepository
+  );
+
   return new LawyerInquiryService(
     currentUser,
     lawyerInquiryRepository,
     firmMemberRepository,
-    caseService
+    caseService,
+    documentService
   );
 }
