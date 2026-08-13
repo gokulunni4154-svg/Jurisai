@@ -45,7 +45,7 @@
 import 'server-only';
 
 import type { AuthUser, FirmRole } from '@/core/auth/types';
-import { NotFoundError } from '@/core/errors/app-error';
+import { NotFoundError, ValidationError } from '@/core/errors/app-error';
 import { BaseService } from '@/core/services/base.service';
 import type { Database } from '@/core/supabase/database.types';
 import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
@@ -214,6 +214,217 @@ export class CaseAccessGrantService extends BaseService {
     );
 
     return cases;
+  }
+
+  /**
+   * FOUNDATION TASK 2 — Case Assignment & Access Architecture.
+   *
+   * assignCase() / reassignCase() / removeAssignment() below are the
+   * lawyer-assignment entry points the task requires. They are
+   * deliberately NOT folded into issueGrant()/revokeGrant() above:
+   * those two remain the general-purpose grant primitive (also used to
+   * grant a CLIENT profile access to a case, per this file's own
+   * "Client RLS scoping" note higher up), and grantee_id there is not
+   * restricted to firm staff on purpose. Assignment is a narrower,
+   * lawyer-specific operation with an extra invariant issueGrant() does
+   * not (and should not) enforce generally: the grantee must actually
+   * belong to the case's firm.
+   *
+   * CLOSES A REAL GAP flagged directly above on issueGrant()'s own doc
+   * comment ("this method does not check that granteeId is an actual
+   * member of the case's firm/team before granting"). That gap is
+   * exactly Foundation Task 2's CASE ACCESS TEST 8 (a firm admin must
+   * not be able to assign a case to a lawyer from another firm) and
+   * assignment-rule #3 in the task brief ("target lawyer belongs to the
+   * same firm"). issueGrant() itself is left unmodified — its existing
+   * callers (the generic POST /api/cases/[id]/grants route, used for
+   * client grants too) keep their current behavior; the new firm-
+   * membership check lives only in the methods below.
+   */
+
+  /**
+   * Assigns a case to a lawyer. Caller must pass requireGrantManageAccess()
+   * (case owner, team lead, or firm admin/owner — unchanged, Decision
+   * #60), same gate as issueGrant(). Additionally validates the target
+   * lawyer is a firm_members row of the CASE'S OWN firm (caseRow.firm_id
+   * — never a client-supplied firm id, so this cannot be spoofed) before
+   * issuing anything — see this method's own class-level doc comment
+   * above for why that check does not live in issueGrant() itself.
+   *
+   * Idempotent: assigning a lawyer who already holds an active grant at
+   * the same access level is a no-op that returns the existing grant,
+   * rather than hitting case_access_grants_active_unique (the partial
+   * unique index on (case_id, grantee_id) where revoked_at is null) as
+   * a raw DatabaseError. Assigning at a DIFFERENT access level updates
+   * the existing active grant in place instead of creating a second row
+   * (which the unique index would reject outright).
+   */
+  async assignCase(input: {
+    caseId: string;
+    lawyerId: string;
+    accessLevel?: 'read' | 'read_write';
+  }): Promise<CaseAccessGrantRow> {
+    const caseRow = await this.caseRepository.findByIdOrThrow(input.caseId);
+    const user = await this.requireGrantManageAccess(caseRow);
+    const accessLevel = input.accessLevel ?? 'read_write';
+
+    await this.requireLawyerInSameFirm(caseRow, input.lawyerId);
+
+    const existing = await this.caseAccessGrantRepository.findActiveGrantForCaseAndProfile(
+      input.caseId,
+      input.lawyerId,
+    );
+
+    if (existing) {
+      if (existing.access_level === accessLevel) {
+        return existing;
+      }
+
+      const updated = await this.caseAccessGrantRepository.update(existing.id, {
+        access_level: accessLevel,
+      } as never);
+
+      await this.auditLogRepository.recordUserAction({
+        actorId: user.id,
+        firmId: caseRow.firm_id,
+        caseId: input.caseId,
+        action: 'case.assignment.update',
+        resourceType: 'case_access_grant',
+        resourceId: existing.id,
+        metadata: { caseId: input.caseId, lawyerId: input.lawyerId, accessLevel },
+      });
+
+      return updated;
+    }
+
+    const grant = await this.caseAccessGrantRepository.create({
+      case_id: input.caseId,
+      grantee_id: input.lawyerId,
+      granted_by: user.id,
+      access_level: accessLevel,
+    } as never);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: caseRow.firm_id,
+      caseId: input.caseId,
+      action: 'case.assignment.assign',
+      resourceType: 'case_access_grant',
+      resourceId: grant.id,
+      metadata: { caseId: input.caseId, lawyerId: input.lawyerId, accessLevel },
+    });
+
+    return grant;
+  }
+
+  /**
+   * Reassigns a case from one lawyer to another: revokes fromLawyerId's
+   * active grant (if any — a missing prior assignment is not treated as
+   * an error, since the end state this method guarantees is "toLawyerId
+   * is now assigned", regardless of what came before) and assigns
+   * toLawyerId via assignCase() (so the same same-firm validation and
+   * idempotency handling applies to the new assignee).
+   */
+  async reassignCase(input: {
+    caseId: string;
+    fromLawyerId: string;
+    toLawyerId: string;
+    accessLevel?: 'read' | 'read_write';
+  }): Promise<CaseAccessGrantRow> {
+    const caseRow = await this.caseRepository.findByIdOrThrow(input.caseId);
+    const user = await this.requireGrantManageAccess(caseRow);
+
+    const priorGrant = await this.caseAccessGrantRepository.findActiveGrantForCaseAndProfile(
+      input.caseId,
+      input.fromLawyerId,
+    );
+
+    if (priorGrant) {
+      await this.caseAccessGrantRepository.update(priorGrant.id, {
+        revoked_at: new Date().toISOString(),
+      } as never);
+
+      await this.auditLogRepository.recordUserAction({
+        actorId: user.id,
+        firmId: caseRow.firm_id,
+        caseId: input.caseId,
+        action: 'case.assignment.reassign',
+        resourceType: 'case_access_grant',
+        resourceId: priorGrant.id,
+        metadata: { caseId: input.caseId, fromLawyerId: input.fromLawyerId, toLawyerId: input.toLawyerId },
+      });
+    }
+
+    return this.assignCase({
+      caseId: input.caseId,
+      lawyerId: input.toLawyerId,
+      accessLevel: input.accessLevel,
+    });
+  }
+
+  /**
+   * Removes a lawyer's assignment from a case (soft-revoke, same
+   * revoked_at mechanism as revokeGrant()). Looks the active grant up by
+   * (caseId, lawyerId) rather than requiring the caller to already know
+   * a grantId — the natural shape for a "remove this lawyer from this
+   * case" management action. Throws NotFoundError if the lawyer has no
+   * active assignment on this case.
+   */
+  async removeAssignment(caseId: string, lawyerId: string): Promise<CaseAccessGrantRow> {
+    const caseRow = await this.caseRepository.findByIdOrThrow(caseId);
+    const user = await this.requireGrantManageAccess(caseRow);
+
+    const grant = await this.caseAccessGrantRepository.findActiveGrantForCaseAndProfile(
+      caseId,
+      lawyerId,
+    );
+
+    if (!grant) {
+      throw new NotFoundError('case_access_grants', `${caseId}:${lawyerId}`);
+    }
+
+    const revoked = await this.caseAccessGrantRepository.update(grant.id, {
+      revoked_at: new Date().toISOString(),
+    } as never);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      firmId: caseRow.firm_id,
+      caseId,
+      action: 'case.assignment.remove',
+      resourceType: 'case_access_grant',
+      resourceId: grant.id,
+      metadata: { caseId, lawyerId },
+    });
+
+    return revoked;
+  }
+
+  /**
+   * CASE ACCESS TEST 8 / assignment-rule #3: the target lawyer must be a
+   * firm_members row of the CASE'S OWN firm (caseRow.firm_id, resolved
+   * from the trusted caseRow already fetched by the caller — never a
+   * client-supplied firm id). No specific FirmRole is required of the
+   * target (an assignee could themselves be an 'admin' or 'owner', not
+   * just a plain 'lawyer'/'employee' row) — only firm membership itself.
+   * A missing firm_members row (personal orgs, a different firm
+   * entirely, or a profile that was never added to this firm) fails
+   * closed with a ValidationError, not a generic authorization error,
+   * since this is a data-validity problem with the request (a bad
+   * lawyerId), not a permissions problem with the caller.
+   */
+  private async requireLawyerInSameFirm(caseRow: CaseRow, lawyerId: string): Promise<void> {
+    const firmRole = await this.firmMemberRepository.findByFirmAndProfile(
+      caseRow.firm_id,
+      lawyerId,
+    );
+
+    if (!firmRole) {
+      throw new ValidationError(
+        'The selected lawyer is not a member of this case\u2019s firm.',
+        { caseId: caseRow.id, firmId: caseRow.firm_id, lawyerId },
+      );
+    }
   }
 
   /**
