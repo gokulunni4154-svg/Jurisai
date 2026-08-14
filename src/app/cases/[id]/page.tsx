@@ -135,6 +135,9 @@ import {
   Download,
   Paperclip,
   X,
+  Users,
+  UserPlus,
+  Shield,
 } from 'lucide-react';
 
 // ---- Shapes — see file header for exactly which fields are confirmed
@@ -190,6 +193,39 @@ interface VaultDocumentRow {
   mime_type: string;
   size_bytes: number;
 }
+
+// Case Team / Access — lawyers with access to this case via
+// `case_access_grants`. Shape matches the real table exactly (see
+// database.types.ts's `case_access_grants` Row) — id, case_id,
+// grantee_id, granted_by, access_level, revoked_at, created_at.
+// Listed via the existing GET /api/cases/[id]/grants route
+// (CaseAccessGrantService#listGrantsForCase -> the repository's own
+// findActiveGrantsForCase, confirmed "active only" by that method's own
+// doc comment), previously with no UI entry point anywhere in the repo
+// — same class of gap as Case Documents linking before it. Added here
+// via the lawyer-assignment-specific entry points
+// (POST /api/cases/[id]/assignments, POST
+// /api/cases/[id]/assignments/[lawyerId]/remove) rather than the
+// general-purpose /grants routes, since assignCase()/removeAssignment()
+// additionally enforce that the target lawyer belongs to the case's own
+// firm — the general /grants routes are also used for client access
+// grants, which is Client Portal territory and out of scope here.
+type AccessLevel = 'read' | 'read_write';
+
+interface CaseAccessGrantRow {
+  id: string;
+  case_id: string;
+  grantee_id: string;
+  granted_by: string;
+  access_level: AccessLevel;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+const ACCESS_LEVEL_LABELS: Record<AccessLevel, string> = {
+  read: 'Read only',
+  read_write: 'Read & write',
+};
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'To do',
@@ -272,6 +308,18 @@ function DocFileTypeIcon({ mime }: { mime: string }) {
   );
 }
 
+// Full-timestamp formatter for case_access_grants.created_at (a real
+// timestamptz, unlike tasks' plain-date due_date) — same en-IN/short
+// convention as formatDueDate() above, just without the UTC-midnight
+// date-only parsing that field doesn't need.
+function formatGrantedAt(isoTimestamp: string): string {
+  return new Date(isoTimestamp).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -288,6 +336,7 @@ export default function CaseDetailPage() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [documents, setDocuments] = useState<CaseDocumentRow[]>([]);
   const [hiddenDocumentCount, setHiddenDocumentCount] = useState(0);
+  const [grants, setGrants] = useState<CaseAccessGrantRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -330,6 +379,18 @@ export default function CaseDetailPage() {
       const rawDocuments: (CaseDocumentRow | null)[] = documentsJson.data;
       setDocuments(rawDocuments.filter((d): d is CaseDocumentRow => d != null));
       setHiddenDocumentCount(rawDocuments.filter((d) => d == null).length);
+
+      const grantsRes = await fetch(`/api/cases/${caseId}/grants`, { credentials: 'include' });
+      if (!grantsRes.ok) throw new Error(await extractErrorMessage(grantsRes));
+      const grantsJson = await grantsRes.json();
+      // Real confirmed envelope: { data: grants } — see
+      // cases/[id]/grants/route.ts's own GET handler
+      // (CaseAccessGrantService#listGrantsForCase). Already active-only
+      // per that route's underlying repository method; not re-filtered
+      // here beyond a defensive revoked_at check in case a revoked row
+      // is ever returned.
+      const rawGrants: CaseAccessGrantRow[] = grantsJson.data;
+      setGrants(rawGrants.filter((g) => g.revoked_at == null));
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load this case.');
     } finally {
@@ -421,6 +482,7 @@ export default function CaseDetailPage() {
               onDocumentsChanged={setDocuments}
               hiddenDocumentCount={hiddenDocumentCount}
             />
+            <TeamSection caseId={caseId} grants={grants} onGrantsChanged={setGrants} />
           </div>
         )}
       </main>
@@ -1004,6 +1066,243 @@ function DocumentsSection({
           {hiddenDocumentCount === 1 ? ' is' : 's are'} not visible to you (added by another
           member of this case).
         </p>
+      )}
+    </section>
+  );
+}
+
+// ---- Case Team / Access section ----
+//
+// Mirrors DocumentsSection's overall shape (list + inline add form +
+// per-row busy/error state), adapted for the lawyer-assignment
+// relationship instead of a link/unlink one — see the CaseAccessGrantRow
+// interface's own doc comment above for exactly which existing routes
+// this reuses and why (assignments, not the general-purpose grants
+// primitive).
+//
+// Same posture as every other action on this page: assignCase() /
+// removeAssignment() enforce case-owner/team-lead/firm-admin
+// authorization AND (assignCase only) that the target lawyer belongs to
+// the case's own firm, entirely at the Service layer. This page has no
+// client-side way to know the caller's role or the target's firm
+// membership in advance, so Add/Remove are always rendered and a
+// 400/403 surfaces as an inline error, exactly like Tasks/Documents.
+//
+// No profile picker: same "no members/profiles-lookup endpoint
+// reachable from the client" gap TasksSection's own assignee field
+// already flags — lawyerId is a plain text UUID input, matching that
+// established convention rather than inventing a picker component this
+// session.
+
+function TeamSection({
+  caseId,
+  grants,
+  onGrantsChanged,
+}: {
+  caseId: string;
+  grants: CaseAccessGrantRow[];
+  onGrantsChanged: (grants: CaseAccessGrantRow[]) => void;
+}) {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [lawyerId, setLawyerId] = useState('');
+  const [accessLevel, setAccessLevel] = useState<AccessLevel>('read_write');
+  const [isAdding, setIsAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const [busyGrantId, setBusyGrantId] = useState<string | null>(null);
+  const [grantErrors, setGrantErrors] = useState<Record<string, string>>({});
+
+  const resetForm = () => {
+    setLawyerId('');
+    setAccessLevel('read_write');
+    setAddError(null);
+  };
+
+  const openAddForm = () => {
+    setShowAddForm(true);
+    setAddError(null);
+  };
+
+  const closeAddForm = () => {
+    setShowAddForm(false);
+    resetForm();
+  };
+
+  const handleAssign = async () => {
+    const trimmedLawyerId = lawyerId.trim();
+    if (!trimmedLawyerId) {
+      setAddError('Enter the lawyer\u2019s profile ID first.');
+      return;
+    }
+
+    setIsAdding(true);
+    setAddError(null);
+    try {
+      // Body shape matches this route's own doc comment exactly:
+      // { lawyerId: string, accessLevel?: 'read' | 'read_write' } — see
+      // cases/[id]/assignments/route.ts's own POST handler
+      // (CaseAccessGrantService#assignCase).
+      const res = await fetch(`/api/cases/${caseId}/assignments`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lawyerId: trimmedLawyerId, accessLevel }),
+      });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      const grant: CaseAccessGrantRow = json.data;
+
+      // assignCase() is idempotent at the SAME access level (returns
+      // the existing grant, same id) and updates in place at a
+      // DIFFERENT one — either way this is "the current state of this
+      // grantee's access," so replace any existing row for the same
+      // grantee rather than blindly prepending a duplicate.
+      const withoutExisting = grants.filter((g) => g.grantee_id !== grant.grantee_id);
+      onGrantsChanged([grant, ...withoutExisting]);
+      closeAddForm();
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Could not add this lawyer to the case.');
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  // See section header comment: always rendered, backed by the
+  // Service's own owner/team-lead/firm-admin enforcement — a 403
+  // surfaces here as an inline per-row error, same posture as
+  // DocumentsSection#handleRemove.
+  const handleRemove = async (grant: CaseAccessGrantRow) => {
+    setBusyGrantId(grant.id);
+    setGrantErrors((prev) => ({ ...prev, [grant.id]: '' }));
+    try {
+      const res = await fetch(
+        `/api/cases/${caseId}/assignments/${grant.grantee_id}/remove`,
+        { method: 'POST', credentials: 'include' },
+      );
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      onGrantsChanged(grants.filter((g) => g.id !== grant.id));
+    } catch (err) {
+      setGrantErrors((prev) => ({
+        ...prev,
+        [grant.id]: err instanceof Error ? err.message : 'Could not remove this lawyer.',
+      }));
+    } finally {
+      setBusyGrantId(null);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" strokeWidth={1.75} />
+          <h2 className="font-serif text-[18px] text-foreground">Case Team</h2>
+        </div>
+        <button
+          onClick={() => (showAddForm ? closeAddForm() : openAddForm())}
+          className="flex items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
+        >
+          {showAddForm ? <X className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+          {showAddForm ? 'Cancel' : 'Add lawyer'}
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div className="mb-5 flex flex-col gap-3 rounded-md border border-border bg-background p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="grant-lawyer-id" className="text-[12px] font-medium text-foreground">
+                Lawyer profile ID
+              </label>
+              <input
+                id="grant-lawyer-id"
+                type="text"
+                placeholder="UUID"
+                value={lawyerId}
+                onChange={(e) => setLawyerId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="grant-access-level" className="text-[12px] font-medium text-foreground">
+                Access level
+              </label>
+              <select
+                id="grant-access-level"
+                value={accessLevel}
+                onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <option value="read_write">{ACCESS_LEVEL_LABELS.read_write}</option>
+                <option value="read">{ACCESS_LEVEL_LABELS.read}</option>
+              </select>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            The lawyer must already be a member of this case&rsquo;s firm.
+          </p>
+
+          {addError !== null && (
+            <p role="alert" className="text-[12px] text-destructive">
+              {addError}
+            </p>
+          )}
+
+          <button
+            onClick={handleAssign}
+            disabled={isAdding}
+            className="flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isAdding && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {isAdding ? 'Adding\u2026' : 'Add to case'}
+          </button>
+        </div>
+      )}
+
+      {grants.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">
+          No one else has access to this case yet.
+        </p>
+      ) : (
+        <div className="flex flex-col divide-y divide-border">
+          {grants.map((grant) => (
+            <div key={grant.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Shield className="h-[18px] w-[18px] text-muted-foreground" strokeWidth={1.75} />
+                  <p className="truncate text-[13px] font-medium text-foreground">
+                    {grant.grantee_id}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                  {ACCESS_LEVEL_LABELS[grant.access_level]}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                <span>Added {formatGrantedAt(grant.created_at)}</span>
+                <button
+                  onClick={() => handleRemove(grant)}
+                  disabled={busyGrantId === grant.id}
+                  className="ml-auto flex items-center gap-1 text-destructive hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busyGrantId === grant.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  Remove
+                </button>
+              </div>
+
+              {grantErrors[grant.id] && (
+                <p className="text-[12px] text-destructive">{grantErrors[grant.id]}</p>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </section>
   );
