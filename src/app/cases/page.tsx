@@ -81,6 +81,7 @@ import {
   Scale,
   LayoutDashboard,
   CalendarClock,
+  ListTodo,
   FolderOpen,
   Bell,
   Settings,
@@ -414,6 +415,13 @@ export default function MattersPage() {
             aria-label="Hearings & Calendar"
           >
             <CalendarClock className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          </button>
+          <button
+            onClick={() => router.push('/tasks/mine')}
+            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            aria-label="Tasks & Deadlines"
+          >
+            <ListTodo className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </button>
           <button
             onClick={() => router.push('/documents')}

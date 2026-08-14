@@ -81,7 +81,7 @@ function initials(name: string | null): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
-export function AppSidebar({ active }: { active: 'documents' }) {
+export function AppSidebar({ active }: { active: 'documents' | 'tasks' }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -162,7 +162,9 @@ export function AppSidebar({ active }: { active: 'documents' }) {
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
         {navItems.map((item) => {
-          const isActive = item.href === '/documents' && active === 'documents';
+          const isActive =
+            (item.href === '/documents' && active === 'documents') ||
+            (item.href === '/tasks/mine' && active === 'tasks');
           const Icon = item.icon;
 
           if (!item.href) {
