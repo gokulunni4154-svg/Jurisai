@@ -44,6 +44,14 @@
 // POST /api/auth/sign-out (confirmed real route via `find`) and hard-
 // navigates to /sign-in on success, since there's no shared auth-context
 // hook anywhere in this project to invalidate client-side otherwise.
+//
+// AMENDMENT -- Lawyer Profile page task, later session: `active` widened
+// to also accept 'profile', and the account-menu dropdown (previously
+// "Sign out" only) gained a "My Profile" item pointing at the new
+// /profile page. The footer button's own label ("View account") named a
+// destination that never existed anywhere in this repo until this
+// change -- confirmed via full-repo search this session (no
+// profile/account/settings page other than firm-scoped Settings).
 
 'use client';
 
@@ -65,6 +73,7 @@ import {
   ChevronDown,
   LogOut,
   Loader2,
+  User,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -88,7 +97,11 @@ function initials(name: string | null): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
-export function AppSidebar({ active }: { active: 'documents' | 'tasks' | 'matters' }) {
+export function AppSidebar({
+  active,
+}: {
+  active: 'documents' | 'tasks' | 'matters' | 'profile';
+}) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -241,6 +254,28 @@ export function AppSidebar({ active }: { active: 'documents' | 'tasks' | 'matter
 
         {menuOpen && (
           <div className="absolute bottom-[calc(100%+4px)] left-3 right-3 rounded-md border border-sidebar-border bg-sidebar shadow-lg">
+            {/*
+              NEW, Lawyer Profile page (this session): "View account" in the
+              footer button below previously had nothing behind it -- this
+              menu only ever contained "Sign out". /profile (GET/PATCH
+              /api/profiles/me, both real, confirmed this session) is that
+              real destination now. Kept inside this existing dropdown
+              rather than adding a new top-level nav item, since the
+              account menu is already the established place this kind of
+              "about me" action lives (the footer button's own copy says
+              "View account").
+            */}
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push('/profile');
+              }}
+              aria-current={active === 'profile' ? 'page' : undefined}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+            >
+              <User className="h-3.5 w-3.5" strokeWidth={1.75} />
+              My Profile
+            </button>
             <button
               onClick={handleSignOut}
               disabled={signingOut}

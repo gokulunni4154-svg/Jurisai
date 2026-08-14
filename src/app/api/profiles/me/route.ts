@@ -23,11 +23,24 @@ import { ValidationError } from '@/core/errors/app-error';
  * Supabase client. createClient() (File 14) is called fresh here, per
  * request, per that file's own documented constraint -- it must never be
  * cached at module scope, since it is bound to this request's cookies.
+ *
+ * Also returns the resolved `user` (AuthUser | null) alongside the service.
+ * NEW, Lawyer Profile page (this session): GET below merges a few
+ * session-sourced fields (email, role, email_verified, last_sign_in_at)
+ * into the response for display on the new /profile page. That data
+ * already lives on AuthUser (src/core/auth/types.ts) -- profiles.service.ts's
+ * own class-level doc comment on ProfileRepository confirms `profiles` has
+ * no email column by design (email lives on auth.users only). Rather than
+ * adding a new repository/service method or a new column, this route
+ * handler -- which already resolves `user` via getCurrentUser() to build
+ * the service -- reuses that same resolved value for the response. No new
+ * Supabase call, no new business logic, no schema change.
  */
 async function buildProfileService() {
   const supabase = await createClient();
   const user = await getCurrentUser();
-  return new ProfileService(user, new ProfileRepository(supabase));
+  const service = new ProfileService(user, new ProfileRepository(supabase));
+  return { service, user };
 }
 
 /**
@@ -48,10 +61,25 @@ async function parseJsonBody(request: Request): Promise<unknown> {
 
 export async function GET() {
   try {
-    const service = await buildProfileService();
+    const { service, user } = await buildProfileService();
     const profile = await service.getOwnProfile();
 
-    return NextResponse.json({ data: profile });
+    // NEW, Lawyer Profile page (this session): `user` is guaranteed
+    // non-null here -- getOwnProfile() above already called
+    // requireAuthentication() internally and would have thrown
+    // AuthenticationError (caught below) before this line if there were
+    // no session. See buildProfileService()'s own doc comment for why
+    // these session-sourced fields are merged in here rather than added
+    // to the `profiles` table or ProfileService.
+    return NextResponse.json({
+      data: {
+        ...profile,
+        email: user?.email ?? null,
+        role: user?.role ?? null,
+        email_verified: user?.emailVerified ?? false,
+        last_sign_in_at: user?.lastSignInAt ?? null,
+      },
+    });
   } catch (error) {
     return handleApiError(error);
   }
@@ -60,7 +88,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   try {
     const rawInput = await parseJsonBody(request);
-    const service = await buildProfileService();
+    const { service } = await buildProfileService();
     const profile = await service.updateOwnProfile(rawInput);
 
     return NextResponse.json({ data: profile });
