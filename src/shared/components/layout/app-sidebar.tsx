@@ -11,10 +11,18 @@
 // wired into any other existing page in this change — only
 // documents/page.tsx imports it — so nothing else gets redesigned.
 //
-// NAV ITEMS — SOURCE-VERIFIED AGAINST ACTUAL ROUTES IN THIS REPO, this
-// session (`find src/app -maxdepth 4 -type d`). Only routes that really
+// NAV ITEMS — SOURCE-VERIFIED AGAINST ACTUAL ROUTES IN THIS REPO.
+// Re-verified during the Documents workspace inspection task (this
+// session, `find src/app -maxdepth 4 -type d`). Only routes that really
 // exist are clickable:
 //   - Dashboard        -> /lawyer                (real: (dashboard)/lawyer/page.tsx)
+//   - Matters             -> /cases               (real: src/app/cases/page.tsx —
+//     landed in the "integrate lawyer matters page" commit, which merged
+//     to main BEFORE this sidebar was authored; the original "no list
+//     route exists" note above was already stale the moment this file
+//     was written. Fixed during the Documents inspection task rather than
+//     left pointing at a disabled "Coming soon" state for a page that has
+//     existed the whole time.)
 //   - Hearings & Calendar -> /hearings/upcoming   (real)
 //   - Tasks & Deadlines   -> /tasks/mine          (real)
 //   - Documents           -> /documents           (real, this page)
@@ -24,13 +32,12 @@
 //   - Reports / Settings  -> /firm/{firmId}/reports and /firm/{firmId}/settings
 //     ONLY when the caller's profile has a firm_id (firm-scoped routes,
 //     can't be linked without one). Disabled otherwise.
-// Matters, AI Assistant, Clients, and Team have NO corresponding page
-// anywhere in this repo (confirmed: no src/app/cases/page.tsx list route,
-// no ai-assistant route, no clients/team pages beyond nested firm APIs
-// with no frontend). Per the brief's own rule ("use a disabled/
-// coming-soon state, or leave it out") these render disabled with a
-// "Coming soon" label rather than linking to something that 404s or
-// silently doing nothing.
+// AI Assistant, Clients, and Team still have NO corresponding page
+// anywhere in this repo (confirmed again this session: no ai-assistant
+// route, no clients/team pages beyond nested firm APIs with no frontend).
+// Per the brief's own rule ("use a disabled/coming-soon state, or leave
+// it out") these still render disabled with a "Coming soon" label rather
+// than linking to something that 404s or silently doing nothing.
 //
 // DATA: fetches GET /api/profiles/me (confirmed real route, this
 // session) for the footer name/avatar/firm_id. Sign-out posts to
@@ -81,7 +88,7 @@ function initials(name: string | null): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
-export function AppSidebar({ active }: { active: 'documents' | 'tasks' }) {
+export function AppSidebar({ active }: { active: 'documents' | 'tasks' | 'matters' }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -111,7 +118,7 @@ export function AppSidebar({ active }: { active: 'documents' | 'tasks' }) {
 
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/lawyer', icon: LayoutDashboard },
-    { label: 'Matters', href: null, icon: Briefcase, comingSoon: true },
+    { label: 'Matters', href: '/cases', icon: Briefcase },
     { label: 'Hearings & Calendar', href: '/hearings/upcoming', icon: CalendarClock },
     { label: 'Tasks & Deadlines', href: '/tasks/mine', icon: CheckSquare },
     { label: 'Documents', href: '/documents', icon: FileText },
@@ -164,7 +171,8 @@ export function AppSidebar({ active }: { active: 'documents' | 'tasks' }) {
         {navItems.map((item) => {
           const isActive =
             (item.href === '/documents' && active === 'documents') ||
-            (item.href === '/tasks/mine' && active === 'tasks');
+            (item.href === '/tasks/mine' && active === 'tasks') ||
+            (item.href === '/cases' && active === 'matters');
           const Icon = item.icon;
 
           if (!item.href) {
