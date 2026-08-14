@@ -109,6 +109,10 @@
 // ever revisited, switching it to this same `useParams()` approach
 // would remove the Promise-typing question rather than resolve it.
 
+// AMENDMENT, later session — Case Notes & Timeline navigation. See the
+// header buttons' own inline comment for the full gap description and
+// reasoning. Two-button addition only; no other change to this file.
+
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
@@ -123,6 +127,8 @@ import {
   Calendar,
   User,
   Gavel,
+  StickyNote,
+  History,
 } from 'lucide-react';
 
 // ---- Shapes — see file header for exactly which fields are confirmed
@@ -273,6 +279,33 @@ export default function CaseDetailPage() {
             {caseRow?.title ?? (isLoading ? 'Loading…' : 'Case')}
           </h1>
         </div>
+        {/*
+          AMENDMENT, this session -- Case Notes & Timeline navigation.
+          Both /cases/[id]/notes and /cases/[id]/timeline (real,
+          confirmed pages backed by working GET/POST APIs -- see
+          api/cases/[id]/notes/route.ts and api/cases/[id]/timeline/
+          route.ts) existed with zero entry points anywhere in this
+          repo (confirmed via repo-wide grep this session) -- the only
+          way to reach either was typing the URL directly. Added as two
+          more header buttons, exactly mirroring the existing Hearings
+          button's established pattern (same button shape, same
+          router.push, same icon+label layout) rather than inventing a
+          new nav treatment.
+        */}
+        <button
+          onClick={() => router.push(`/cases/${caseId}/notes`)}
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
+        >
+          <StickyNote className="h-3.5 w-3.5" />
+          Notes
+        </button>
+        <button
+          onClick={() => router.push(`/cases/${caseId}/timeline`)}
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
+        >
+          <History className="h-3.5 w-3.5" />
+          Timeline
+        </button>
         <button
           onClick={() => router.push(`/cases/${caseId}/hearings`)}
           className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
