@@ -129,6 +129,12 @@ import {
   Gavel,
   StickyNote,
   History,
+  FileText,
+  FileImage,
+  File as FileIcon,
+  Download,
+  Paperclip,
+  X,
 } from 'lucide-react';
 
 // ---- Shapes — see file header for exactly which fields are confirmed
@@ -158,6 +164,31 @@ interface TaskRow {
   due_date: string | null;
   created_by: string;
   created_at: string;
+}
+
+// Documents linked to this case via `case_documents` — see
+// GET/POST /api/cases/[id]/documents (existing routes, already wired
+// to CaseService#listCaseDocuments/addDocumentToCase, previously with
+// no entry point anywhere in the UI — same class of gap the Notes/
+// Timeline/Hearings header buttons above already closed once each).
+// Shape matches the real `documents` table (Legal Vault) exactly, per
+// documents/page.tsx's own confirmed DocumentRow interface — only the
+// fields this section actually renders are kept.
+interface CaseDocumentRow {
+  id: string;
+  title: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
+// Vault document available to attach — same shape, listed via the
+// existing GET /api/documents endpoint (documents/page.tsx's own
+// confirmed `{ data: { documents, total, limit, offset } }` envelope).
+interface VaultDocumentRow {
+  id: string;
+  title: string;
+  mime_type: string;
+  size_bytes: number;
 }
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -219,6 +250,35 @@ function formatDueDate(dateString: string): string {
   });
 }
 
+// File-type icon + size formatting, copied verbatim from
+// documents/page.tsx's confirmed fileMeta()/FileTypeIcon()/
+// formatFileSize() (trimmed to the mime groups this section actually
+// needs an icon for — pdf/doc share one, image gets its own, anything
+// else falls back to the generic file icon).
+function fileTypeGroup(mime: string): 'image' | 'doc' {
+  return mime.startsWith('image/') ? 'image' : 'doc';
+}
+
+function DocFileTypeIcon({ mime }: { mime: string }) {
+  const cls = 'h-[18px] w-[18px] text-muted-foreground';
+  return fileTypeGroup(mime) === 'image' ? (
+    <FileImage className={cls} strokeWidth={1.75} />
+  ) : mime === 'application/pdf' ||
+    mime === 'application/msword' ||
+    mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ? (
+    <FileText className={cls} strokeWidth={1.75} />
+  ) : (
+    <FileIcon className={cls} strokeWidth={1.75} />
+  );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 export default function CaseDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -226,6 +286,8 @@ export default function CaseDetailPage() {
 
   const [caseRow, setCaseRow] = useState<CaseRow | null>(null);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [documents, setDocuments] = useState<CaseDocumentRow[]>([]);
+  const [hiddenDocumentCount, setHiddenDocumentCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -250,6 +312,24 @@ export default function CaseDetailPage() {
       // source (unlike File 160's Open Item #32, which applied to
       // endpoints whose ordering was never confirmed).
       setTasks(tasksJson.data);
+
+      const documentsRes = await fetch(`/api/cases/${caseId}/documents`, { credentials: 'include' });
+      if (!documentsRes.ok) throw new Error(await extractErrorMessage(documentsRes));
+      const documentsJson = await documentsRes.json();
+      // Real confirmed envelope: { data: documents } — see
+      // cases/[id]/documents/route.ts's own GET handler
+      // (CaseService#listCaseDocuments). Defensively filtered: the
+      // repository's embedded `documents(*)` Postgrest join is subject
+      // to `documents` table RLS same as findManyVisibleWithClient()'s
+      // already-documented `clients` embed — a document added to this
+      // case by a different owner can come back as `documents: null`
+      // for a caller who isn't that document's owner, not because the
+      // link doesn't exist. Not silently swallowed into an empty list
+      // without explanation; see the section's own "hidden documents"
+      // notice below.
+      const rawDocuments: (CaseDocumentRow | null)[] = documentsJson.data;
+      setDocuments(rawDocuments.filter((d): d is CaseDocumentRow => d != null));
+      setHiddenDocumentCount(rawDocuments.filter((d) => d == null).length);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load this case.');
     } finally {
@@ -335,6 +415,12 @@ export default function CaseDetailPage() {
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
             <TasksSection caseId={caseId} tasks={tasks} onTasksChanged={setTasks} />
+            <DocumentsSection
+              caseId={caseId}
+              documents={documents}
+              onDocumentsChanged={setDocuments}
+              hiddenDocumentCount={hiddenDocumentCount}
+            />
           </div>
         )}
       </main>
@@ -636,6 +722,288 @@ function TasksSection({
             </div>
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+// ---- Documents section ----
+//
+// Mirrors TasksSection's overall shape (list + inline create/attach
+// form + per-row busy/error state), adapted for a link/unlink
+// relationship instead of full CRUD — a case document is never
+// created here, only attached from (or detached back to) the
+// caller's existing Legal Vault (GET/POST/DELETE existing since a
+// prior session, previously with zero UI entry point anywhere in the
+// repo — confirmed via repo-wide grep this session, same class of gap
+// as the Notes/Timeline/Hearings header buttons above).
+//
+// FLAGGED, NOT SOLVED HERE, same posture as TasksSection's own delete
+// button: CaseService#removeDocumentFromCase is owner-of-case only,
+// and #addDocumentToCase requires either case ownership or an active
+// read_write grant PLUS ownership of the document being attached
+// (case.service.ts's own doc comments, confirmed real). This page has
+// no client-side way to know the caller's role in advance, so Attach/
+// Remove are always rendered and a 403 surfaces as an inline error,
+// exactly like every other action on this page.
+
+function DocumentsSection({
+  caseId,
+  documents,
+  onDocumentsChanged,
+  hiddenDocumentCount,
+}: {
+  caseId: string;
+  documents: CaseDocumentRow[];
+  onDocumentsChanged: (documents: CaseDocumentRow[]) => void;
+  hiddenDocumentCount: number;
+}) {
+  const [showAttachForm, setShowAttachForm] = useState(false);
+  const [isLoadingVault, setIsLoadingVault] = useState(false);
+  const [vaultDocuments, setVaultDocuments] = useState<VaultDocumentRow[]>([]);
+  const [vaultError, setVaultError] = useState<string | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState('');
+  const [isAttaching, setIsAttaching] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
+  const [busyDocId, setBusyDocId] = useState<string | null>(null);
+  const [docErrors, setDocErrors] = useState<Record<string, string>>({});
+
+  const linkedIds = new Set(documents.map((d) => d.id));
+
+  // Loads the caller's own Legal Vault to populate the "attach"
+  // picker — GET /api/documents, same confirmed envelope
+  // documents/page.tsx already relies on. Only fetched when the
+  // picker is opened, not eagerly on section mount.
+  const openAttachForm = async () => {
+    setShowAttachForm(true);
+    setAttachError(null);
+    setIsLoadingVault(true);
+    setVaultError(null);
+    try {
+      const res = await fetch('/api/documents?limit=100&offset=0', { credentials: 'include' });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      const list: VaultDocumentRow[] = json.data.documents;
+      setVaultDocuments(list);
+    } catch (err) {
+      setVaultError(err instanceof Error ? err.message : 'Could not load your documents.');
+    } finally {
+      setIsLoadingVault(false);
+    }
+  };
+
+  const closeAttachForm = () => {
+    setShowAttachForm(false);
+    setSelectedDocumentId('');
+    setAttachError(null);
+  };
+
+  const attachableDocuments = vaultDocuments.filter((d) => !linkedIds.has(d.id));
+
+  const handleAttach = async () => {
+    if (!selectedDocumentId) {
+      setAttachError('Choose a document first.');
+      return;
+    }
+    setIsAttaching(true);
+    setAttachError(null);
+    try {
+      const res = await fetch(`/api/cases/${caseId}/documents`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: selectedDocumentId }),
+      });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+
+      // POST's real response envelope is `{ data: link }` — the raw
+      // case_documents join row (case_id/document_id only), not the
+      // full document — see cases/[id]/documents/route.ts's own doc
+      // comment. The full row is already sitting in vaultDocuments
+      // from the picker fetch above, so it's appended from there
+      // instead of re-fetching the whole case-documents list.
+      const attached = vaultDocuments.find((d) => d.id === selectedDocumentId);
+      if (attached) {
+        onDocumentsChanged([attached, ...documents]);
+      }
+      closeAttachForm();
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : 'Could not attach this document.');
+    } finally {
+      setIsAttaching(false);
+    }
+  };
+
+  const handleDownload = async (doc: CaseDocumentRow) => {
+    setBusyDocId(doc.id);
+    setDocErrors((prev) => ({ ...prev, [doc.id]: '' }));
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/download`, { credentials: 'include' });
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      const json = await res.json();
+      window.open(json.data.url as string, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setDocErrors((prev) => ({
+        ...prev,
+        [doc.id]: err instanceof Error ? err.message : 'Could not get a download link.',
+      }));
+    } finally {
+      setBusyDocId(null);
+    }
+  };
+
+  // See file header: always rendered, backed by the Service's own
+  // owner-of-case enforcement — a 403 surfaces here as an inline
+  // per-row error, same posture as TasksSection#handleDelete.
+  const handleRemove = async (doc: CaseDocumentRow) => {
+    setBusyDocId(doc.id);
+    setDocErrors((prev) => ({ ...prev, [doc.id]: '' }));
+    try {
+      const res = await fetch(`/api/cases/${caseId}/documents/${doc.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      // Real confirmed shape: bare 204, no JSON body — see
+      // cases/[id]/documents/[documentId]/route.ts's own DELETE
+      // handler.
+      if (!res.ok) throw new Error(await extractErrorMessage(res));
+      onDocumentsChanged(documents.filter((d) => d.id !== doc.id));
+    } catch (err) {
+      setDocErrors((prev) => ({
+        ...prev,
+        [doc.id]: err instanceof Error ? err.message : 'Could not remove this document.',
+      }));
+    } finally {
+      setBusyDocId(null);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Paperclip className="h-4 w-4 text-primary" strokeWidth={1.75} />
+          <h2 className="font-serif text-[18px] text-foreground">Documents</h2>
+        </div>
+        <button
+          onClick={() => (showAttachForm ? closeAttachForm() : openAttachForm())}
+          className="flex items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
+        >
+          {showAttachForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+          {showAttachForm ? 'Cancel' : 'Attach document'}
+        </button>
+      </div>
+
+      {showAttachForm && (
+        <div className="mb-5 flex flex-col gap-3 rounded-md border border-border bg-background p-4">
+          {isLoadingVault ? (
+            <div className="flex items-center gap-2 py-2 text-[13px] text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading your documents…
+            </div>
+          ) : vaultError ? (
+            <p role="alert" className="text-[12px] text-destructive">
+              {vaultError}
+            </p>
+          ) : attachableDocuments.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">
+              No unlinked documents in your vault. Upload one from the Documents workspace first.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <label htmlFor="attach-document" className="text-[12px] font-medium text-foreground">
+                  Choose a document from your vault
+                </label>
+                <select
+                  id="attach-document"
+                  value={selectedDocumentId}
+                  onChange={(e) => setSelectedDocumentId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <option value="">Select a document…</option>
+                  {attachableDocuments.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.title} ({formatFileSize(doc.size_bytes)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {attachError !== null && (
+                <p role="alert" className="text-[12px] text-destructive">
+                  {attachError}
+                </p>
+              )}
+
+              <button
+                onClick={handleAttach}
+                disabled={isAttaching}
+                className="flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isAttaching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {isAttaching ? 'Attaching…' : 'Attach'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {documents.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">
+          No documents linked to this case yet.
+        </p>
+      ) : (
+        <div className="flex flex-col divide-y divide-border">
+          {documents.map((doc) => (
+            <div key={doc.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <DocFileTypeIcon mime={doc.mime_type} />
+                  <p className="truncate text-[13px] font-medium text-foreground">{doc.title}</p>
+                </div>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {formatFileSize(doc.size_bytes)}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                <button
+                  onClick={() => handleDownload(doc)}
+                  disabled={busyDocId === doc.id}
+                  className="flex items-center gap-1 text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Download className="h-3 w-3" />
+                  Download
+                </button>
+                <button
+                  onClick={() => handleRemove(doc)}
+                  disabled={busyDocId === doc.id}
+                  className="ml-auto flex items-center gap-1 text-destructive hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busyDocId === doc.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  Remove
+                </button>
+              </div>
+
+              {docErrors[doc.id] && (
+                <p className="text-[12px] text-destructive">{docErrors[doc.id]}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hiddenDocumentCount > 0 && (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          {hiddenDocumentCount} additional linked document
+          {hiddenDocumentCount === 1 ? ' is' : 's are'} not visible to you (added by another
+          member of this case).
+        </p>
       )}
     </section>
   );
