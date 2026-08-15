@@ -11,12 +11,37 @@ import { TeamRepository } from './team.repository';
 import { FirmMemberRepository } from './firm-member.repository';
 import type { TeamMemberRepository } from './team-member.repository';
 import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
+import type { FirmRepository } from '@/modules/billing/firm.repository';
+import type { ProfileRepository } from '@/modules/profiles/profile.repository';
 
 const INVITATION_EXPIRY_DAYS = 7;
 
 interface CreateTeamInvitationInput {
   readonly teamId: string;
   readonly profileId: string;
+}
+
+/**
+ * NEW — My Invitations task, this session. Enriched shape returned by
+ * listPendingForCurrentUser() below, mirroring
+ * PendingFirmInvitation (firm-invitation.service.ts) — same reasoning:
+ * a frontend rendering this list needs teamName/firmName/
+ * invitedByName, not bare UUIDs. team_invitations has no
+ * email/role/token columns at all (Decisions #11/#12, see class doc
+ * comment), so this shape is narrower than PendingFirmInvitation by
+ * construction, not by omission.
+ */
+export interface PendingTeamInvitation {
+  readonly id: string;
+  readonly team_id: string;
+  readonly teamName: string;
+  readonly firm_id: string;
+  readonly firmName: string;
+  readonly status: string;
+  readonly invited_by: string;
+  readonly invitedByName: string | null;
+  readonly expires_at: string;
+  readonly created_at: string;
 }
 
 /**
@@ -89,6 +114,12 @@ export class TeamInvitationService extends BaseService {
     private readonly firmMemberRepository: FirmMemberRepository,
     private readonly teamMemberRepository: TeamMemberRepository,
     private readonly auditLogRepository: AuditLogRepository,
+    // NEW — My Invitations task, this session. Read-only, used only by
+    // listPendingForCurrentUser()'s enrichment below — see that
+    // method's own doc comment and PendingTeamInvitation's. Same
+    // reasoning as FirmInvitationService's identical addition.
+    private readonly firmRepository: FirmRepository,
+    private readonly profileRepository: ProfileRepository,
   ) {
     super(currentUser);
   }
@@ -324,10 +355,46 @@ export class TeamInvitationService extends BaseService {
 
   /**
    * Lists the current user's own pending team invitations.
+   *
+   * ENRICHED THIS SESSION (My Invitations task) — same reasoning as
+   * FirmInvitationService#listPendingForCurrentUser()'s identical
+   * change: raw rows carry only team_id/invited_by as bare UUIDs.
+   * Resolves teamName (via resolveTeamFirmId()'s own teamRepository,
+   * which also yields firm_id for firmName), and invitedByName, per
+   * invitation, in parallel via Promise.all. Same defensive
+   * findById-with-fallback posture, same reasoning: team_invitations.
+   * team_id/invited_by both cascade-delete (migration header,
+   * assumptions A/C — applied identically to team_invitations,
+   * confirmed same migration file), so a dangling reference shouldn't
+   * be reachable in practice, but the fallback costs nothing.
    */
-  async listPendingForCurrentUser() {
+  async listPendingForCurrentUser(): Promise<PendingTeamInvitation[]> {
     const user = this.requireAuthentication();
 
-    return this.teamInvitationRepository.findPendingByProfileId(user.id);
+    const invitations = await this.teamInvitationRepository.findPendingByProfileId(user.id);
+
+    return Promise.all(
+      invitations.map(async (invitation) => {
+        const team = await this.teamRepository.findById(invitation.team_id);
+
+        const [firm, inviter] = await Promise.all([
+          team ? this.firmRepository.findById(team.firm_id) : Promise.resolve(null),
+          this.profileRepository.findById(invitation.invited_by),
+        ]);
+
+        return {
+          id: invitation.id,
+          team_id: invitation.team_id,
+          teamName: team?.name ?? 'Unknown team',
+          firm_id: team?.firm_id ?? '',
+          firmName: firm?.name ?? 'Unknown firm',
+          status: invitation.status,
+          invited_by: invitation.invited_by,
+          invitedByName: inviter?.full_name ?? null,
+          expires_at: invitation.expires_at,
+          created_at: invitation.created_at,
+        };
+      }),
+    );
   }
 }

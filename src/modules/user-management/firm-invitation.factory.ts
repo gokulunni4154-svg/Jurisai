@@ -8,6 +8,8 @@ import { FirmMemberRepository } from './firm-member.repository';
 import { FirmInvitationService } from './firm-invitation.service';
 import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import { AuthUserRepository } from './auth-user.repository';
+import { FirmRepository } from '@/modules/billing/firm.repository';
+import { ProfileRepository } from '@/modules/profiles/profile.repository';
 
 /**
  * Phase 4 — Enterprise & Collaboration, Invitation System. Mirrors
@@ -30,6 +32,21 @@ import { AuthUserRepository } from './auth-user.repository';
  * the same adminClient instance already in scope for this, rather than
  * constructing a second client, matches this factory's own established
  * one-client convention.
+ *
+ * FirmRepository and ProfileRepository — NEW, My Invitations task, this
+ * session — back listPendingForCurrentUser()'s firmName/invitedByName
+ * enrichment (see that method's own doc comment). Same adminClient
+ * reuse: the caller viewing their own pending invitation is, by
+ * definition, not yet a firm_members row for that firm, so an
+ * RLS-respecting client would fail to read the firm name at all (firms
+ * SELECT is owner/admin-only — see firms/[id]/route.ts's own doc
+ * comment) or the inviter's profile (profiles SELECT is
+ * owner-or-admin-only). Same "service-layer read stands in for
+ * visibility RLS doesn't grant" reasoning
+ * ProfileService#getPublicDisplayName() already established for Case
+ * Timeline, applied here via direct repository composition rather than
+ * a cross-Service call (this project's established no-cross-Service-
+ * calls convention).
  */
 export function createFirmInvitationService(currentUser: AuthUser | null): FirmInvitationService {
   const adminClient = createAdminClient();
@@ -38,6 +55,8 @@ export function createFirmInvitationService(currentUser: AuthUser | null): FirmI
   const firmMemberRepository = new FirmMemberRepository(adminClient);
   const auditLogRepository = new AuditLogRepository(adminClient);
   const authUserRepository = new AuthUserRepository(adminClient);
+  const firmRepository = new FirmRepository(adminClient);
+  const profileRepository = new ProfileRepository(adminClient);
 
   return new FirmInvitationService(
     currentUser,
@@ -45,5 +64,7 @@ export function createFirmInvitationService(currentUser: AuthUser | null): FirmI
     firmMemberRepository,
     auditLogRepository,
     authUserRepository,
+    firmRepository,
+    profileRepository,
   );
 }

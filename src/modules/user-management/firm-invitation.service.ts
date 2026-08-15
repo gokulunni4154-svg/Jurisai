@@ -30,6 +30,32 @@ import { FirmInvitationRepository } from './firm-invitation.repository';
 import { FirmMemberRepository } from './firm-member.repository';
 import type { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import type { AuthUserRepository } from './auth-user.repository';
+import type { FirmRepository } from '@/modules/billing/firm.repository';
+import type { ProfileRepository } from '@/modules/profiles/profile.repository';
+
+/**
+ * NEW — My Invitations task, this session. Enriched shape returned by
+ * listPendingForCurrentUser() below: the raw FirmInvitationRow plus
+ * firmName/invitedByName, resolved server-side so the (as-yet
+ * nonexistent) Lawyer Terminal frontend consuming this has something
+ * human-readable to render, rather than bare firm_id/invited_by UUIDs.
+ * Neither field existed on this method's return type before this
+ * session -- confirmed via full-repo search that GET
+ * /api/invitations/firm/pending (this method's only route caller) had
+ * zero frontend consumers anywhere in the project prior to this task.
+ */
+export interface PendingFirmInvitation {
+  readonly id: string;
+  readonly firm_id: string;
+  readonly firmName: string;
+  readonly email: string;
+  readonly role: FirmRole;
+  readonly status: string;
+  readonly invited_by: string;
+  readonly invitedByName: string | null;
+  readonly expires_at: string;
+  readonly created_at: string;
+}
 
 const INVITATION_EXPIRY_DAYS = 7;
 
@@ -78,6 +104,13 @@ export class FirmInvitationService extends BaseService {
     private readonly firmMemberRepository: FirmMemberRepository,
     private readonly auditLogRepository: AuditLogRepository,
     private readonly authUserRepository: AuthUserRepository,
+    // NEW — My Invitations task, this session. Both read-only, both
+    // used only by listPendingForCurrentUser()'s enrichment below (see
+    // that method's own doc comment). Neither participates in any
+    // write path, so adding them doesn't touch this class's existing
+    // authorization behavior anywhere else.
+    private readonly firmRepository: FirmRepository,
+    private readonly profileRepository: ProfileRepository,
   ) {
     super(currentUser);
   }
@@ -314,10 +347,49 @@ export class FirmInvitationService extends BaseService {
   /**
    * Lists the current user's own pending invitations -- the in-app
    * pending-list read path (Decision #3).
+   *
+   * ENRICHED THIS SESSION (My Invitations task): the raw repository
+   * rows carry firm_id/invited_by as bare UUIDs only -- fine for the
+   * accept-path methods above, which never need to display anything,
+   * but useless to a frontend rendering an actual invitations list.
+   * Resolves firmName (firmRepository.findById) and invitedByName
+   * (profileRepository.findById) per invitation, in parallel via
+   * Promise.all.
+   *
+   * DELIBERATELY uses findById (returns null), not findByIdOrThrow,
+   * for both lookups, and falls back to a placeholder string rather
+   * than letting one bad row 500 the entire list -- firms.owner_id and
+   * firm_invitations.invited_by both cascade-delete their respective
+   * invitation rows (see this table's migration header, assumptions A
+   * and C), so a dangling reference shouldn't be reachable in practice,
+   * but a defensive fallback costs nothing and keeps one edge case from
+   * taking down every other pending invitation in the response.
    */
-  async listPendingForCurrentUser() {
+  async listPendingForCurrentUser(): Promise<PendingFirmInvitation[]> {
     const user = this.requireAuthentication();
 
-    return this.firmInvitationRepository.findPendingByProfileId(user.id);
+    const invitations = await this.firmInvitationRepository.findPendingByProfileId(user.id);
+
+    return Promise.all(
+      invitations.map(async (invitation) => {
+        const [firm, inviter] = await Promise.all([
+          this.firmRepository.findById(invitation.firm_id),
+          this.profileRepository.findById(invitation.invited_by),
+        ]);
+
+        return {
+          id: invitation.id,
+          firm_id: invitation.firm_id,
+          firmName: firm?.name ?? 'Unknown firm',
+          email: invitation.email,
+          role: invitation.role as FirmRole,
+          status: invitation.status,
+          invited_by: invitation.invited_by,
+          invitedByName: inviter?.full_name ?? null,
+          expires_at: invitation.expires_at,
+          created_at: invitation.created_at,
+        };
+      }),
+    );
   }
 }

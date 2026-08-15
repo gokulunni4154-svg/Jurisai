@@ -9,6 +9,8 @@ import { FirmMemberRepository } from './firm-member.repository';
 import { TeamMemberRepository } from './team-member.repository';
 import { TeamInvitationService } from './team-invitation.service';
 import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
+import { FirmRepository } from '@/modules/billing/firm.repository';
+import { ProfileRepository } from '@/modules/profiles/profile.repository';
 
 /**
  * Phase 4 — Enterprise & Collaboration, Invitation System. Same
@@ -31,6 +33,12 @@ import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
  * pasted this session — constructed here on the same trusted
  * BaseRepository-inheritance basis team-invitation.service.ts's own doc
  * comment already flags, not a fresh confirmation.
+ *
+ * FirmRepository and ProfileRepository — NEW, My Invitations task, this
+ * session — back listPendingForCurrentUser()'s teamName/firmName/
+ * invitedByName enrichment (see that method's own doc comment). Same
+ * "caller isn't a member yet, so RLS wouldn't grant this read anyway"
+ * reasoning as firm-invitation.factory.ts's identical addition.
  */
 export function createTeamInvitationService(currentUser: AuthUser | null): TeamInvitationService {
   const adminClient = createAdminClient();
@@ -40,6 +48,8 @@ export function createTeamInvitationService(currentUser: AuthUser | null): TeamI
   const firmMemberRepository = new FirmMemberRepository(adminClient);
   const teamMemberRepository = new TeamMemberRepository(adminClient);
   const auditLogRepository = new AuditLogRepository(adminClient);
+  const firmRepository = new FirmRepository(adminClient);
+  const profileRepository = new ProfileRepository(adminClient);
 
   return new TeamInvitationService(
     currentUser,
@@ -48,5 +58,7 @@ export function createTeamInvitationService(currentUser: AuthUser | null): TeamI
     firmMemberRepository,
     teamMemberRepository,
     auditLogRepository,
+    firmRepository,
+    profileRepository,
   );
 }

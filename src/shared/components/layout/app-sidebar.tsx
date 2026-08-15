@@ -75,6 +75,19 @@
 // item like Matters/Tasks/Documents do. Points at /lawyer-inquiries
 // (new page, this session) -- GET /api/lawyer-inquires (new route, this
 // session) backs it.
+//
+// AMENDMENT -- My Invitations page task, later session: `active` widened
+// again to also accept 'invitations', and a "My Invitations" item added
+// to the account-menu dropdown, directly below "My Verification". Same
+// reasoning as the My Profile/My Verification amendments above, NOT the
+// Inquiries one: GET /api/invitations/firm/pending and GET
+// /api/invitations/team/pending (both real, pre-existing) had no
+// frontend consumer anywhere in the repo -- a pending firm/team
+// invitation is a "status of my own account" concern with no external
+// party waiting on it, unlike an inquiry, so it belongs in the same
+// "about me" menu as My Profile/My Verification rather than becoming a
+// fourth top-level item. Points at /invitations (new page, this
+// session).
 
 'use client';
 
@@ -99,6 +112,7 @@ import {
   Loader2,
   User,
   BadgeCheck,
+  Mail,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -125,7 +139,14 @@ function initials(name: string | null): string {
 export function AppSidebar({
   active,
 }: {
-  active: 'documents' | 'tasks' | 'matters' | 'profile' | 'verification' | 'inquiries';
+  active:
+    | 'documents'
+    | 'tasks'
+    | 'matters'
+    | 'profile'
+    | 'verification'
+    | 'inquiries'
+    | 'invitations';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -313,6 +334,17 @@ export function AppSidebar({
             >
               <BadgeCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
               My Verification
+            </button>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push('/invitations');
+              }}
+              aria-current={active === 'invitations' ? 'page' : undefined}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+            >
+              <Mail className="h-3.5 w-3.5" strokeWidth={1.75} />
+              My Invitations
             </button>
             <button
               onClick={handleSignOut}
