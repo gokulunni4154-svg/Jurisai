@@ -52,6 +52,17 @@
 // destination that never existed anywhere in this repo until this
 // change -- confirmed via full-repo search this session (no
 // profile/account/settings page other than firm-scoped Settings).
+//
+// AMENDMENT -- My Verification page task, later session: `active`
+// widened again to also accept 'verification', and a "My Verification"
+// item added to the same account-menu dropdown, directly below "My
+// Profile". Same reasoning as that earlier amendment: GET/POST
+// /api/professional-verification/me (both real, pre-existing) had no
+// frontend consumer anywhere in the repo -- the only page under
+// professional-verification/ was the admin review queue, a different
+// surface entirely. This is the same class of "about me" action as "My
+// Profile", so it lives in the same menu rather than becoming a new
+// top-level nav item.
 
 'use client';
 
@@ -74,6 +85,7 @@ import {
   LogOut,
   Loader2,
   User,
+  BadgeCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -100,7 +112,7 @@ function initials(name: string | null): string {
 export function AppSidebar({
   active,
 }: {
-  active: 'documents' | 'tasks' | 'matters' | 'profile';
+  active: 'documents' | 'tasks' | 'matters' | 'profile' | 'verification';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -275,6 +287,17 @@ export function AppSidebar({
             >
               <User className="h-3.5 w-3.5" strokeWidth={1.75} />
               My Profile
+            </button>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push('/professional-verification');
+              }}
+              aria-current={active === 'verification' ? 'page' : undefined}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+            >
+              <BadgeCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
+              My Verification
             </button>
             <button
               onClick={handleSignOut}
