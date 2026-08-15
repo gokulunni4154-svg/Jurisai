@@ -161,6 +161,47 @@ export class LawyerInquiryRepository {
   }
 
   /**
+   * NEW -- lists every inquiry currently assigned to a specific lawyer
+   * (target_profile_id = targetProfileId), most recent first. Built for
+   * the Lawyer Terminal "My Inquiries" gap (accept/decline/convert all
+   * pre-existed with zero list/read entry point for the lawyer they act
+   * on) -- see lawyer-inquiry.service.ts's listMyInquiries() and the
+   * accompanying implementation report for the full audit writeup.
+   *
+   * FLAGGED, same trust posture as create() above (this file's own
+   * header comment): targetProfileId is passed in and trusted, not
+   * derived from anything this repository method checks itself --
+   * whatever calls this (LawyerInquiryService#listMyInquiries()) is
+   * responsible for passing the AUTHENTICATED caller's own id, never a
+   * client-supplied one. This mirrors lawyer_inquiries' own real SELECT
+   * RLS policy (lawyer_inquiries_select_assigned_lawyer: `target_profile_id
+   * = auth.uid()`), even though this repository is constructed with the
+   * admin client (RLS bypassed) -- the filter here is what actually
+   * enforces the same boundary the RLS policy would, for the one caller
+   * (the Service layer) that is expected to ever invoke this method with
+   * anything other than a self-scoped id.
+   *
+   * No status filter -- returns pending, accepted, AND converted_to_case
+   * rows for this lawyer. The UI consuming this can filter/group
+   * client-side; keeping this method's own contract simple (one lawyer's
+   * full inquiry history) avoids inventing a query-param shape with no
+   * existing precedent elsewhere in this file.
+   */
+  async listForTargetProfile(targetProfileId: string): Promise<LawyerInquiryRow[]> {
+    const { data, error } = await this.client
+      .from(TABLE)
+      .select('*')
+      .eq('target_profile_id', targetProfileId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  /**
    * Transitions an inquiry from pending to accepted (§2 step 9).
    *
    * FLAGGED: does not verify the row's CURRENT status is 'pending'

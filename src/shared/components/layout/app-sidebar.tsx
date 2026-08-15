@@ -63,6 +63,18 @@
 // surface entirely. This is the same class of "about me" action as "My
 // Profile", so it lives in the same menu rather than becoming a new
 // top-level nav item.
+//
+// AMENDMENT -- My Inquiries page task, later session: `active` widened
+// again to also accept 'inquiries', and a real "Inquiries" top-level nav
+// item added (between Matters and Hearings & Calendar), replacing what
+// was previously nothing -- there was no "Inquiries"/"Contact requests"
+// entry anywhere in this list before. Unlike My Profile/My Verification,
+// this is NOT placed in the account dropdown: accepting/declining/
+// converting an inquiry is a regular worklist action a lawyer checks
+// often, not an "about me" settings page, so it gets its own top-level
+// item like Matters/Tasks/Documents do. Points at /lawyer-inquiries
+// (new page, this session) -- GET /api/lawyer-inquires (new route, this
+// session) backs it.
 
 'use client';
 
@@ -76,6 +88,7 @@ import {
   CheckSquare,
   FileText,
   FolderKanban,
+  Inbox,
   Sparkles,
   Users,
   UserSquare2,
@@ -112,7 +125,7 @@ function initials(name: string | null): string {
 export function AppSidebar({
   active,
 }: {
-  active: 'documents' | 'tasks' | 'matters' | 'profile' | 'verification';
+  active: 'documents' | 'tasks' | 'matters' | 'profile' | 'verification' | 'inquiries';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -144,6 +157,7 @@ export function AppSidebar({
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: '/lawyer', icon: LayoutDashboard },
     { label: 'Matters', href: '/cases', icon: Briefcase },
+    { label: 'Inquiries', href: '/lawyer-inquiries', icon: Inbox },
     { label: 'Hearings & Calendar', href: '/hearings/upcoming', icon: CalendarClock },
     { label: 'Tasks & Deadlines', href: '/tasks/mine', icon: CheckSquare },
     { label: 'Documents', href: '/documents', icon: FileText },
@@ -197,7 +211,8 @@ export function AppSidebar({
           const isActive =
             (item.href === '/documents' && active === 'documents') ||
             (item.href === '/tasks/mine' && active === 'tasks') ||
-            (item.href === '/cases' && active === 'matters');
+            (item.href === '/cases' && active === 'matters') ||
+            (item.href === '/lawyer-inquiries' && active === 'inquiries');
           const Icon = item.icon;
 
           if (!item.href) {

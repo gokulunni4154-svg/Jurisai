@@ -109,6 +109,13 @@ export interface LawyerInquiryListing {
   status: 'pending' | 'accepted' | 'converted_to_case';
   documentStoragePath: string;
   analysisResult: unknown;
+  // NEW -- added for listMyInquiries()'s consumer (the "My Inquiries"
+  // page needs a created date to sort/display by). Additive only:
+  // every existing caller of toListing() (accept/decline/assign/
+  // convert's own return values) already has this on the row it maps
+  // from, so this is a strictly wider response shape, not a breaking
+  // change to any existing route's contract.
+  createdAt: string;
 }
 
 /**
@@ -208,6 +215,27 @@ export class LawyerInquiryService extends BaseService {
     });
 
     return toListing(created);
+  }
+
+  /**
+   * NEW -- lists every inquiry assigned to the CURRENT authenticated
+   * caller (self-scoped, no id param -- same "no :id, resolves off the
+   * authenticated caller" shape as CaseAccessGrantService#listMyCases(),
+   * confirmed real precedent this session). Closes the "My Inquiries"
+   * gap: accept/decline/convert have been fully implemented and
+   * routable since earlier sessions, but nothing anywhere in this repo
+   * ever listed a lawyer's OWN inquiries for them to act on in the
+   * first place -- see the accompanying implementation report.
+   *
+   * requireAuthentication() supplies the id this filters on -- never a
+   * client-supplied value, matching repository.listForTargetProfile()'s
+   * own trust-posture comment.
+   */
+  async listMyInquiries(): Promise<LawyerInquiryListing[]> {
+    const user = this.requireAuthentication();
+
+    const rows = await this.repository.listForTargetProfile(user.id);
+    return rows.map(toListing);
   }
 
   /**
@@ -383,6 +411,7 @@ function toListing(row: {
   status: 'pending' | 'accepted' | 'converted_to_case';
   document_storage_path: string;
   analysis_result: unknown;
+  created_at: string;
 }): LawyerInquiryListing {
   return {
     id: row.id,
@@ -393,5 +422,6 @@ function toListing(row: {
     status: row.status,
     documentStoragePath: row.document_storage_path,
     analysisResult: row.analysis_result,
+    createdAt: row.created_at,
   };
 }
