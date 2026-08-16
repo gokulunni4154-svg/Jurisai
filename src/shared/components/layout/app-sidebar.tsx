@@ -129,6 +129,36 @@
 // firm-member-authorized -- confirmed via a full audit of current main
 // and the live Supabase project this session. This nav change plus the
 // new page are the only missing layer.
+//
+// AMENDMENT -- Firm Terminal Observability / Run History integration
+// task, later session: `active` widened again to also accept
+// 'observability'. EXISTING PAGE + BACKEND, NO GAP: /observability
+// (firm-owner view) and /observability/admin (platform-admin view),
+// their two API routes, and ObservabilityService -- including its own
+// firm-membership-verified authorization (see that file's own "SECURITY
+// FIX" doc comment -- a real cross-firm data leak found and closed in an
+// earlier session, unrelated to this task) -- were all already fully
+// built with zero navigation entry anywhere in the repo -- the exact gap
+// a prior repository audit flagged. This nav item, pointing at the
+// existing `/observability` page, is the only change this task makes;
+// the page itself is not touched. Not firm-scoped in the URL the way
+// Clients/Team/Reports/Settings are (`/firm/{firmId}/...`) --
+// ObservabilityService#getFirmRunHistory resolves the caller's own firm
+// server-side from their profile, never from a URL param -- but still
+// gated on `firmId` presence here for the same UX reason those four
+// items are: a personal-organization caller (no firm_id) would only hit
+// a NotFoundError from the service, so the item degrades to "Coming
+// soon" instead of linking to a page that just errors. Deliberately NOT
+// placed in the account-menu dropdown with My Profile/My Notifications/
+// etc. -- run history is firm-wide administration a firm owner/admin
+// returns to routinely, the same class of concern as Reports/Settings,
+// not an "about me" page. /observability/admin (the separate
+// platform-admin, all-firms view, requireRole('admin') only) gets NO nav
+// entry, matching this project's existing precedent for platform-admin-
+// only surfaces (audit-log/admin/page.tsx is reachable only by direct
+// URL too, never linked from this sidebar) -- adding one here would
+// expose a platform-admin link to every ordinary firm user, which is
+// out of this task's Firm Terminal scope regardless.
 
 'use client';
 
@@ -155,6 +185,7 @@ import {
   BadgeCheck,
   Mail,
   Bell,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -191,7 +222,8 @@ export function AppSidebar({
     | 'invitations'
     | 'notifications'
     | 'clients'
-    | 'teams';
+    | 'teams'
+    | 'observability';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -248,6 +280,12 @@ export function AppSidebar({
       comingSoon: !firmId,
     },
     {
+      label: 'Run History',
+      href: firmId ? '/observability' : null,
+      icon: Activity,
+      comingSoon: !firmId,
+    },
+    {
       label: 'Settings',
       href: firmId ? `/firm/${firmId}/settings` : null,
       icon: Settings,
@@ -290,7 +328,8 @@ export function AppSidebar({
             (item.href === '/cases' && active === 'matters') ||
             (item.href === '/lawyer-inquiries' && active === 'inquiries') ||
             (item.label === 'Clients' && active === 'clients') ||
-            (item.label === 'Team' && active === 'teams');
+            (item.label === 'Team' && active === 'teams') ||
+            (item.href === '/observability' && active === 'observability');
           const Icon = item.icon;
 
           if (!item.href) {
