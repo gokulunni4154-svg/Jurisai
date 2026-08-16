@@ -41,6 +41,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AlertCircle, Bell, Loader2, X } from 'lucide-react';
 
 interface NotificationRow {
@@ -97,6 +98,7 @@ interface NotificationsPanelProps {
 }
 
 export function NotificationsPanel({ isOpen, onClose, onUnreadCountChange }: NotificationsPanelProps) {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -169,13 +171,32 @@ export function NotificationsPanel({ isOpen, onClose, onUnreadCountChange }: Not
           <Bell className="h-4 w-4 text-primary" strokeWidth={1.75} />
           <h2 className="font-serif text-[16px] text-foreground">Notifications</h2>
         </div>
-        <button
-          onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
-          aria-label="Close notifications"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/*
+            NEW, My Notifications page task (this session): this panel's
+            own 20-most-recent, non-paginated fetch (see file-level
+            comment above) has always had no way to see anything past
+            it. /notifications (new page, this session) is that full
+            history. Placed here, next to Close, since this dropdown is
+            the natural entry point into a view it can't itself provide.
+          */}
+          <button
+            onClick={() => {
+              onClose();
+              router.push('/notifications');
+            }}
+            className="rounded-md px-2 py-1 text-[12px] font-medium text-primary hover:bg-muted/50"
+          >
+            View all
+          </button>
+          <button
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
+            aria-label="Close notifications"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">

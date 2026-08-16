@@ -88,6 +88,19 @@
 // "about me" menu as My Profile/My Verification rather than becoming a
 // fourth top-level item. Points at /invitations (new page, this
 // session).
+//
+// AMENDMENT -- My Notifications page task, later session: `active`
+// widened again to also accept 'notifications', and a "My
+// Notifications" item added to the account-menu dropdown, directly
+// below "My Invitations". Same reasoning as that amendment: GET
+// /api/notifications already supports limit/offset/unreadOnly (real,
+// pre-existing) but had no full-history frontend consumer anywhere in
+// the repo -- only the dropdown panel below, hardcoded to the 20 most
+// recent. A notification is the same "status of my own account" class
+// of concern as My Profile/My Verification/My Invitations, not an
+// externally-driven worklist like Inquiries, so it goes in the same
+// menu rather than becoming a fifth top-level item. Points at
+// /notifications (new page, this session).
 
 'use client';
 
@@ -113,6 +126,7 @@ import {
   User,
   BadgeCheck,
   Mail,
+  Bell,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -146,7 +160,8 @@ export function AppSidebar({
     | 'profile'
     | 'verification'
     | 'inquiries'
-    | 'invitations';
+    | 'invitations'
+    | 'notifications';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -345,6 +360,17 @@ export function AppSidebar({
             >
               <Mail className="h-3.5 w-3.5" strokeWidth={1.75} />
               My Invitations
+            </button>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push('/notifications');
+              }}
+              aria-current={active === 'notifications' ? 'page' : undefined}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+            >
+              <Bell className="h-3.5 w-3.5" strokeWidth={1.75} />
+              My Notifications
             </button>
             <button
               onClick={handleSignOut}
