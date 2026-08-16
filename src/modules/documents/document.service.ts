@@ -12,6 +12,13 @@
 // established precedent (Audit Log Phase 3 File 11) — audit write happens
 // AFTER the real mutation (and, for updateDocument, after the existing
 // notification write) has already succeeded.
+// Amendment #16 (THIS SESSION): added restoreDocument() and
+// permanentlyDeleteDocument() to close the Trash gap flagged in
+// src/app/documents/page.tsx's own header comment ("Restore/Delete
+// permanently are disabled with 'Coming soon' ... no restore or
+// hard-delete route anywhere in the API"). Both are owner-only, both
+// require the document to already be soft-deleted, and both write their
+// own audit entry — see each method's doc comment.
 //
 // FLAGGED / FIXED — session 55 (tsc pass): updateDocument()'s
 // `input.hearingDate.toISOString()` call (below) was flagged by tsc as
@@ -32,7 +39,7 @@
 import 'server-only';
 
 import type { AuthUser } from '@/core/auth/types';
-import { AuthorizationError, NotFoundError } from '@/core/errors/app-error';
+import { AuthorizationError, ConflictError, NotFoundError } from '@/core/errors/app-error';
 import { BaseService } from '@/core/services/base.service';
 import type { Database } from '@/core/supabase/database.types';
 import type { NotificationService } from '@/modules/notifications/notification.service';
@@ -424,6 +431,109 @@ export class DocumentService extends BaseService {
       action: 'documents.delete',
       resourceType: 'document',
       resourceId: id,
+    });
+  }
+
+  /**
+   * NEW — Amendment #16 (Trash: Restore). Reverses a soft-delete.
+   * Owner-only, same no-admin-override posture as update/delete (see
+   * class-level doc comment) — File 45's RLS has no admin UPDATE policy
+   * to back an admin override with, and clearing deleted_at is an
+   * UPDATE as far as RLS is concerned.
+   *
+   * Fetches first, same shape as deleteDocument(): (a) a genuinely
+   * missing/invisible id is a clean NotFoundError before this method
+   * ever calls the repository, and (b) the ownership check runs against
+   * a real owner_id. Unlike getDocumentById/updateDocument, a
+   * soft-deleted row IS the expected state here, so this method does
+   * NOT throw NotFoundError when `deleted_at !== null` — instead it
+   * throws when `deleted_at === null` (nothing to restore), the
+   * inverse condition. DocumentRepository#restore()'s own guard
+   * against restoring an already-active row is a second, independent
+   * line of defense, not a substitute for this check — same
+   * belt-and-suspenders relationship deleteDocument() already has with
+   * DocumentRepository#delete()'s own double-delete guard.
+   */
+  async restoreDocument(rawParams: unknown): Promise<DocumentRow> {
+    const user = this.requireAuthentication();
+    const { id } = documentIdParamSchema.parse(rawParams);
+
+    const existing = await this.documentRepository.findByIdOrThrow(id);
+
+    if (existing.deleted_at === null) {
+      throw new ConflictError('This document is not in the trash.', { id });
+    }
+
+    this.requireOwnership(existing.owner_id);
+
+    const restored = await this.documentRepository.restore(id);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      action: 'documents.restore',
+      resourceType: 'document',
+      resourceId: id,
+    });
+
+    return restored;
+  }
+
+  /**
+   * NEW — Amendment #16 (Trash: Permanent delete). Irreversibly removes
+   * a document that has already been moved to Trash — this method
+   * requires `deleted_at !== null` (the inverse of deleteDocument()'s
+   * requirement), matching the Trash UI's own gating (Delete
+   * permanently only ever appears on an already-trashed row; see
+   * src/app/documents/page.tsx). Owner-only, same no-admin-override
+   * posture as every other write on this service.
+   *
+   * ORDERING DECISION, FLAGGED — this method deletes the Postgres row
+   * (the source of truth for "does this document exist") BEFORE
+   * attempting to remove the underlying Storage object, not the other
+   * way around. If the Storage removal subsequently fails,
+   * DocumentRepository#removeStorageObject() swallows that failure (see
+   * its own doc comment) rather than throwing, so this method's
+   * contract is: "the document is gone" is guaranteed once this
+   * resolves; "the Storage object is gone" is best-effort. The
+   * alternative order (Storage first, DB row second) would risk the
+   * opposite and arguably worse failure mode — a DB write failing after
+   * Storage already succeeded would leave a document that still LOOKS
+   * present in every list/detail view but whose file is unrecoverable.
+   * Same "accepted, flagged, not solved" class of non-transactional risk
+   * this project already carries elsewhere (see class-level doc comment,
+   * and document-upload.ts's own orphaned-Storage-object note) — not a
+   * new risk category, just this method's specific instance of it.
+   *
+   * The audit entry is written last, same position as every other
+   * mutation on this service, and carries the storage_path that was
+   * targeted for removal (not just the id) since after this call
+   * resolves there is no row left to look that path up from again.
+   */
+  async permanentlyDeleteDocument(rawParams: unknown): Promise<void> {
+    const user = this.requireAuthentication();
+    const { id } = documentIdParamSchema.parse(rawParams);
+
+    const existing = await this.documentRepository.findByIdOrThrow(id);
+
+    if (existing.deleted_at === null) {
+      throw new ConflictError(
+        'Only documents already in the trash can be permanently deleted.',
+        { id },
+      );
+    }
+
+    this.requireOwnership(existing.owner_id);
+
+    const deleted = await this.documentRepository.hardDelete(id);
+
+    await this.documentRepository.removeStorageObject(deleted.storage_path);
+
+    await this.auditLogRepository.recordUserAction({
+      actorId: user.id,
+      action: 'documents.permanent_delete',
+      resourceType: 'document',
+      resourceId: id,
+      metadata: { storagePath: deleted.storage_path },
     });
   }
 }

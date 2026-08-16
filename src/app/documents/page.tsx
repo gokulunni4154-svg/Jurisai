@@ -34,11 +34,14 @@
 //     plans or subscriptions. Only "used" (sum of size_bytes, computed
 //     client-side) is shown as real; total/available are marked
 //     unavailable rather than hardcoded.
-//   - Trash restore / permanent delete: DELETE /api/documents/[id] is
-//     confirmed soft-delete only (see that route's own doc comment) —
-//     there is no restore or hard-delete route anywhere in the API.
-//     Trash lists real soft-deleted rows; Restore/Delete permanently
-//     are disabled with "Coming soon", not wired to nothing.
+//   - Trash restore / permanent delete: CLOSED THIS SESSION. DELETE
+//     /api/documents/[id] is still soft-delete only (unchanged — see
+//     that route's own doc comment), but two new routes now exist:
+//     POST /api/documents/[id]/restore and DELETE
+//     /api/documents/[id]/permanent (document.service.ts's
+//     restoreDocument()/permanentlyDeleteDocument(), Amendment #16).
+//     Restore and Delete permanently below are real, wired actions now,
+//     not "coming soon" stubs — see handleRestore/handlePermanentDelete.
 //
 // PAGINATION, FLAGGED: fetches with limit=100 (MAX_PAGE_SIZE, confirmed
 // in common.schemas.ts) and includeDeleted=true once, then does all
@@ -392,6 +395,68 @@ export default function DocumentsPage() {
     }
   };
 
+  // NEW — Trash: Restore. Mirrors handleTrash's shape exactly (same
+  // busy/error/optimistic-update pattern), calling the new
+  // POST /api/documents/[id]/restore route (document.service.ts's
+  // restoreDocument(), Amendment #16) instead of DELETE. No confirm()
+  // prompt — restoring is non-destructive and reversible (the document
+  // can simply be trashed again), unlike permanent delete below.
+  const handleRestore = async (doc: DocumentRow) => {
+    setBusyDocId(doc.id);
+    setRowError(null);
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/restore`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(`Could not restore document (status ${res.status}).`);
+      setDocuments((prev) => prev.map((d) => (d.id === doc.id ? { ...d, deleted_at: null } : d)));
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Could not restore document.');
+    } finally {
+      setBusyDocId(null);
+      setOpenActionsFor(null);
+    }
+  };
+
+  // NEW — Trash: Permanent delete. Calls the new
+  // DELETE /api/documents/[id]/permanent route (document.service.ts's
+  // permanentlyDeleteDocument(), Amendment #16). Irreversible, so this
+  // is the one row action in the file that gates on window.confirm()
+  // first — same pattern already used by
+  // src/app/billing/subscription/page.tsx's cancel-subscription flow
+  // (that file's own doc comment: a styled modal is a possible future
+  // upgrade, not yet built anywhere in this project). On success the
+  // row is removed from local state entirely, not just flagged, since
+  // the row no longer exists server-side.
+  const handlePermanentDelete = async (doc: DocumentRow) => {
+    if (
+      !window.confirm(
+        `Permanently delete "${doc.title}"? This cannot be undone — the file will be removed completely.`,
+      )
+    ) {
+      return;
+    }
+
+    setBusyDocId(doc.id);
+    setRowError(null);
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/permanent`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok && res.status !== 204) {
+        throw new Error(`Could not permanently delete document (status ${res.status}).`);
+      }
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : 'Could not permanently delete document.');
+    } finally {
+      setBusyDocId(null);
+      setOpenActionsFor(null);
+    }
+  };
+
   // ---- Render -------------------------------------------------------------
 
   return (
@@ -721,18 +786,19 @@ export default function DocumentsPage() {
                                     ) : (
                                       <>
                                         <button
-                                          disabled
-                                          title="Restore isn't available yet — no restore endpoint exists."
-                                          className="flex w-full cursor-not-allowed items-center px-3 py-2 text-left text-[12.5px] text-muted-foreground/60"
+                                          onClick={() => handleRestore(doc)}
+                                          disabled={busyDocId === doc.id}
+                                          className="flex w-full items-center px-3 py-2 text-left text-[12.5px] text-foreground hover:bg-muted disabled:opacity-40"
                                         >
-                                          Restore (coming soon)
+                                          Restore
                                         </button>
                                         <button
-                                          disabled
-                                          title="Permanent delete isn't available yet."
-                                          className="flex w-full cursor-not-allowed items-center px-3 py-2 text-left text-[12.5px] text-muted-foreground/60"
+                                          onClick={() => handlePermanentDelete(doc)}
+                                          disabled={busyDocId === doc.id}
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-destructive hover:bg-destructive/5 disabled:opacity-40"
                                         >
-                                          Delete permanently (coming soon)
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                          Delete permanently
                                         </button>
                                       </>
                                     )}

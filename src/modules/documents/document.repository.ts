@@ -167,6 +167,113 @@ export class DocumentRepository extends BaseRepository<'documents'> {
   }
 
   /**
+   * NEW — Amendment #16 (Trash: Restore). Reverses a soft-delete by
+   * clearing `deleted_at`. Mirrors delete()'s own double-action guard,
+   * inverted: the `.not('deleted_at', 'is', null)` clause means a row
+   * that is NOT currently trashed (active, or nonexistent / RLS-invisible)
+   * matches zero rows, and `.maybeSingle()` returns `null` — turned into
+   * a NotFoundError below, same as delete()'s already-deleted case. This
+   * keeps "restore something that was never trashed" an error rather
+   * than a silent no-op, consistent with this class's existing
+   * double-action posture.
+   */
+  async restore(id: string): Promise<DocumentRow> {
+    const { data, error } = await this.supabase
+      .from('documents')
+      .update({ deleted_at: null } as never)
+      .eq('id', id)
+      .not('deleted_at', 'is', null)
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError('Failed to restore document', error, {
+        table: this.tableName,
+        id,
+      });
+    }
+
+    if (!data) {
+      throw new NotFoundError(String(this.tableName), id);
+    }
+
+    return data as DocumentRow;
+  }
+
+  /**
+   * NEW — Amendment #16 (Trash: Permanent delete). Issues a real SQL
+   * DELETE, unlike the overridden delete() above which only ever soft-
+   * deletes. Deliberately a differently-named method, not a second
+   * override of delete() behind a flag — this class's delete() exists
+   * specifically to give Documents its own soft-delete semantics, so a
+   * hard-delete path needs its own name to stay honest about what it
+   * does, matching this file's existing pattern of one method per
+   * distinct operation rather than parameterizing behavior.
+   *
+   * Same `.not('deleted_at', 'is', null)` guard as restore() above, for
+   * the same reason: this project's Trash UI only ever offers "Delete
+   * permanently" on a row that is already trashed (see
+   * src/app/documents/page.tsx), so a document must be soft-deleted
+   * first — this is not a general-purpose hard-delete-anything method.
+   * Returns the deleted row (specifically its storage_path) so the
+   * caller can remove the matching Storage object as a second step;
+   * this method does not touch Storage itself, staying a pure Postgres
+   * operation like every other method on this class except
+   * createSignedDownloadUrl below.
+   */
+  async hardDelete(id: string): Promise<DocumentRow> {
+    const { data, error } = await this.supabase
+      .from('documents')
+      .delete()
+      .eq('id', id)
+      .not('deleted_at', 'is', null)
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError('Failed to permanently delete document', error, {
+        table: this.tableName,
+        id,
+      });
+    }
+
+    if (!data) {
+      throw new NotFoundError(String(this.tableName), id);
+    }
+
+    return data as DocumentRow;
+  }
+
+  /**
+   * NEW — Amendment #16 (Trash: Permanent delete). Removes the
+   * underlying Storage object for a permanently-deleted document.
+   *
+   * Called by DocumentService#permanentlyDeleteDocument() AFTER
+   * hardDelete() above has already removed the Postgres row — see that
+   * service method's own doc comment for why this ordering was chosen
+   * and what "accepted, flagged, not solved" risk it carries, same
+   * class of risk this project already accepts elsewhere (see
+   * DocumentService's class-level doc comment, and document-upload.ts's
+   * own orphaned-Storage-object note).
+   *
+   * Deliberately swallows a "not found" style Storage error rather than
+   * throwing — Storage's remove() does not error on a missing object,
+   * but this project has no confirmed precedent for exactly how a
+   * genuinely-failed removal is shaped, so this method is intentionally
+   * forgiving about the failure mode: a caller that already deleted the
+   * DB row has no useful recovery action to take on a Storage failure
+   * anyway (there is nothing left to roll back to). Real/unexpected
+   * errors are still surfaced via the returned boolean so the caller can
+   * decide whether to audit-log the discrepancy, rather than being
+   * silently discarded.
+   */
+  async removeStorageObject(storagePath: string): Promise<boolean> {
+    const { error } = await this.supabase.storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
+
+    return !error;
+  }
+
+  /**
    * NEW — Amendment #12. Generates a time-limited signed URL for
    * downloading a document's underlying file from Storage.
    *
