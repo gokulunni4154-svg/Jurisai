@@ -69,4 +69,37 @@ export class ClientRepository extends BaseRepository<'clients'> {
 
     return (data ?? []) as ClientRow[];
   }
+
+  /**
+   * NEW, Client Portal — Client Dashboard. Resolves the caller's own
+   * `clients` row by profile_id. Relies entirely on `clients_select_own`
+   * RLS (20260812000000_create_clients_table.sql) to scope this to "my
+   * own row only" — this method is intended to be called ONLY from a
+   * repository instance constructed against the RLS-respecting client
+   * (see client-dashboard.factory.ts), never the admin client, so that
+   * a caller can never resolve another profile's client record by
+   * passing an arbitrary id. `.maybeSingle()`, not
+   * `.single()`/`findByIdOrThrow()`-style: "not yet linked to any
+   * clients row" (an authenticated 'client'-role account whose invite
+   * acceptance somehow didn't complete the link, or any other role
+   * entirely) is an expected, valid state here, not a NotFoundError —
+   * the caller (ClientDashboardService) decides how to respond to
+   * `null`.
+   */
+  async findByProfileId(profileId: string): Promise<ClientRow | null> {
+    const { data, error } = await this.supabase
+      .from('clients')
+      .select('*')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError('Failed to find client by profile id', error, {
+        table: this.tableName,
+        profileId,
+      });
+    }
+
+    return (data as ClientRow | null) ?? null;
+  }
 }
