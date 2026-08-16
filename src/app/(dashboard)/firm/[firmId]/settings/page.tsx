@@ -46,6 +46,67 @@
 // either GET call (caller not 'owner'/'admin' per FirmService's own new
 // requireManageAccess(), this session) renders the same dedicated
 // forbidden message, not the generic error banner.
+//
+// AMENDMENT -- Firm Terminal Team/Member Management task, later session:
+// added a third section, "Invitations", directly below Members.
+// EXISTING BACKEND, NO GAP: GET/POST /api/firms/[id]/invitations and
+// POST /api/firms/[id]/invitations/[invitationId]/revoke (all real,
+// confirmed this session) plus FirmInvitationService's own
+// createInvitation()/listForFirm()/revokeInvitation() (all real,
+// confirmed this session, same requireFirmRole(['owner','admin'])
+// gating as every method already on this page) were fully built with
+// zero frontend consumer anywhere in the repo prior to this change --
+// confirmed via full-repo search. This section is the only missing
+// layer; no service/repository/route/migration touched.
+//
+// PLACEMENT DECISION: added as a third sibling section on THIS page
+// rather than a new top-level route/nav item. "Add member" above
+// already covers direct-by-profileId membership (no invite step);
+// Invitations is the complementary invite-by-email flow for people who
+// aren't a known profileId yet -- both are the same underlying concern
+// (firm membership) and the existing Members section already
+// established the "CRUD list + form, all on this one settings page"
+// shape this reuses verbatim, rather than inventing a second page/route
+// for what is one coherent workflow. The sidebar's separate, still-
+// disabled "Team" item is deliberately left untouched -- that label is
+// reserved for the real, distinct `teams`/`team_members` subsystem
+// (TeamService et al., confirmed this session to be an entirely
+// separate feature with its own zero-frontend gap), not repurposed
+// here to avoid a naming collision with that future task.
+//
+// FIELDS SHOWN: only real, confirmed firm_invitations columns (verified
+// directly against database.types.ts this session) -- email, role,
+// status, expires_at, created_at. token/profile_id/invited_by/
+// accepted_at/revoked_at are not surfaced -- no UI need identified for
+// them (revoked_at/accepted_at are implied by status; token is only
+// meaningful embedded in inviteUrl, itself only returned once at
+// creation time, handled below).
+//
+// STATUS VALUES: 'status' is a bare `text` column (no enum/CHECK
+// constraint found in this session's search), but createInvitation()/
+// revokeInvitation()/acceptFromList() only ever write
+// 'pending'|'revoked'|'accepted'|'expired' -- those four are what this
+// page's badge styling below switches on; any other value (a manual DB
+// edit, a future status this page doesn't know about) falls back to a
+// plain neutral badge rather than crashing.
+//
+// REVOKE ONLY, NO EDIT/RESEND: revokeInvitation() is the only mutation
+// FirmInvitationService exposes on an existing invitation -- no
+// "resend" method exists. Re-inviting the same email (which
+// createInvitation()'s own Decision #10 handles by auto-revoking the
+// old pending row) is the establishment path for that, so the Revoke
+// button is offered only on 'pending' rows, and the same "New
+// invitation" form below covers re-inviting.
+//
+// INVITE-LINK DISCLOSURE: createInvitation() returns inviteUrl only
+// when the email did NOT match an existing profile (new-user path,
+// Decision #3) -- null otherwise (existing-profile path, actioned via
+// that user's own My Invitations pending-list instead, a different
+// page entirely). When present, this page shows a one-time copyable
+// link in the creation form's own success state rather than persisting
+// it into invitation list rows -- the token is never re-fetchable after
+// creation (no route returns it), so there is nothing to show on
+// subsequent loads.
 
 'use client';
 
@@ -88,6 +149,38 @@ interface FirmMemberRow {
   profile?: ProfileRow | null;
 }
 
+interface FirmInvitationRow {
+  id: string;
+  firm_id: string;
+  email: string;
+  profile_id: string | null;
+  role: FirmRole;
+  token: string;
+  status: string;
+  invited_by: string;
+  expires_at: string;
+  revoked_at: string | null;
+  accepted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const ALLOWED_INVITE_ROLES: readonly FirmRole[] = ['owner', 'admin', 'employee', 'lawyer'];
+
+function invitationStatusClasses(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'border-amber-200 bg-amber-50 text-amber-700';
+    case 'accepted':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'revoked':
+    case 'expired':
+      return 'border-slate-200 bg-slate-100 text-slate-500';
+    default:
+      return 'border-slate-200 bg-slate-100 text-slate-500';
+  }
+}
+
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString('en-IN', {
     day: 'numeric',
@@ -107,6 +200,7 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
 
   const [firm, setFirm] = useState<FirmRow | null>(null);
   const [members, setMembers] = useState<FirmMemberRow[]>([]);
+  const [invitations, setInvitations] = useState<FirmInvitationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -128,13 +222,26 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
   const [rowBusy, setRowBusy] = useState<Record<string, boolean>>({});
   const [rowError, setRowError] = useState<Record<string, string | null>>({});
 
+  // New-invitation form state -- mirrors the "add member" form's own
+  // state shape exactly.
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<FirmRole>('employee');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+
+  // Per-row action state for revoking a pending invitation, keyed by
+  // invitation id -- same shape as rowBusy/rowError above.
+  const [invRowBusy, setInvRowBusy] = useState<Record<string, boolean>>({});
+  const [invRowError, setInvRowError] = useState<Record<string, string | null>>({});
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setForbidden(false);
 
     try {
-      const [firmRes, membersRes] = await Promise.all([
+      const [firmRes, membersRes, invitationsRes] = await Promise.all([
         fetch(`/api/firms/${firmId}`),
         // AMENDED, THIS SESSION: was /api/firms/${firmId}/members (plain
         // roster, no names). Now uses the new .../roster endpoint for
@@ -142,9 +249,14 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
         // elsewhere below (add/role-change/remove all still hit the
         // original /members and /members/[profileId] routes, unchanged).
         fetch(`/api/firms/${firmId}/members/roster`),
+        // NEW, THIS SESSION: GET /api/firms/[id]/invitations -- real,
+        // pre-existing route, same owner/admin gating as the other two
+        // calls here, so a 403 on any of the three is treated
+        // identically below (see forbidden-state handling).
+        fetch(`/api/firms/${firmId}/invitations`),
       ]);
 
-      if (firmRes.status === 403 || membersRes.status === 403) {
+      if (firmRes.status === 403 || membersRes.status === 403 || invitationsRes.status === 403) {
         setForbidden(true);
         return;
       }
@@ -157,9 +269,15 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
         throw new Error(membersJson?.error?.message ?? 'Failed to load members.');
       }
 
+      const invitationsJson = await invitationsRes.json();
+      if (!invitationsRes.ok) {
+        throw new Error(invitationsJson?.error?.message ?? 'Failed to load invitations.');
+      }
+
       setFirm(firmJson.data as FirmRow);
       setNameInput((firmJson.data as FirmRow).name);
       setMembers(membersJson.data as FirmMemberRow[]);
+      setInvitations(invitationsJson.data as FirmInvitationRow[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load firm settings.');
     } finally {
@@ -277,6 +395,70 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
         [member.id]: err instanceof Error ? err.message : 'Failed to remove member.',
       }));
       setRowBusy((prev) => ({ ...prev, [member.id]: false }));
+    }
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviting(true);
+    setInviteError(null);
+    setInviteUrl(null);
+
+    try {
+      const res = await fetch(`/api/firms/${firmId}/invitations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error?.message ?? 'Failed to send invitation.');
+
+      // Decision #10 (see FirmInvitationService#createInvitation()'s own
+      // doc comment): re-inviting the same email revokes the old
+      // pending row server-side first. Reload the list wholesale rather
+      // than trying to patch that revocation into local state by hand.
+      const invitationsRes = await fetch(`/api/firms/${firmId}/invitations`);
+      const invitationsJson = await invitationsRes.json();
+      if (invitationsRes.ok) {
+        setInvitations(invitationsJson.data as FirmInvitationRow[]);
+      }
+
+      setInviteEmail('');
+      setInviteRole('employee');
+      setInviteUrl(json.inviteUrl ?? null);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Failed to send invitation.');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleRevokeInvitation(invitation: FirmInvitationRow) {
+    setInvRowBusy((prev) => ({ ...prev, [invitation.id]: true }));
+    setInvRowError((prev) => ({ ...prev, [invitation.id]: null }));
+
+    try {
+      const res = await fetch(
+        `/api/firms/${firmId}/invitations/${invitation.id}/revoke`,
+        { method: 'POST' },
+      );
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error?.message ?? 'Failed to revoke invitation.');
+
+      setInvitations((prev) =>
+        prev.map((inv) =>
+          inv.id === invitation.id ? { ...inv, status: 'revoked' } : inv,
+        ),
+      );
+    } catch (err) {
+      setInvRowError((prev) => ({
+        ...prev,
+        [invitation.id]: err instanceof Error ? err.message : 'Failed to revoke invitation.',
+      }));
+    } finally {
+      setInvRowBusy((prev) => ({ ...prev, [invitation.id]: false }));
     }
   }
 
@@ -423,6 +605,103 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
               </button>
             </form>
             {addMemberError && <p className="mt-2 text-xs text-red-700">{addMemberError}</p>}
+          </section>
+
+          {/* Invitations */}
+          <section>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Invitations{' '}
+              <span className="font-normal text-slate-400">({invitations.length})</span>
+            </h2>
+
+            {invitations.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-500">No invitations sent yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {invitations.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {inv.email}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {inv.role} · sent {formatTimestamp(inv.created_at)}
+                          {inv.status === 'pending'
+                            ? ` · expires ${formatTimestamp(inv.expires_at)}`
+                            : ''}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${invitationStatusClasses(inv.status)}`}
+                        >
+                          {inv.status}
+                        </span>
+
+                        {inv.status === 'pending' && (
+                          <button
+                            type="button"
+                            disabled={invRowBusy[inv.id]}
+                            onClick={() => handleRevokeInvitation(inv)}
+                            className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-50"
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {invRowError[inv.id] && (
+                      <p className="mt-2 text-xs text-red-700">{invRowError[inv.id]}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* New invitation */}
+            <form
+              onSubmit={handleInvite}
+              className="mt-4 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3"
+            >
+              <input
+                type="email"
+                placeholder="Email address"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+              />
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as FirmRole)}
+                className="rounded-md border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900"
+              >
+                {ALLOWED_INVITE_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                disabled={inviting || inviteEmail.trim().length === 0}
+                className="rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {inviting ? 'Sending…' : 'Send invite'}
+              </button>
+            </form>
+            {inviteError && <p className="mt-2 text-xs text-red-700">{inviteError}</p>}
+            {inviteUrl && (
+              <p className="mt-2 break-all text-xs text-slate-500">
+                Invitation sent. Since this email has no existing account, share this link
+                directly: <span className="text-slate-700">{inviteUrl}</span>
+              </p>
+            )}
           </section>
         </div>
       ) : null}
