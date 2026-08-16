@@ -101,6 +101,19 @@
 // externally-driven worklist like Inquiries, so it goes in the same
 // menu rather than becoming a fifth top-level item. Points at
 // /notifications (new page, this session).
+//
+// AMENDMENT -- Firm Terminal Clients workspace task, later session:
+// `active` widened again to also accept 'clients'. The "Clients" item
+// (previously always disabled/"Coming soon", per this file's own
+// original nav-items comment above) now links to
+// /firm/{firmId}/clients -- new page, this same change -- whenever the
+// caller has a firm_id, identical gating to the existing
+// Reports/Settings items just above it in navItems (all three are
+// firm-scoped routes that can't be linked without one). Not moved to
+// the account-menu dropdown: like Reports/Settings, this is firm-wide
+// administration a firm owner/admin returns to routinely, not an
+// "about me" concern, so it stays a top-level item in its existing
+// position.
 
 'use client';
 
@@ -161,7 +174,8 @@ export function AppSidebar({
     | 'verification'
     | 'inquiries'
     | 'invitations'
-    | 'notifications';
+    | 'notifications'
+    | 'clients';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -199,7 +213,12 @@ export function AppSidebar({
     { label: 'Documents', href: '/documents', icon: FileText },
     { label: 'Document Sets', href: '/document-sets', icon: FolderKanban },
     { label: 'AI Assistant', href: null, icon: Sparkles, comingSoon: true },
-    { label: 'Clients', href: null, icon: Users, comingSoon: true },
+    {
+      label: 'Clients',
+      href: firmId ? `/firm/${firmId}/clients` : null,
+      icon: Users,
+      comingSoon: !firmId,
+    },
     { label: 'Team', href: null, icon: UserSquare2, comingSoon: true },
     {
       label: 'Reports',
@@ -248,7 +267,8 @@ export function AppSidebar({
             (item.href === '/documents' && active === 'documents') ||
             (item.href === '/tasks/mine' && active === 'tasks') ||
             (item.href === '/cases' && active === 'matters') ||
-            (item.href === '/lawyer-inquiries' && active === 'inquiries');
+            (item.href === '/lawyer-inquiries' && active === 'inquiries') ||
+            (item.label === 'Clients' && active === 'clients');
           const Icon = item.icon;
 
           if (!item.href) {
