@@ -114,6 +114,21 @@
 // administration a firm owner/admin returns to routinely, not an
 // "about me" concern, so it stays a top-level item in its existing
 // position.
+//
+// AMENDMENT -- Firm Terminal Teams/Team Management workspace task,
+// later session: `active` widened again to also accept 'teams'. The
+// "Team" item (previously always disabled/"Coming soon" -- this file's
+// own original nav-items comment above explicitly reserved this exact
+// label for the real, distinct teams/team_members subsystem once it
+// existed) now links to /firm/{firmId}/teams (new page, this same
+// change) whenever the caller has a firm_id -- identical gating to
+// Clients/Reports/Settings just above/below it. EXISTING BACKEND, NO
+// GAP: TeamService/TeamMemberService/TeamInvitationService and every
+// route under /api/firms/[id]/teams, /api/teams/[id]/invitations, and
+// /api/invitations/team were already fully built and owner/admin- or
+// firm-member-authorized -- confirmed via a full audit of current main
+// and the live Supabase project this session. This nav change plus the
+// new page are the only missing layer.
 
 'use client';
 
@@ -175,7 +190,8 @@ export function AppSidebar({
     | 'inquiries'
     | 'invitations'
     | 'notifications'
-    | 'clients';
+    | 'clients'
+    | 'teams';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -219,7 +235,12 @@ export function AppSidebar({
       icon: Users,
       comingSoon: !firmId,
     },
-    { label: 'Team', href: null, icon: UserSquare2, comingSoon: true },
+    {
+      label: 'Team',
+      href: firmId ? `/firm/${firmId}/teams` : null,
+      icon: UserSquare2,
+      comingSoon: !firmId,
+    },
     {
       label: 'Reports',
       href: firmId ? `/firm/${firmId}/reports` : null,
@@ -268,7 +289,8 @@ export function AppSidebar({
             (item.href === '/tasks/mine' && active === 'tasks') ||
             (item.href === '/cases' && active === 'matters') ||
             (item.href === '/lawyer-inquiries' && active === 'inquiries') ||
-            (item.label === 'Clients' && active === 'clients');
+            (item.label === 'Clients' && active === 'clients') ||
+            (item.label === 'Team' && active === 'teams');
           const Icon = item.icon;
 
           if (!item.href) {
