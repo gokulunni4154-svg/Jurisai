@@ -47,17 +47,25 @@
 // ("contact your firm") and not a real permissions error the way (1)
 // is; (3) success -> identity + cases + upcoming hearings.
 //
-// SCOPE, PER STEP 10: no case detail, no document list, no messaging,
-// no billing, no appointment booking here — a case row links to
-// /cases/[id], but that page itself is Lawyer Terminal surface with no
-// client-authorization check of its own (out of scope for this task
-// to touch — see final report's "Remaining Work"), so case rows are
-// NOT made clickable here. Read-only summary only.
+// SCOPE, PER STEP 10: no document list, no messaging, no billing, no
+// appointment booking here — read-only summary only.
+//
+// AMENDED, Client Portal Phase 2 (Client Matter / Case Workspace): case
+// rows are NOW clickable, routing to /client/cases/[id] — the gap this
+// file's own header previously flagged ("that page itself is Lawyer
+// Terminal surface with no client-authorization check of its own... so
+// case rows are NOT made clickable here") is closed: /client/cases/[id]
+// is a dedicated client-facing page backed by GET /api/client/cases/[id]
+// (ClientCaseService), authorized via the confirmed-live
+// cases_select_client_own RLS policy — not the lawyer /cases/[id]
+// route. router.push(), not next/link, matching this project's existing
+// navigation convention (see cases/page.tsx's own header buttons).
 
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, AlertCircle, Inbox, Gavel, Building2, Scale } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Loader2, AlertCircle, Inbox, Gavel, Building2, Scale, ChevronRight } from 'lucide-react';
 
 interface ClientRow {
   id: string;
@@ -141,6 +149,7 @@ function extractErrorMessage(json: unknown, fallback: string): string {
 }
 
 export default function ClientPortalPage() {
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notLinked, setNotLinked] = useState(false);
@@ -263,9 +272,10 @@ export default function ClientPortalPage() {
               ) : (
                 <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
                   {data.cases.map((c) => (
-                    <div
+                    <button
                       key={c.id}
-                      className="flex flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                      onClick={() => router.push(`/client/cases/${c.id}`)}
+                      className="flex w-full flex-col gap-2 px-5 py-4 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-[14px] font-medium text-foreground">{c.title}</p>
@@ -274,14 +284,17 @@ export default function ClientPortalPage() {
                           <span>Updated {formatDate(c.updated_at)}</span>
                         </p>
                       </div>
-                      <span
-                        className={`shrink-0 self-start rounded-full px-2.5 py-1 text-[11px] font-medium sm:self-auto ${statusBadgeClass(
-                          c.status,
-                        )}`}
-                      >
-                        {statusLabel(c.status)}
-                      </span>
-                    </div>
+                      <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${statusBadgeClass(
+                            c.status,
+                          )}`}
+                        >
+                          {statusLabel(c.status)}
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+                      </div>
+                    </button>
                   ))}
                 </div>
               )}
