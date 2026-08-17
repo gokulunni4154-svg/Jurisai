@@ -111,22 +111,37 @@ export async function POST(request: Request): Promise<NextResponse> {
  *    firm module exists yet. This is a deliberate, flagged cross-module
  *    reuse, not a hidden coupling.
  *
- * 3. fallback ('/documents') -- CORRECTED, this turn: originally '/',
- *    on the assumption no any-user destination existed yet. Confirmed
- *    false via real pasted source: src/app/documents/page.tsx is a
- *    fully real, working page (GET /api/documents, real upload flow,
- *    navigation into /documents/[id], which per that file's own doc
- *    comments already gates Legal Health Score -> AI Legal Insights ->
- *    lawyer-inquiry contact -- the exact "any user" vision from the
- *    continuation prompt). There is no missing dashboard to build here;
- *    '/' was simply the wrong fallback, pointing at static marketing
- *    content instead of this already-built page. Also the landing spot
- *    for 'law_firm', 'business', 'client', 'admin', and 'support' roles
- *    for now -- none of those were in scope for this session's redirect
- *    work; only the three destinations the continuation prompt actually
- *    specified are handled here.
+ * 3. client ('/client') -- NEW, General Portal Phase 1 task. Checked
+ *    before the firm-owner lookup for the same reason lawyer is
+ *    checked first: role is the cheaper, more specific signal, and a
+ *    'client' account is by definition never a firm owner (clients.firm_id
+ *    is a separate relationship from firms.owner_id -- see
+ *    src/core/auth/types.ts's own AMENDMENT comment on why 'client' is
+ *    modeled as never firm-side). src/app/client/page.tsx (backed by
+ *    GET /api/dashboard/client) has been a fully real, working page
+ *    since an earlier session, but nothing here ever routed a
+ *    signing-in client TO it -- they fell through to the generic
+ *    fallback below like every other non-lawyer, non-firm-owner
+ *    account. Confirmed real via this session's repo audit, not
+ *    assumed.
  *
- * Failure while resolving firm ownership is swallowed to '/documents'
+ * 4. firm owner ('/firm/[firmId]'), via FirmRepository.findByOwnerId().
+ *    Unchanged from before this task.
+ *
+ * 5. fallback ('/dashboard') -- CORRECTED, this task: previously
+ *    '/documents'. General Portal Phase 1 (this task) adds the actual
+ *    missing piece '/documents' itself was standing in for -- a real
+ *    welcome/overview home (GET /api/dashboard/general) with Legal
+ *    Health Score, risk summary, and AI recommendations aggregated
+ *    across the caller's own documents, not just the document-manager
+ *    table. '/documents' remains fully real and reachable (linked from
+ *    the new dashboard's own Quick Actions and from AppSidebar), it is
+ *    simply no longer the FIRST thing a general user sees after
+ *    signing in. Also the landing spot for 'business', 'admin', and
+ *    'support' roles for now -- none of those had a more specific
+ *    destination in scope for this task either.
+ *
+ * Failure while resolving firm ownership is swallowed to '/dashboard'
  * rather than propagated -- matching this file's existing
  * reattachment-error posture just above: a session was legitimately
  * established, so a firm-lookup failure degrading the destination is
@@ -137,13 +152,17 @@ async function resolveDashboardRedirect(user: AuthUser): Promise<string> {
     return '/lawyer';
   }
 
+  if (user.role === 'client') {
+    return '/client';
+  }
+
   try {
     const supabase = await createClient();
     const firmRepository = new FirmRepository(supabase);
     const firm = await firmRepository.findByOwnerId(user.id);
-    return firm ? `/firm/${firm.id}` : '/documents';
+    return firm ? `/firm/${firm.id}` : '/dashboard';
   } catch {
-    return '/documents';
+    return '/dashboard';
   }
 }
 

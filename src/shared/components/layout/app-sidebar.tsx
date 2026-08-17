@@ -194,6 +194,13 @@ interface MeProfile {
   full_name: string | null;
   avatar_url: string | null;
   firm_id: string | null;
+  // NEW — General Portal Phase 1. GET /api/profiles/me already returns
+  // `role` (merged in from the session's AuthUser, confirmed real
+  // source — see that route's own doc comment); it just had no
+  // consumer in this file before. Used below solely to resolve the
+  // "Dashboard" nav item to the right home for the caller's actual
+  // account type, not to gate rendering of anything.
+  role: string | null;
 }
 
 interface NavItem {
@@ -223,7 +230,8 @@ export function AppSidebar({
     | 'notifications'
     | 'clients'
     | 'teams'
-    | 'observability';
+    | 'observability'
+    | 'dashboard';
 }) {
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
@@ -252,8 +260,32 @@ export function AppSidebar({
 
   const firmId = profile?.firm_id ?? null;
 
+  // NEW — General Portal Phase 1. This "Dashboard" item previously
+  // hardcoded '/lawyer' for every caller, regardless of account type —
+  // fine for the lawyer pages that were this sidebar's only consumer
+  // when it was written, but AppSidebar is also the shell
+  // documents/page.tsx uses (the real landing page for 'individual'/
+  // 'business' accounts today, per sign-in's own resolveDashboardRedirect()),
+  // so a general user clicking "Dashboard" was being sent to a
+  // lawyer-only page. Resolved the same priority order
+  // resolveDashboardRedirect() itself uses (lawyer checked first, since
+  // signUpAsLawyer() also creates a solo owner-role firm — see that
+  // route's own doc comment for why ordering here matters), plus a
+  // 'client' branch (the real, already-built /client page — see
+  // src/app/client/page.tsx — had no sidebar entry point at all before
+  // this change) and a firm-owner branch, falling back to the new
+  // General Portal home (/dashboard, this task) for everyone else.
+  const dashboardHref =
+    profile?.role === 'lawyer'
+      ? '/lawyer'
+      : profile?.role === 'client'
+        ? '/client'
+        : firmId
+          ? `/firm/${firmId}`
+          : '/dashboard';
+
   const navItems: NavItem[] = [
-    { label: 'Dashboard', href: '/lawyer', icon: LayoutDashboard },
+    { label: 'Dashboard', href: dashboardHref, icon: LayoutDashboard },
     { label: 'Matters', href: '/cases', icon: Briefcase },
     { label: 'Inquiries', href: '/lawyer-inquiries', icon: Inbox },
     { label: 'Hearings & Calendar', href: '/hearings/upcoming', icon: CalendarClock },
@@ -323,6 +355,7 @@ export function AppSidebar({
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
         {navItems.map((item) => {
           const isActive =
+            (item.label === 'Dashboard' && active === 'dashboard') ||
             (item.href === '/documents' && active === 'documents') ||
             (item.href === '/tasks/mine' && active === 'tasks') ||
             (item.href === '/cases' && active === 'matters') ||
