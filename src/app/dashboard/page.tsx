@@ -55,6 +55,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { UploadAnalyzeModal } from '@/shared/components/dashboard/upload-analyze-modal';
 
 interface MeProfile {
   id: string;
@@ -117,6 +118,8 @@ export default function GeneralDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // NEW — General Portal Phase 2: Upload → Analyze quick flow modal.
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -131,22 +134,35 @@ export default function GeneralDashboardPage() {
     })();
   }, []);
 
+  // Extracted (was an inline effect body) so the Upload → Analyze modal
+  // can re-trigger the same real fetch on close — this is the existing
+  // dashboard API re-queried fresh, not a new endpoint or a client-side
+  // patch of the summary numbers.
+  const fetchDashboard = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/dashboard/general', { credentials: 'include' });
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+      const json = await res.json();
+      setData(json.data as DashboardData);
+    } catch {
+      setError('Could not load your dashboard. Try again in a moment.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await fetch('/api/dashboard/general', { credentials: 'include' });
-        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
-        const json = await res.json();
-        setData(json.data as DashboardData);
-      } catch {
-        setError('Could not load your dashboard. Try again in a moment.');
-      } finally {
-        setIsLoading(false);
-      }
-    })();
+    fetchDashboard();
   }, []);
+
+  const handleUploadModalClose = () => {
+    setIsUploadModalOpen(false);
+    // Re-fetch so a newly uploaded/analyzed document is reflected
+    // immediately, without requiring a manual page reload.
+    fetchDashboard();
+  };
 
   const firstName = me?.full_name?.trim().split(/\s+/)[0] ?? null;
   const totalRiskFlags = data
@@ -181,6 +197,29 @@ export default function GeneralDashboardPage() {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* NEW — General Portal Phase 2: prominent Upload → Analyze
+                  CTA for a brand-new user with zero documents. Only
+                  rendered when data.documentSummary.total === 0 — a
+                  returning user with documents keeps the existing
+                  overview, per the "Upload another document" Quick
+                  Action above instead. */}
+              {data.documentSummary.total === 0 && (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-6 text-center">
+                  <p className="text-[16px] font-semibold text-foreground">Your legal health starts here.</p>
+                  <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
+                    Upload your first legal document to see your Legal Health Score, risks, and AI
+                    recommendations.
+                  </p>
+                  <button
+                    onClick={() => setIsUploadModalOpen(true)}
+                    className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload a legal document
+                  </button>
+                </div>
+              )}
+
               {/* Document overview */}
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <SummaryCard
@@ -319,8 +358,8 @@ export default function GeneralDashboardPage() {
                     <div className="space-y-1">
                       <QuickAction
                         icon={<Upload className="h-4 w-4" />}
-                        label="Upload Document"
-                        onClick={() => router.push('/documents')}
+                        label={data.documentSummary.total === 0 ? 'Upload Document' : 'Upload another document'}
+                        onClick={() => setIsUploadModalOpen(true)}
                       />
                       <QuickAction
                         icon={<FileText className="h-4 w-4" />}
@@ -353,6 +392,8 @@ export default function GeneralDashboardPage() {
           )}
         </main>
       </div>
+
+      {isUploadModalOpen && <UploadAnalyzeModal onClose={handleUploadModalClose} />}
     </div>
   );
 }

@@ -56,7 +56,15 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-200);
 }
 
-function validateFile(file: File): void {
+// NEW — exported for General Portal Phase 2's Upload → Analyze quick
+// flow (src/shared/components/dashboard/upload-analyze-modal.tsx), so
+// that flow's Step 1 (select + validate) can reuse this module's real
+// validation rules instead of re-declaring its own allow-list/size
+// limit. ALLOWED_MIME_TYPES/MAX_SIZE_BYTES were already the single
+// source of truth for uploadDocument()/uploadDocumentsBulk() above —
+// only the export keyword changed here, no behavior change.
+export { ALLOWED_MIME_TYPES, MAX_SIZE_BYTES };
+export function validateFile(file: File): void {
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
     throw new UploadValidationError(
       `"${file.type || 'unknown type'}" isn't a supported file type.`,
