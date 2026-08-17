@@ -61,11 +61,35 @@
 // route. router.push(), not next/link, matching this project's existing
 // navigation convention (see cases/page.tsx's own header buttons).
 
+// AMENDED, Client Portal Phase 3 (Client Notifications — hearing
+// reminders): a Notifications entry with an unread-count badge was
+// added to the header, per that feature's brief ("Add a lightweight
+// notification indicator to /client... do not redesign the dashboard,
+// do not create a large notification widget"). Kept as a SEPARATE
+// fetch (GET /api/notifications?unreadOnly=true&limit=1, reading only
+// the response's own `total` field) rather than folding an
+// unreadCount into GET /api/dashboard/client's payload — same
+// "display-only need, don't touch an existing route/service's response
+// shape for it" reasoning the Hearings & Calendar polish pass already
+// used for case-title lookups. A failed unread-count fetch fails
+// silently (badge just doesn't render) rather than surfacing a second
+// error state on top of the dashboard's own — this is secondary,
+// non-blocking chrome, not core dashboard data.
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, Inbox, Gavel, Building2, Scale, ChevronRight } from 'lucide-react';
+import {
+  Loader2,
+  AlertCircle,
+  Inbox,
+  Gavel,
+  Building2,
+  Scale,
+  ChevronRight,
+  Bell,
+} from 'lucide-react';
 
 interface ClientRow {
   id: string;
@@ -155,6 +179,29 @@ export default function ClientPortalPage() {
   const [notLinked, setNotLinked] = useState(false);
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUnreadCount() {
+      try {
+        const res = await fetch('/api/notifications?unreadOnly=true&limit=1', {
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setUnreadCount(json?.data?.total ?? 0);
+      } catch {
+        // Non-blocking chrome — see file header. Badge just doesn't render.
+      }
+    }
+
+    loadUnreadCount();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,6 +263,16 @@ export default function ClientPortalPage() {
             </p>
           </div>
         </div>
+        <button
+          onClick={() => router.push('/client/notifications')}
+          className="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          aria-label="Notifications"
+        >
+          <Bell className="h-4 w-4" strokeWidth={1.75} />
+          {unreadCount > 0 && (
+            <span className="absolute right-1.5 top-1.5 flex h-2 w-2 rounded-full bg-primary" />
+          )}
+        </button>
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-8">

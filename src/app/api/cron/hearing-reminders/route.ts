@@ -61,6 +61,49 @@
 // applied only to the single-recipient + audit-write case), just now
 // covering N recipients instead of 1. Not solved here; flagging that
 // the blast radius of a partial failure is now larger than it was.
+//
+// CLIENT PORTAL PHASE 3 -- CLIENT NOTIFICATIONS (this session), ADDITIVE.
+// Real gap found and closed: this cron already resolves "who should be
+// notified for this hearing" as owner + active read_write grantees, but
+// never checked whether the case has a linked Client Portal user
+// (cases.client_id -> clients.profile_id) at all. Reusing the EXISTING
+// 'hearing_reminder' notification type/hearing_id shape for the client
+// recipient too -- no new notification type, no new column, no new
+// dedup mechanism needed. The per-hearing reminder_sent_at gate already
+// covers the client recipient the same way it covers every other
+// recipient: one send per hearing, all recipients together.
+//
+// SECURITY: the client recipient's user_id is resolved ENTIRELY
+// server-side, under the admin client already in use for this whole
+// route -- cases.client_id (server-read) -> clients.id (server lookup,
+// ClientRepository#findById(), admin client bypasses RLS deliberately,
+// same as every other repository already constructed in this route) ->
+// clients.profile_id. No client-supplied id of any kind is ever
+// consulted. If the case has no client_id, or the linked clients row
+// has no profile_id yet (client record exists but hasn't completed
+// portal signup), no client notification is created for that hearing --
+// silently skipped, not an error, since both are valid ordinary states.
+//
+// SCOPE CORRECTION AGAINST THE AUDIT BRIEF THAT REQUESTED THIS FEATURE:
+// the brief's own text named 'hearing_date_reminder' as "the first
+// notification type" for this feature. Read against the real, pasted
+// migrations (20260725010000_create_notifications_table.sql,
+// 20260904000001_widen_notifications_for_hearings.sql) that name is
+// WRONG for this feature -- 'hearing_date_reminder' is a distinct,
+// older type permanently scoped to documents.hearing_date (requires
+// document_id + hearing_date_snapshot, forbids hearing_id). The correct,
+// already-real type for a hearings-table reminder is 'hearing_reminder'
+// (requires hearing_id), which is what this route already sends to
+// lawyer recipients and now also sends to the client recipient. Not
+// silently corrected without a trace: flagged here, and in the session
+// report, per the brief's own "read the actual code first, don't
+// assume the audit is current" instruction.
+//
+// CLIENT-VISIBLE CONTENT: reuses the exact same title/message already
+// sent to lawyer recipients ("Upcoming hearing" / date + court name).
+// No internal-lawyer-only field is added for the client branch -- there
+// was nothing lawyer-internal in this message to begin with, so no
+// separate client-facing copy was needed.
 
 import { NextResponse } from 'next/server';
 
@@ -71,6 +114,7 @@ import { CaseRepository } from '@/modules/cases/case.repository';
 import { CaseAccessGrantRepository } from '@/modules/cases/case-access-grant.repository';
 import { NotificationRepository } from '@/modules/notifications/notification.repository';
 import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
+import { ClientRepository } from '@/modules/user-management/client.repository';
 
 const REMINDER_WINDOW_DAYS = 3;
 
@@ -107,6 +151,7 @@ export async function GET(request: Request) {
   const caseAccessGrantRepository = new CaseAccessGrantRepository(supabase);
   const notificationRepository = new NotificationRepository(supabase);
   const auditLogRepository = new AuditLogRepository(supabase);
+  const clientRepository = new ClientRepository(supabase);
 
   const now = new Date();
   const windowEnd = addDays(now, REMINDER_WINDOW_DAYS);
@@ -147,8 +192,23 @@ export async function GET(request: Request) {
         (grant) => (grant as { access_level?: string }).access_level === 'read_write',
       );
 
+      // Client Portal recipient -- see file header. Resolved
+      // server-side only, from the authorized case relationship;
+      // never from any client-supplied id.
+      let clientRecipientId: string | null = null;
+      if (caseRow.client_id) {
+        const clientRow = await clientRepository.findById(caseRow.client_id);
+        if (clientRow?.profile_id) {
+          clientRecipientId = clientRow.profile_id;
+        }
+      }
+
       const recipientIds = Array.from(
-        new Set([caseRow.owner_id, ...readWriteGrantees.map((grant) => grant.grantee_id)]),
+        new Set([
+          caseRow.owner_id,
+          ...readWriteGrantees.map((grant) => grant.grantee_id),
+          ...(clientRecipientId ? [clientRecipientId] : []),
+        ]),
       );
 
       for (const recipientId of recipientIds) {
