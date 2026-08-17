@@ -82,10 +82,21 @@
 // exactly. No last-lead protection exists server-side, so none is
 // invented here either.
 
+// AMENDMENT -- Navigation + Polish Cleanup task, later session: this
+// page's own header comment above claimed it already used the shared
+// AppSidebar shell -- that was NOT true in the current repo (re-
+// verified this task per its own "audit the current repo, don't
+// assume the prior audit's findings still hold" instruction): the page
+// rendered as a bare, unshelled container the same as its Firm
+// Terminal siblings. Now actually wrapped in AppSidebar
+// (active="teams"), matching documents/page.tsx's established
+// wrapping pattern. No business logic touched.
+
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 
 type FirmRole = 'owner' | 'admin' | 'employee' | 'lawyer';
 type TeamMemberRole = 'member' | 'lead';
@@ -572,7 +583,10 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
   const headerTitle = firm ? firm.name : `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
+      <AppSidebar active="teams" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
           {headerTitle}
@@ -936,6 +950,8 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
           </section>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

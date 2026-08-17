@@ -1,10 +1,19 @@
 // src/app/observability/page.tsx
 // JurisAI Observability module — Phase 3
 
+// AMENDMENT -- Navigation + Polish Cleanup task, later session: now
+// rendered inside the shared AppSidebar shell (active="observability"),
+// matching documents/page.tsx's established wrapping pattern (the
+// outer container's height basis is switched from h-full to h-screen
+// to match every other AppSidebar consumer -- h-full had no ancestor
+// with an explicit height to inherit from, root layout.tsx only sets
+// `min-h-screen` on <body>). No business logic touched.
+
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, AlertCircle, Activity } from 'lucide-react';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 
 // ---- Shapes, mirrored from ObservabilityService/ObservabilityRun ----
 // Same convention as src/app/documents/[id]/page.tsx's own "Shapes,
@@ -142,7 +151,9 @@ export default function ObservabilityFirmPage() {
   }, [loadRuns]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
+      <AppSidebar active="observability" />
+      <div className="flex flex-1 flex-col overflow-hidden">
       <header className="border-b px-8 py-5">
         <div className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-muted-foreground" />
@@ -213,6 +224,7 @@ export default function ObservabilityFirmPage() {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }

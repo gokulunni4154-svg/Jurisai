@@ -152,4 +152,46 @@ export class FirmMemberRepository extends BaseRepository<'firm_members'> {
 
     return (data ?? []) as FirmMemberRow[];
   }
+
+  /**
+   * NEW — Navigation + Polish Cleanup task. Returns every firm_members
+   * row for a single profile, across all firms they belong to
+   * (multi-firm membership is real — see
+   * 20260804000000_support_multi_firm_membership.sql). Needed because
+   * no existing method here answers "which firm(s) is this profile a
+   * member of" starting from just a profile id; findByFirmAndProfile()/
+   * findRowByFirmAndProfile() both require the firmId already known,
+   * and findByFirmId() goes the other direction (firm -> members).
+   *
+   * Motivating caller: resolveDashboardRedirect() (sign-in route) —
+   * post-login routing previously used FirmRepository#findByOwnerId()
+   * only, which misses a profile that is a firm 'admin' (FirmRole)
+   * without being the firm's owner. That is a real, distinct account
+   * shape (firm-invitation.service.ts's own ALLOWED_INVITE_ROLES
+   * includes 'admin' as an inviteable role), so it needs its own
+   * lookup here rather than being folded into the owner-only one.
+   *
+   * Same `created_at asc` ordering convention as findByFirmId() above,
+   * for the same reason: no ordering requirement is confirmed anywhere
+   * for this new query shape, and earliest-membership-first is a
+   * reasonable, consistent default given profiles.firm_id's own
+   * "primary = first join" convention (see the multi-firm migration's
+   * assumption #1).
+   */
+  async findByProfileId(profileId: string): Promise<FirmMemberRow[]> {
+    const { data, error } = await this.supabase
+      .from('firm_members')
+      .select('*')
+      .eq('profile_id', profileId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new DatabaseError('Failed to list firm members by profile id', error, {
+        table: this.tableName,
+        profileId,
+      });
+    }
+
+    return (data ?? []) as FirmMemberRow[];
+  }
 }

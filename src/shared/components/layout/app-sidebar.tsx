@@ -186,6 +186,7 @@ import {
   Mail,
   Bell,
   Activity,
+  ListTodo,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -231,6 +232,9 @@ export function AppSidebar({
     | 'clients'
     | 'teams'
     | 'observability'
+    | 'reports'
+    | 'settings'
+    | 'firm-tasks'
     | 'dashboard';
 }) {
   const router = useRouter();
@@ -305,6 +309,26 @@ export function AppSidebar({
       icon: UserSquare2,
       comingSoon: !firmId,
     },
+    // NEW — Navigation + Polish Cleanup task. Closes the confirmed
+    // stranded-page gap: GET/POST /api/firms/[id]/tasks (standalone,
+    // non-case firm to-dos) and src/app/firms/[id]/tasks/page.tsx were
+    // both fully built, authorized (tasks_select RLS scopes correctly
+    // to firm_members of that firm), and had ZERO navigation entry
+    // anywhere in the repo — reachable only by typing the URL directly.
+    // Gated on firmId exactly like Clients/Team/Reports/Settings just
+    // above/below (a firm-scoped route that can't be linked without
+    // one). Distinct from the existing "Tasks & Deadlines" item above,
+    // which points at /tasks/mine (personal, assignee-scoped) — this
+    // is the firm-wide standalone to-do list, a different page and a
+    // different data shape (TaskService#listStandaloneTasks vs
+    // #listMyTasks), so it gets its own label rather than overloading
+    // an existing one.
+    {
+      label: 'Firm Tasks',
+      href: firmId ? `/firms/${firmId}/tasks` : null,
+      icon: ListTodo,
+      comingSoon: !firmId,
+    },
     {
       label: 'Reports',
       href: firmId ? `/firm/${firmId}/reports` : null,
@@ -362,6 +386,9 @@ export function AppSidebar({
             (item.href === '/lawyer-inquiries' && active === 'inquiries') ||
             (item.label === 'Clients' && active === 'clients') ||
             (item.label === 'Team' && active === 'teams') ||
+            (item.label === 'Firm Tasks' && active === 'firm-tasks') ||
+            (item.label === 'Reports' && active === 'reports') ||
+            (item.label === 'Settings' && active === 'settings') ||
             (item.href === '/observability' && active === 'observability');
           const Icon = item.icon;
 

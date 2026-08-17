@@ -55,10 +55,20 @@
 // FirmDashboardService#getDashboard() likewise takes no limit/offset,
 // so there is no "Load more" UI here either.
 
+// AMENDMENT -- Navigation + Polish Cleanup task, later session: now
+// rendered inside the shared AppSidebar shell (active="dashboard"),
+// matching documents/page.tsx's established wrapping pattern exactly
+// (flex h-screen outer row, sidebar + scrollable content column). This
+// page previously had no persistent navigation of any kind -- one of
+// six Firm Terminal pages the prior architecture audit flagged for
+// this exact inconsistency. No business logic, data fetching, or
+// visibility handling below was touched.
+
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 
 interface FirmCase {
   id: string;
@@ -168,7 +178,10 @@ export default function FirmDashboardPage({ params }: { params: { firmId: string
   const headerTitle = `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
+      <AppSidebar active="dashboard" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-5xl px-6 py-10">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
           {headerTitle}
@@ -274,6 +287,8 @@ export default function FirmDashboardPage({ params }: { params: { firmId: string
           </section>
         </div>
       ) : null}
+        </div>
+      </div>
     </div>
   );
 }

@@ -94,10 +94,16 @@
 // server-side per File 4's own flagged decision not to expose it as a
 // query param), so there is no "Load more" UI here either.
 
+// AMENDMENT -- Navigation + Polish Cleanup task, later session: now
+// rendered inside the shared AppSidebar shell (active="reports"),
+// matching documents/page.tsx's established wrapping pattern. No
+// business logic touched.
+
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 
 interface StatusCounts {
   total: number;
@@ -209,7 +215,10 @@ export default function FirmReportsPage({ params }: { params: { firmId: string }
   const headerTitle = `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
+      <AppSidebar active="reports" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-5xl px-6 py-10">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
           {headerTitle}
@@ -339,6 +348,8 @@ export default function FirmReportsPage({ params }: { params: { firmId: string }
           </section>
         </div>
       ) : null}
+        </div>
+      </div>
     </div>
   );
 }

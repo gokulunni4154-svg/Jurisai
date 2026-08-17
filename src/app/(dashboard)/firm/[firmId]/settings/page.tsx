@@ -108,10 +108,16 @@
 // creation (no route returns it), so there is nothing to show on
 // subsequent loads.
 
+// AMENDMENT -- Navigation + Polish Cleanup task, later session: now
+// rendered inside the shared AppSidebar shell (active="settings"),
+// matching documents/page.tsx's established wrapping pattern. No
+// business logic touched.
+
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 
 type FirmRole = 'owner' | 'admin' | 'employee' | 'lawyer';
 
@@ -465,7 +471,10 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
   const headerTitle = firm ? firm.name : `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
+      <AppSidebar active="settings" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
           {headerTitle}
@@ -705,6 +714,8 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
           </section>
         </div>
       ) : null}
+        </div>
+      </div>
     </div>
   );
 }

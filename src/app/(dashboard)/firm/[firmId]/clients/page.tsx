@@ -47,11 +47,17 @@
 // page, this same change) -- GET/PATCH /api/firms/[id]/clients/[clientId]
 // already exist and were otherwise unreachable from any frontend.
 
+// AMENDMENT -- Navigation + Polish Cleanup task, later session: now
+// rendered inside the shared AppSidebar shell (active="clients"),
+// matching documents/page.tsx's established wrapping pattern. No
+// business logic touched.
+
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 
 interface FirmRow {
   id: string;
@@ -185,7 +191,10 @@ export default function FirmClientsPage({ params }: { params: { firmId: string }
   const headerTitle = firm ? firm.name : `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
+      <AppSidebar active="clients" />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
           {headerTitle}
@@ -316,6 +325,8 @@ export default function FirmClientsPage({ params }: { params: { firmId: string }
           </section>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

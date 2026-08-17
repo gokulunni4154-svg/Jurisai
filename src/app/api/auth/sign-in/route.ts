@@ -5,6 +5,7 @@ import { buildAuthService } from '@/modules/auth/auth.factory';
 import { buildAnonymousAnalysisService } from '@/modules/lawyer-inquiries/anonymous-analysis.factory';
 import { createClient } from '@/core/supabase/server';
 import { FirmRepository } from '@/modules/billing/firm.repository';
+import { FirmMemberRepository } from '@/modules/user-management/firm-member.repository';
 import type { AuthUser } from '@/core/auth/types';
 
 /**
@@ -125,8 +126,29 @@ export async function POST(request: Request): Promise<NextResponse> {
  *    account. Confirmed real via this session's repo audit, not
  *    assumed.
  *
- * 4. firm owner ('/firm/[firmId]'), via FirmRepository.findByOwnerId().
- *    Unchanged from before this task.
+ * 4. firm owner OR firm admin ('/firm/[firmId]'). CORRECTED, Navigation
+ *    + Polish Cleanup task: previously ONLY checked
+ *    FirmRepository.findByOwnerId() -- a real bug, found via this
+ *    task's own audit, not assumed. That call only ever matches a
+ *    profile listed as firms.owner_id, so a profile that is a firm
+ *    'admin' (FirmRole, via firm_members) WITHOUT being the owner --
+ *    a real, distinct, inviteable account shape (see
+ *    firm-invitation.service.ts's own ALLOWED_INVITE_ROLES) -- fell
+ *    through to the '/dashboard' fallback below instead of landing in
+ *    the Firm Terminal, contradicting this project's own stated
+ *    "FIRM OWNER/ADMIN -> Firm Terminal" redirect rule. Now checks
+ *    FirmMemberRepository#findByProfileId() (new method, this task)
+ *    for an 'owner' or 'admin' row (owner preferred first, matching
+ *    the prior behavior exactly when one exists; multi-firm-admin case
+ *    takes the earliest membership, same "primary = first join"
+ *    convention profiles.firm_id itself uses) instead of the
+ *    owner-only firms table lookup. Ordinary ('employee'/'lawyer'
+ *    FirmRole) members are deliberately NOT matched here -- they are
+ *    firm-side staff, not firm-wide administrators, so they keep
+ *    following the role-based / fallback paths above and below
+ *    exactly as before; this preserves scenario 5 in this task's own
+ *    test matrix ("Ordinary firm lawyer -> no unauthorized management
+ *    navigation").
  *
  * 5. fallback ('/dashboard') -- CORRECTED, this task: previously
  *    '/documents'. General Portal Phase 1 (this task) adds the actual
@@ -160,7 +182,14 @@ async function resolveDashboardRedirect(user: AuthUser): Promise<string> {
     const supabase = await createClient();
     const firmRepository = new FirmRepository(supabase);
     const firm = await firmRepository.findByOwnerId(user.id);
-    return firm ? `/firm/${firm.id}` : '/dashboard';
+    if (firm) {
+      return `/firm/${firm.id}`;
+    }
+
+    const firmMemberRepository = new FirmMemberRepository(supabase);
+    const memberships = await firmMemberRepository.findByProfileId(user.id);
+    const adminMembership = memberships.find((m) => m.role === 'admin');
+    return adminMembership ? `/firm/${adminMembership.firm_id}` : '/dashboard';
   } catch {
     return '/dashboard';
   }
