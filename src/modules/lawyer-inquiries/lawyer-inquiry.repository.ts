@@ -202,6 +202,46 @@ export class LawyerInquiryRepository {
   }
 
   /**
+   * NEW -- General User Terminal, "My Sent Inquiries" gap. Lists every
+   * inquiry SENT BY a specific sender (client_profile_id =
+   * senderProfileId), most recent first. Mirrors listForTargetProfile()
+   * above field-for-field (same query shape, same trust posture, same
+   * "no status filter, let the caller filter/group client-side"
+   * decision) -- the only difference is which column is filtered on:
+   * client_profile_id (who sent it) instead of target_profile_id (who
+   * it's assigned to). Confirmed against this table's real, live SELECT
+   * RLS this session (`lawyer_inquiries_select_client`: client_profile_id
+   * = auth.uid()) -- that policy already covers exactly this access
+   * pattern, so no RLS change was needed for this method to be safe in
+   * principle. It still doesn't rely on that policy directly, though:
+   * this repository is always constructed with the admin client (RLS
+   * bypassed -- see this file's own header comment), so the
+   * `.eq('client_profile_id', senderProfileId)` filter below is what
+   * actually enforces the boundary the RLS policy would, not the policy
+   * itself.
+   *
+   * FLAGGED, same trust posture as listForTargetProfile() above:
+   * senderProfileId is passed in and trusted, not derived from anything
+   * this repository method checks itself -- whatever calls this
+   * (LawyerInquiryService#listMySentInquiries()) is responsible for
+   * passing the AUTHENTICATED caller's own id, never a client-supplied
+   * one.
+   */
+  async listForSenderProfile(senderProfileId: string): Promise<LawyerInquiryRow[]> {
+    const { data, error } = await this.client
+      .from(TABLE)
+      .select('*')
+      .eq('client_profile_id', senderProfileId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  /**
    * Transitions an inquiry from pending to accepted (§2 step 9).
    *
    * FLAGGED: does not verify the row's CURRENT status is 'pending'

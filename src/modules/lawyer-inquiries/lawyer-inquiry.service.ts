@@ -239,6 +239,45 @@ export class LawyerInquiryService extends BaseService {
   }
 
   /**
+   * NEW -- General User Terminal, "My Sent Inquiries" gap (the
+   * companion read this session identified as missing: a General User
+   * can already SEND an inquiry via createInquiry() above, but had no
+   * way to see what happened to it afterward). Self-scoped, no id/
+   * profileId param -- same "resolves entirely off requireAuthentication()'s
+   * own result" shape as listMyInquiries() below and
+   * CaseAccessGrantService#listMyCases() (confirmed real precedent).
+   *
+   * KEY DECISION, IDENTITY MODEL: deliberately named
+   * listMySentInquiries(), not e.g. listForClientProfile(), to keep the
+   * General User Terminal's own vocabulary (a General User is not
+   * necessarily a Client Portal "client" -- see
+   * lawyer-directory.service.ts's own "no currentUser concept" framing
+   * for the same client/General-User distinction elsewhere in this
+   * module) separate from this table's column name, which is
+   * client_profile_id purely because that column predates the General
+   * Portal existing as a concept at all (this table was built for the
+   * anonymous-visitor-signs-up-and-contacts-a-lawyer flow, back when
+   * "client" meant "whoever sent the inquiry," not the later, distinct
+   * Client Portal role). No new identity field was introduced --
+   * user.id (requireAuthentication()'s own result) is compared directly
+   * against the existing client_profile_id column, same column
+   * createInquiry() already writes to.
+   *
+   * No requireOwnership()/requireFirmRole() gate here, unlike
+   * acceptInquiry()/assignInquiry() below -- there is no specific row
+   * to check ownership against yet at call time (this IS the query that
+   * finds which rows belong to the caller), same "authorization is
+   * baked into the query's own filter, not a post-hoc check" posture as
+   * listMyInquiries() below.
+   */
+  async listMySentInquiries(): Promise<LawyerInquiryListing[]> {
+    const user = this.requireAuthentication();
+
+    const rows = await this.repository.listForSenderProfile(user.id);
+    return rows.map(toListing);
+  }
+
+  /**
    * Accepts a pending inquiry (§2 step 9) -- full document + analysis
    * unlock for the lawyer from this point on. Only the inquiry's
    * target_profile_id may accept it.

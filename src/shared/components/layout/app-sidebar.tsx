@@ -130,6 +130,28 @@
 // and the live Supabase project this session. This nav change plus the
 // new page are the only missing layer.
 //
+// AMENDMENT -- My Sent Inquiries (General User Terminal, "what happened
+// to the inquiry I sent" task), later session: `active` widened again
+// to also accept 'inquiries-mine', and a real "My Inquiries" top-level
+// nav item added (directly below "Find a Lawyer"), pointing at
+// /inquiries/mine (new page, this same change). EXISTING BACKEND, NO
+// GAP AT THE DATA LAYER BUT A REAL GAP EVERYWHERE ELSE: a General User
+// could already SEND an inquiry (existing Contact-a-Lawyer flow,
+// documents/[id]/page.tsx) but had no way to see it afterward -- there
+// was no repository method, no service method, and no route for a
+// sender-scoped read before this change (only listForTargetProfile()/
+// listMyInquiries(), the LAWYER-scoped read, existed). Deliberately kept
+// as its OWN nav item and OWN `active` value, not merged into the
+// existing "Inquiries" item a few lines below (which points a LAWYER at
+// /lawyer-inquiries, a different query -- assigned-to-me, not sent-by-
+// me -- over the same table): merging them would mean the same nav
+// label silently means two different things depending on account type,
+// which is exactly the kind of ambiguity this file's own "Dashboard"
+// item had to work around with resolveDashboardRedirect()-style
+// branching. Two distinct, always-visible items are clearer than one
+// role-branching one here, since (unlike Dashboard) a single account
+// could plausibly want to see both lists.
+//
 // AMENDMENT -- Find a Lawyer (General User Terminal, standalone lawyer
 // directory task), later session: `active` widened again to also accept
 // 'lawyers', and a real "Find a Lawyer" top-level nav item added
@@ -201,6 +223,7 @@ import {
   Activity,
   ListTodo,
   Search,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -241,6 +264,7 @@ export function AppSidebar({
     | 'profile'
     | 'verification'
     | 'inquiries'
+    | 'inquiries-mine'
     | 'invitations'
     | 'notifications'
     | 'lawyers'
@@ -311,6 +335,7 @@ export function AppSidebar({
     { label: 'Tasks & Deadlines', href: '/tasks/mine', icon: CheckSquare },
     { label: 'Documents', href: '/documents', icon: FileText },
     { label: 'Find a Lawyer', href: '/lawyers', icon: Search },
+    { label: 'My Inquiries', href: '/inquiries/mine', icon: MessageSquare },
     { label: 'Document Sets', href: '/document-sets', icon: FolderKanban },
     { label: 'AI Assistant', href: null, icon: Sparkles, comingSoon: true },
     {
@@ -401,6 +426,7 @@ export function AppSidebar({
             (item.href === '/cases' && active === 'matters') ||
             (item.href === '/lawyer-inquiries' && active === 'inquiries') ||
             (item.href === '/lawyers' && active === 'lawyers') ||
+            (item.href === '/inquiries/mine' && active === 'inquiries-mine') ||
             (item.label === 'Clients' && active === 'clients') ||
             (item.label === 'Team' && active === 'teams') ||
             (item.label === 'Firm Tasks' && active === 'firm-tasks') ||
