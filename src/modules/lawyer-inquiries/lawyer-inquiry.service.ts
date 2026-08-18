@@ -411,6 +411,28 @@ export class LawyerInquiryService extends BaseService {
    * -- no precedent in this codebase for a transaction spanning two
    * different repositories/services (same gap CaseService and
    * DocumentService both separately carry).
+   *
+   * FIXED, P0 SECURITY -- this method previously relied ENTIRELY on
+   * CaseService#createCase()'s own requireCaseCreateAccess() check,
+   * which only verifies the caller has case-creation access to
+   * row.target_firm_id/row.team_id (any firm member, for a solo/no-team
+   * case -- see that method's Decision #60). It never verified the
+   * caller is actually the lawyer this inquiry was assigned to. That
+   * meant any other member of the same firm (e.g. another lawyer, or
+   * any firm member at all for a no-team inquiry) could call convert on
+   * an inquiry accepted by a DIFFERENT lawyer and become the resulting
+   * case's owner_id, taking over that lawyer's accepted engagement.
+   *
+   * The fix reuses the exact same assignment-ownership check
+   * acceptInquiry()/declineInquiry() above already enforce --
+   * requireOwnership(row.target_profile_id) -- rather than inventing a
+   * new authorization rule. Only the lawyer this inquiry is currently
+   * assigned to (target_profile_id) may convert it. No firm-owner/admin
+   * override is added here: acceptInquiry()/declineInquiry(), the two
+   * existing precedents for "acting on this row" in this same file, do
+   * not grant one either (plain requireOwnership(), no allowRoles), so
+   * adding one only for convert would be a new, unprecedented
+   * permission model, not a reuse of an existing one.
    */
   async convertInquiry(inquiryId: string, title: string): Promise<LawyerInquiryListing> {
     this.requireAuthentication();
@@ -424,12 +446,20 @@ export class LawyerInquiryService extends BaseService {
       throw new ConflictError('Only an accepted inquiry can be converted to a case.');
     }
 
-    // CaseService.createCase() performs its own full authorization
-    // check internally (requireCaseCreateAccess) -- this method does
-    // NOT duplicate that check here, same "authorization lives with the
-    // thing being authorized" posture as every other cross-module call
-    // in this file. teamId now comes from row.team_id, set earlier at
-    // assignInquiry() time -- see this method's own doc comment above.
+    if (row.target_profile_id === null) {
+      throw new AuthorizationError('This inquiry has not yet been assigned to a lawyer.');
+    }
+    this.requireOwnership(row.target_profile_id);
+
+    // CaseService.createCase() still performs its own full
+    // authorization check internally (requireCaseCreateAccess) -- that
+    // check is orthogonal (does the caller have case-creation access to
+    // this firm/team at all) and is still required. The
+    // requireOwnership() call above is what was actually missing: it
+    // closes the gap where createCase()'s firm-level check alone let
+    // any firm member convert someone else's assigned inquiry. teamId
+    // still comes from row.team_id, set earlier at assignInquiry()
+    // time -- see this method's own doc comment above.
     const createdCase = await this.caseService.createCase({
       firmId: row.target_firm_id,
       teamId: row.team_id,
