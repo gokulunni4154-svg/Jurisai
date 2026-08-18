@@ -1274,7 +1274,7 @@ export default function DocumentAnalysisPage() {
     setIsSubmittingInquiry(true);
     setInquiryError(null);
     try {
-      const res = await fetch(`/api/documents/${documentId}/lawyer-inquiries`, {
+      const res = await fetch(`/api/documents/${documentId}/lawyer-inquires`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -1835,6 +1835,174 @@ export default function DocumentAnalysisPage() {
                   {healthScoreError && (
                     <p className="text-[12px] text-destructive">{healthScoreError}</p>
                   )}
+                </div>
+              )}
+            </section>
+
+            {/* Contact a Lawyer — NEW, THIS SESSION. Surfaces the
+                previously-dead handleOpenContactLawyer/handleSubmitInquiry
+                flow (state + handlers already existed; this is the first
+                render path for them). Gated on a completed Legal Health
+                Score, mirroring POST /api/documents/[id]/lawyer-inquires'
+                own server-side requirement — see handleSubmitInquiry's
+                comment above. */}
+            <section className="rounded-lg border border-border bg-card p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" strokeWidth={1.75} />
+                <h2 className="font-serif text-[18px] text-foreground">Contact a Lawyer</h2>
+              </div>
+
+              {healthScore?.status !== 'completed' ? (
+                <p className="text-[13px] text-muted-foreground">
+                  Generate a Legal Health Score above first — it&apos;s required before you can
+                  contact a lawyer about this document.
+                </p>
+              ) : !isContactLawyerOpen ? (
+                <div className="flex flex-col items-start gap-3">
+                  <p className="text-[13px] text-muted-foreground">
+                    Not sure what to do next? Reach out to a verified firm and share this
+                    document&apos;s analysis with them directly.
+                  </p>
+                  <button
+                    onClick={handleOpenContactLawyer}
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
+                  >
+                    <Scale className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    Contact a Lawyer
+                  </button>
+                </div>
+              ) : submittedInquiry ? (
+                <div className="flex flex-col items-start gap-3">
+                  <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" strokeWidth={1.75} />
+                    Your inquiry has been sent.
+                  </div>
+                  <p className="text-[12.5px] text-muted-foreground">
+                    The firm can now review your Legal Health Score and analysis. You&apos;ll be
+                    notified once they respond.
+                  </p>
+                  <button
+                    onClick={handleCloseContactLawyer}
+                    className="rounded-md border border-input px-3.5 py-2 text-[13px] font-medium text-foreground hover:bg-muted"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {/* Step 1 — pick a firm */}
+                  <div>
+                    <p className="mb-2 text-[12.5px] font-medium text-foreground">
+                      Choose a firm
+                    </p>
+                    {isLoadingFirms ? (
+                      <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading firms…
+                      </div>
+                    ) : firmsError ? (
+                      <p className="text-[12.5px] text-destructive">{firmsError}</p>
+                    ) : firms && firms.length === 0 ? (
+                      <p className="text-[12.5px] text-muted-foreground">
+                        No verified firms are available right now.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {firms?.map((firm) => (
+                          <button
+                            key={firm.id}
+                            onClick={() => handleSelectFirm(firm.id)}
+                            className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-[13px] transition-colors ${
+                              selectedFirmId === firm.id
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border text-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Building2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                              {firm.name}
+                            </span>
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 2 — optionally pick a specific lawyer at that firm */}
+                  {selectedFirmId && (
+                    <div>
+                      <p className="mb-2 text-[12.5px] font-medium text-foreground">
+                        Choose a lawyer (optional — leave unselected to contact the firm
+                        generally)
+                      </p>
+                      {isLoadingMembers ? (
+                        <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Loading members…
+                        </div>
+                      ) : membersError ? (
+                        <p className="text-[12.5px] text-destructive">{membersError}</p>
+                      ) : firmMembers && firmMembers.length === 0 ? (
+                        <p className="text-[12.5px] text-muted-foreground">
+                          This firm has no members listed yet — you can still contact the
+                          firm generally.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-1.5">
+                          <button
+                            onClick={() => setSelectedProfileId(null)}
+                            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left text-[13px] transition-colors ${
+                              selectedProfileId === null
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border text-foreground hover:bg-muted/50'
+                            }`}
+                          >
+                            Contact the firm generally
+                          </button>
+                          {firmMembers?.map((member) => (
+                            <button
+                              key={member.profileId}
+                              onClick={() => setSelectedProfileId(member.profileId)}
+                              className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-[13px] transition-colors ${
+                                selectedProfileId === member.profileId
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border text-foreground hover:bg-muted/50'
+                              }`}
+                            >
+                              <span>{member.fullName}</span>
+                              <span className="text-[11px] capitalize text-muted-foreground">
+                                {member.role}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {inquiryError && (
+                    <p className="text-[12.5px] text-destructive">{inquiryError}</p>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSubmitInquiry}
+                      disabled={!selectedFirmId || isSubmittingInquiry}
+                      className="flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSubmittingInquiry && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Send Inquiry
+                    </button>
+                    <button
+                      onClick={handleCloseContactLawyer}
+                      disabled={isSubmittingInquiry}
+                      className="flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] text-muted-foreground hover:bg-muted"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </section>
