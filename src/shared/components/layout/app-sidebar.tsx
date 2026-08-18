@@ -130,6 +130,19 @@
 // and the live Supabase project this session. This nav change plus the
 // new page are the only missing layer.
 //
+// AMENDMENT -- Find a Lawyer (General User Terminal, standalone lawyer
+// directory task), later session: `active` widened again to also accept
+// 'lawyers', and a real "Find a Lawyer" top-level nav item added
+// (between Documents and Document Sets). EXISTING BACKEND, NO GAP: GET
+// /api/lawyers (LawyerDirectoryService#listVerifiedLawyers(), confirmed
+// real source this session) already existed with zero frontend consumer
+// anywhere in the repo -- the only thing that read it was this exact
+// gap. Not gated on firmId or role -- unlike Clients/Team/Reports/
+// Settings, this is not firm-scoped, and every account type (general
+// user, lawyer, firm member) benefits from being able to browse the
+// directory, so it always renders as a real, clickable item rather than
+// a conditionally-disabled one.
+//
 // AMENDMENT -- Firm Terminal Observability / Run History integration
 // task, later session: `active` widened again to also accept
 // 'observability'. EXISTING PAGE + BACKEND, NO GAP: /observability
@@ -187,6 +200,7 @@ import {
   Bell,
   Activity,
   ListTodo,
+  Search,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -229,6 +243,7 @@ export function AppSidebar({
     | 'inquiries'
     | 'invitations'
     | 'notifications'
+    | 'lawyers'
     | 'clients'
     | 'teams'
     | 'observability'
@@ -295,6 +310,7 @@ export function AppSidebar({
     { label: 'Hearings & Calendar', href: '/hearings/upcoming', icon: CalendarClock },
     { label: 'Tasks & Deadlines', href: '/tasks/mine', icon: CheckSquare },
     { label: 'Documents', href: '/documents', icon: FileText },
+    { label: 'Find a Lawyer', href: '/lawyers', icon: Search },
     { label: 'Document Sets', href: '/document-sets', icon: FolderKanban },
     { label: 'AI Assistant', href: null, icon: Sparkles, comingSoon: true },
     {
@@ -384,6 +400,7 @@ export function AppSidebar({
             (item.href === '/tasks/mine' && active === 'tasks') ||
             (item.href === '/cases' && active === 'matters') ||
             (item.href === '/lawyer-inquiries' && active === 'inquiries') ||
+            (item.href === '/lawyers' && active === 'lawyers') ||
             (item.label === 'Clients' && active === 'clients') ||
             (item.label === 'Team' && active === 'teams') ||
             (item.label === 'Firm Tasks' && active === 'firm-tasks') ||
