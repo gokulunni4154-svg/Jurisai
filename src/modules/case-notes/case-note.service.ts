@@ -4,19 +4,30 @@
 // shape and its requireTaskCreateAccess()-style private access-check
 // helper — this service's own requireNoteAccess() mirrors that
 // structure, but against a DELIBERATELY NARROWER rule than every other
-// case-scoped module in this project:
+// case-scoped module's WRITE path in this project:
 //
-//   Case owner OR an active READ_WRITE grantee — same test as
-//   task.service.ts's requireTaskCreateAccess() case-linked path.
-//
-//   READ-ONLY grantees are excluded ENTIRELY (cannot list, cannot
-//   post) — unlike case-timeline.service.ts's access rule (owner OR
+//   CREATE (requireNoteAccess()): Case owner OR an active READ_WRITE
+//   grantee — same test as task.service.ts's requireTaskCreateAccess()
+//   case-linked path. READ-ONLY grantees are excluded ENTIRELY from
+//   posting — unlike case-timeline.service.ts's access rule (owner OR
 //   EITHER access level, confirmed product decision), this is
 //   deliberately narrower because "internal" notes are read as
 //   firm-staff-only. FLAGGED: this is this session's own judgment
 //   call, not a re-confirmed product decision — same flag posture as
 //   task.service.ts's own requireTaskCreateAccess() carried when it
 //   was first built.
+//
+//   LIST (listNotesForCase()): CORRECTED, Firm-Manager Visibility
+//   Consistency Audit — no longer calls requireNoteAccess(). Trusts
+//   RLS alone (case_notes_select), same "RLS is the backstop"
+//   convention every sibling list method already uses. See that
+//   method's own doc comment for why: the app-layer re-check that used
+//   to live here predated case_notes_select being widened for
+//   is_firm_case_manager() and was blocking legitimate firm-manager
+//   reads that RLS already allowed. Read-only grantees are still
+//   excluded from listing — that exclusion now lives in RLS alone
+//   (case_notes_select's grantee branch still requires
+//   access_level = 'read_write'), not duplicated in application code.
 //
 // No standalone-firm-note concept — unlike TaskService, there is no
 // second branch here for a null caseId (case_notes.case_id is NOT
@@ -87,21 +98,36 @@ export class CaseNoteService extends BaseService {
   }
 
   /**
-   * Lists every note on a case. Re-checks access explicitly here
-   * (rather than only relying on RLS, as list methods elsewhere in
-   * this project do) — DELIBERATE DIFFERENCE, flagged: read-only
-   * grantees are meant to be excluded even from seeing THAT notes
-   * exist (not just their content), which is narrower than every
-   * other list method's security intent in this project. The
-   * migration's RLS predicate for this (case_notes_select) is now
-   * CONFIRMED correct against the real case_access_grants migration
-   * (revoked_at is null / access_level = 'read_write', copied
-   * directly, not inferred) — this app-layer check is kept anyway as
-   * a second, independent enforcement point given how narrow the
-   * intended exclusion is, not as a hedge against unverified SQL.
+   * Lists every note on a case. RLS-is-the-backstop, matching every
+   * other case-scoped list method in this project (CaseService#
+   * listCaseDocuments, HearingService#listHearingsForCase, TaskService#
+   * listTasksForCase) — only confirms the case itself is visible
+   * (findByIdOrThrow, RLS-scoped) before trusting case_notes_select to
+   * narrow the actual rows returned.
+   *
+   * CORRECTED, Firm-Manager Visibility Consistency Audit: this
+   * previously called requireNoteAccess() (case owner OR active
+   * READ_WRITE grantee ONLY) as a second, app-layer gate on top of
+   * RLS. That app-layer gate predates
+   * 20260813043503_add_firm_manager_case_visibility.sql's
+   * is_firm_case_manager() helper being extended to case_notes_select
+   * (confirmed live: case_notes_select's cases-owner branch now reads
+   * `c.owner_id = auth.uid() OR is_firm_case_manager(c.firm_id)`, applied
+   * directly to the database but never reconciled here) and was never
+   * updated to match — the result was a firm owner/admin (legitimately
+   * firm-case-manager-visible per RLS, and per this migration's own
+   * "firm-staff-only" scoping intent) being rejected with
+   * AuthorizationError before ever reaching a query RLS would have
+   * allowed. Removing the redundant re-check does NOT loosen anything:
+   * case_notes_select's grantee branch still requires
+   * access_level = 'read_write' (revoked_at is null), so a read-only
+   * grantee remains excluded exactly as intended — enforced by RLS
+   * alone now, same as every sibling list method already relied on RLS
+   * alone for its own read-only-grantee exclusions.
    */
   async listNotesForCase(caseId: string): Promise<CaseNoteRow[]> {
-    await this.requireNoteAccess(caseId);
+    this.requireAuthentication();
+    await this.caseRepository.findByIdOrThrow(caseId);
     return this.caseNoteRepository.findByCaseId(caseId);
   }
 
