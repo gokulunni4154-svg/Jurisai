@@ -274,3 +274,116 @@ describe('LawyerInquiryService#convertInquiry', () => {
     expect(caseService.createCase).not.toHaveBeenCalled();
   });
 });
+
+// NEW — Final Lawyer Terminal V1 Launch Audit, Blocker #1 regression
+// coverage. declineInquiry() previously ran every check below and then
+// returned WITHOUT ever calling repository.decline() -- the row was
+// never deleted, so the audit's whole point is: "authorization passing"
+// and "the inquiry is actually gone" are two different assertions, and
+// the old code only ever proved the first one. TEST G is written so it
+// would have FAILED against the pre-fix implementation (which never
+// called repository.decline() at all).
+describe('LawyerInquiryService#declineInquiry', () => {
+  const ASSIGNED_LAWYER = { id: 'lawyer-assigned', role: 'lawyer' } as unknown as AuthUser;
+  const OTHER_FIRM_LAWYER = { id: 'lawyer-other-firm-member', role: 'lawyer' } as unknown as AuthUser;
+
+  const PENDING_ROW = {
+    ...BASE_ROW,
+    status: 'pending' as const,
+    target_profile_id: ASSIGNED_LAWYER.id,
+  };
+
+  function buildDeclineService(
+    currentUser: AuthUser | null,
+    row:
+      | (Omit<typeof PENDING_ROW, 'target_profile_id' | 'status'> & {
+          target_profile_id: string | null;
+          status: 'pending' | 'accepted' | 'converted_to_case';
+        })
+      | null,
+    repositoryOverrides: Partial<LawyerInquiryRepository> = {}
+  ) {
+    const repository = {
+      findById: vi.fn().mockResolvedValue(row),
+      decline: vi.fn().mockResolvedValue(undefined),
+      ...repositoryOverrides,
+    } as unknown as LawyerInquiryRepository;
+
+    const firmMemberRepository = {} as unknown as FirmMemberRepository;
+    const caseService = {} as unknown as CaseService;
+    const documentService = {} as unknown as DocumentService;
+
+    const service = new LawyerInquiryService(
+      currentUser,
+      repository,
+      firmMemberRepository,
+      caseService,
+      documentService
+    );
+
+    return { service, repository };
+  }
+
+  it('TEST G (REGRESSION — fails on the old implementation) — the assigned lawyer declining a pending inquiry actually deletes the row', async () => {
+    const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, PENDING_ROW);
+
+    await service.declineInquiry('inquiry-1');
+
+    // This is the assertion the pre-fix implementation could never
+    // satisfy: it ran the authorization checks and returned without
+    // ever touching the repository's decline() method.
+    expect(repository.decline).toHaveBeenCalledTimes(1);
+    expect(repository.decline).toHaveBeenCalledWith('inquiry-1');
+  });
+
+  it('TEST H — a same-firm lawyer who is NOT the assigned lawyer cannot decline the inquiry', async () => {
+    const { service, repository } = buildDeclineService(OTHER_FIRM_LAWYER, PENDING_ROW);
+
+    await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
+    expect(repository.decline).not.toHaveBeenCalled();
+  });
+
+  it('TEST I — a lawyer at a different firm entirely cannot decline the inquiry', async () => {
+    // Same check as TEST H (target_profile_id ownership is firm-agnostic
+    // by construction — any non-owning caller is rejected identically,
+    // whether same-firm or a different firm) — kept as its own case since
+    // the audit brief lists it separately.
+    const OTHER_FIRM_ENTIRELY_LAWYER = { id: 'lawyer-elsewhere', role: 'lawyer' } as unknown as AuthUser;
+    const { service, repository } = buildDeclineService(OTHER_FIRM_ENTIRELY_LAWYER, PENDING_ROW);
+
+    await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
+    expect(repository.decline).not.toHaveBeenCalled();
+  });
+
+  it('TEST J — an unauthenticated caller cannot decline', async () => {
+    const { service, repository } = buildDeclineService(null, PENDING_ROW);
+
+    await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthenticationError);
+    expect(repository.findById).not.toHaveBeenCalled();
+    expect(repository.decline).not.toHaveBeenCalled();
+  });
+
+  it('TEST K — a missing inquiry resolves silently (existing service semantics: declineInquiry no-ops on an already-gone row, unlike acceptInquiry/convertInquiry which throw NotFoundError)', async () => {
+    const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, null);
+
+    await expect(service.declineInquiry('inquiry-missing')).resolves.toBeUndefined();
+    expect(repository.decline).not.toHaveBeenCalled();
+  });
+
+  it('TEST L — an unassigned inquiry (target_profile_id null) cannot be declined by anyone', async () => {
+    const UNASSIGNED_ROW = { ...PENDING_ROW, target_profile_id: null };
+    const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, UNASSIGNED_ROW);
+
+    await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
+    expect(repository.decline).not.toHaveBeenCalled();
+  });
+
+  it('TEST M — the existing implementation does not gate decline on status: an already-accepted inquiry is still declined by its assigned lawyer via the same ownership check (documents current behavior — no status-based protection exists here, unlike convertInquiry, and this fix does not add one)', async () => {
+    const ACCEPTED_ROW = { ...PENDING_ROW, status: 'accepted' as const };
+    const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, ACCEPTED_ROW);
+
+    await service.declineInquiry('inquiry-1');
+
+    expect(repository.decline).toHaveBeenCalledWith('inquiry-1');
+  });
+});

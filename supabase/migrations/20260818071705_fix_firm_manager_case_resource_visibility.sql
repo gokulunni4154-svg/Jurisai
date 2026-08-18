@@ -20,29 +20,53 @@
 -- WHAT THIS ADDS: extends the SELECT-visibility widening
 -- 20260813043503_add_firm_manager_case_visibility.sql already gave
 -- `cases_select` (and 20260914000000 later gave `hearings_select`) to
--- the three remaining case-scoped resources that were missing it:
--- case_documents, documents (via case_documents), and case_notes, plus
--- an equivalent branch on tasks_select for case-linked tasks. A firm's
--- own owner/admin can now see every document, note, and task belonging
--- to any case in their own firm -- not just resources on cases they
--- personally own or hold an explicit case_access_grants row for --
--- consistent with the same-firm-manager visibility `cases_select` and
--- `hearings_select` already grant. Same `public.is_firm_case_manager()`
--- SECURITY DEFINER helper reused throughout, no new function.
+-- the case-scoped resources that were missing it: case_documents,
+-- documents (via case_documents), and tasks. A firm's own owner/admin
+-- can now see every document and task belonging to any case in their
+-- own firm -- not just resources on cases they personally own or hold
+-- an explicit case_access_grants row for -- consistent with the
+-- same-firm-manager visibility `cases_select` and `hearings_select`
+-- already grant. Same `public.is_firm_case_manager()` SECURITY DEFINER
+-- helper reused throughout, no new function.
 --
 -- SELECT-ONLY, SAME POSTURE AS 20260914000000: every INSERT/UPDATE/
--- DELETE policy on case_documents, documents, case_notes, and tasks is
--- deliberately left untouched -- a firm owner/admin gains read
--- visibility into every case-linked resource in their firm, but
--- creating/editing/deleting still requires being the case owner or
--- holding an active read_write case_access_grants grant on that
--- specific case (or, for case_notes, being the note's own author for
--- update; or, for standalone tasks, any firm_members row, unchanged).
--- This mirrors 20260914000000's own "never weaken authorization simply
--- to make create/edit buttons work" reasoning and matches this
--- project's established mutation posture: manager visibility is a
--- read-time concept everywhere it exists, never a write-time one. No
--- other table, policy, or column is touched.
+-- DELETE policy on case_documents, documents, and tasks is deliberately
+-- left untouched -- a firm owner/admin gains read visibility into
+-- every case-linked resource in their firm, but creating/editing/
+-- deleting still requires being the case owner or holding an active
+-- read_write case_access_grants grant on that specific case (or, for
+-- standalone tasks, any firm_members row, unchanged). This mirrors
+-- 20260914000000's own "never weaken authorization simply to make
+-- create/edit buttons work" reasoning and matches this project's
+-- established mutation posture: manager visibility is a read-time
+-- concept everywhere it exists, never a write-time one. No other
+-- table, policy, or column is touched.
+--
+-- SPLIT OUT, Final Lawyer Terminal V1 Launch Audit / Blocker #2
+-- (migration replay ordering): this file originally also widened
+-- `case_notes_select` in the same statement block. That broke a
+-- from-scratch migration replay -- `public.case_notes` doesn't exist
+-- yet at this file's position in migration order; it isn't created
+-- until the later 20260910000000_create_case_notes_table.sql. Since
+-- production already has today's live state (this file's version,
+-- 20260818071705, is the version already recorded in production's own
+-- migration history for the out-of-band change that included the
+-- case_notes widening), this file's CONTENT here has been narrowed to
+-- only what a fresh replay can actually execute at this point in the
+-- sequence -- case_documents, documents, and tasks, all of which
+-- already exist by 20260818071705. The case_notes_select widening now
+-- lives in its own migration,
+-- 20260910000001_widen_case_notes_select_for_firm_managers.sql,
+-- positioned immediately after case_notes' own creation -- same
+-- "create table, then a later dedicated migration widens its SELECT
+-- policy" shape this project already uses for hearings
+-- (20260904000000 creates the table, 20260914000000 widens
+-- hearings_select). A fresh replay and production now reach the exact
+-- same final case_notes_select policy text; only the migration that
+-- gets there is reordered. Production's own migration history is
+-- UNCHANGED by this split -- this is a local, repository-only
+-- reconciliation, not a remote repair. No `supabase migration repair`
+-- or similar remote-history command was run or is required.
 --
 -- DO NOT apply this file directly with `supabase db push` unless you
 -- have first confirmed version 20260818071705 is NOT already applied on
@@ -97,39 +121,12 @@ create policy documents_select_via_firm_manager
   );
 
 -- ----------------------------------------------------------------------------
--- case_notes_select -- add is_firm_case_manager(c.firm_id) branch
+-- case_notes_select -- MOVED. See this file's header ("SPLIT OUT,
+-- Final Lawyer Terminal V1 Launch Audit / Blocker #2"). Now lives in
+-- 20260910000001_widen_case_notes_select_for_firm_managers.sql,
+-- applied after case_notes' own creation
+-- (20260910000000_create_case_notes_table.sql) rather than here.
 -- ----------------------------------------------------------------------------
--- Widens the case-owner branch only. The case_access_grants branch is
--- untouched -- read-only grantees remain excluded from case_notes,
--- per that migration's own "firm-staff-only" scoping decision. A firm
--- owner/admin qualifies as firm staff, so this branch closes the gap
--- that decision's own intent already implied but never granted at the
--- RLS layer.
-
-drop policy if exists case_notes_select on public.case_notes;
-
-create policy case_notes_select
-  on public.case_notes
-  for select
-  to authenticated
-  using (
-    exists (
-      select 1 from public.cases c
-      where c.id = case_notes.case_id
-        and (
-          c.owner_id = auth.uid()
-          or public.is_firm_case_manager(c.firm_id)
-        )
-    )
-    or exists (
-      select 1 from public.case_access_grants g
-      where g.case_id = case_notes.case_id
-        and g.grantee_id = auth.uid()
-        and g.revoked_at is null
-        and g.access_level = 'read_write'
-    )
-    or (auth.jwt() -> 'app_metadata' ->> 'role') in ('admin', 'support')
-  );
 
 -- ----------------------------------------------------------------------------
 -- tasks_select -- add is_firm_case_manager(firm_id) branch

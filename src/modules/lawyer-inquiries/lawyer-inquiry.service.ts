@@ -307,6 +307,17 @@ export class LawyerInquiryService extends BaseService {
    * Declines a pending inquiry (§2 step 8) -- deletes the row outright,
    * per §4.2's resolved "no stored status, no audit trail" decision.
    * Same target_profile_id-only authorization as acceptInquiry().
+   *
+   * FIXED -- Final Lawyer Terminal V1 Launch Audit, Blocker #1: this
+   * method previously ran every authorization check below and then
+   * returned without ever calling the repository's decline() -- the
+   * row was never actually deleted, so a "declined" inquiry stayed
+   * `pending` forever (the frontend only *looked* like it worked,
+   * since it optimistically drops the row from its own list). Fix is
+   * the smallest possible: add the one call this method's own doc
+   * comment already claimed it made. No change to the authorization
+   * checks above it, no new status, no new column, no API contract
+   * change -- declineInquiry() still returns void, same as before.
    */
   async declineInquiry(inquiryId: string): Promise<void> {
     this.requireAuthentication();
@@ -320,6 +331,8 @@ export class LawyerInquiryService extends BaseService {
       throw new AuthorizationError('This inquiry has not yet been assigned to a lawyer.');
     }
     this.requireOwnership(row.target_profile_id);
+
+    await this.repository.decline(inquiryId);
   }
 
   /**
