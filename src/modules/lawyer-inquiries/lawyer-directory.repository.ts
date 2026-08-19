@@ -71,6 +71,17 @@ interface VerifiedLawyerListingRow {
 
 const PROFESSIONAL_VERIFICATIONS_TABLE = 'professional_verifications';
 
+// FLAGGED: hand-typed raw select-result shape, not from generated
+// Supabase types -- same caveat as VerifiedLawyerListingRow above. Only
+// used to replace an `any` on the .map() callback below with something
+// that reflects the actual `.select()` columns; no behavior change.
+interface VerifiedLawyerRawRow {
+  profile_id: string;
+  registration_number: string;
+  reviewed_at: string | null;
+  profiles: { full_name: string | null } | null;
+}
+
 /**
  * Thin Postgres access for the public "browse verified lawyers"
  * directory. Always constructed with the admin client -- see the file
@@ -127,7 +138,16 @@ export class LawyerDirectoryRepository {
     // here is a guess at the right shape for a directory listing
     // response -- no frontend directory-page source was pasted this
     // session to confirm what shape it actually consumes.
-    return (data ?? []).map((row: any) => ({
+    // Cast the raw result array (not the callback param) to the real
+    // runtime shape: passing a plain string to `.select()` on an
+    // untyped `SupabaseClient` makes supabase-js infer embedded
+    // relations as arrays regardless of actual cardinality, which
+    // doesn't match the `!inner` (to-one) embed's real runtime shape
+    // used below -- same reasoning as FirmMemberRawRow's cast further
+    // down this file.
+    const rows = (data ?? []) as unknown as VerifiedLawyerRawRow[];
+
+    return rows.map((row) => ({
       profile_id: row.profile_id,
       full_name: row.profiles?.full_name ?? '',
       registration_number: row.registration_number,
@@ -212,7 +232,14 @@ export class LawyerDirectoryRepository {
       throw error;
     }
 
-    return (data ?? []).map((row: any) => ({
+    // Cast the raw result array (not the callback param) to the real
+    // runtime shape -- see VerifiedLawyerRawRow's comment above for why
+    // a direct callback param type doesn't structurally match what
+    // supabase-js infers for a plain-string `.select()` on an untyped
+    // client.
+    const rows = (data ?? []) as unknown as FirmMemberRawRow[];
+
+    return rows.map((row) => ({
       profile_id: row.profile_id,
       full_name: row.profiles?.full_name ?? '',
       role: row.role,
@@ -231,4 +258,14 @@ interface FirmMemberListingRow {
   profile_id: string;
   full_name: string;
   role: string;
+}
+
+// FLAGGED: hand-typed raw select-result shape, not from generated
+// Supabase types -- same caveat as FirmMemberListingRow above. Only
+// used to replace an `any` on the .map() callback below with something
+// that reflects the actual `.select()` columns; no behavior change.
+interface FirmMemberRawRow {
+  profile_id: string;
+  role: string;
+  profiles: { full_name: string | null } | null;
 }

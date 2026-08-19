@@ -56,7 +56,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
@@ -114,7 +114,14 @@ async function extractErrorMessage(res: Response): Promise<string> {
   }
 }
 
-export default function CheckoutPage() {
+// FIXED — V1 production blocker (build-blocker fix task). `next build`'s
+// static export requires any `useSearchParams()` call to sit inside a
+// `<Suspense>` boundary (Next.js's own "missing-suspense-with-csr-bailout"
+// rule) — without one, `pnpm build` fails outright. The component body
+// is unchanged; it's just renamed and wrapped by a thin default export
+// below, so the actual page logic (and this file's runtime behavior) is
+// identical to before.
+function CheckoutPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planSlug = searchParams.get('planSlug');
@@ -253,10 +260,10 @@ export default function CheckoutPage() {
                 </div>
               </dl>
               <div className="rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] leading-relaxed text-foreground">
-                Payment authorization isn't wired up yet — Cashfree credentials
-                haven't been configured, so there's nowhere to redirect you to
+                Payment authorization isn&apos;t wired up yet — Cashfree credentials
+                haven&apos;t been configured, so there&apos;s nowhere to redirect you to
                 complete payment. This subscription record was created, but
-                won't be usable until that's finished.
+                won&apos;t be usable until that&apos;s finished.
               </div>
               <button
                 onClick={() => router.push('/pricing')}
@@ -343,5 +350,12 @@ export default function CheckoutPage() {
         </div>
       </main>
     </div>
+  );
+}
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutPageInner />
+    </Suspense>
   );
 }

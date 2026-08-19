@@ -59,7 +59,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowLeft, Loader2, XCircle } from 'lucide-react';
 
@@ -85,7 +85,11 @@ async function extractErrorMessage(res: Response): Promise<string> {
   }
 }
 
-export default function SubscriptionPage() {
+// FIXED — V1 production blocker (build-blocker fix task). See
+// billing/checkout/page.tsx's identical comment: `useSearchParams()`
+// requires a `<Suspense>` boundary for `next build`'s static export to
+// succeed. Component body unchanged, just renamed + wrapped below.
+function SubscriptionPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const firmId = searchParams.get('firmId');
@@ -233,5 +237,12 @@ export default function SubscriptionPage() {
         </div>
       </main>
     </div>
+  );
+}
+export default function SubscriptionPage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscriptionPageInner />
+    </Suspense>
   );
 }

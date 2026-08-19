@@ -111,50 +111,19 @@ const serverEnvSchema = z.object({
    */
   CRON_SECRET: z.string().min(1, 'CRON_SECRET is required'),
 
-  /**
-   * Billing module, CashfreeService. Cashfree's real, current
-   * Subscriptions API (POST /pg/plans, POST /pg/subscriptions) auths via
-   * two headers, `x-client-id` and `x-client-secret` — confirmed against
-   * Cashfree's real, current API docs, not the deprecated "previous"/v1
-   * docs. No fixed format/prefix is documented for either value the way
-   * OPENAI_API_KEY's "sk-" prefix is, so only non-empty is enforced
-   * here, same posture as CRON_SECRET above.
-   */
-  CASHFREE_CLIENT_ID: z.string().min(1, 'CASHFREE_CLIENT_ID is required'),
-  CASHFREE_CLIENT_SECRET: z.string().min(1, 'CASHFREE_CLIENT_SECRET is required'),
-
-  /**
-   * Billing module, CashfreeService. Selects which Cashfree base URL
-   * CashfreeService talks to (sandbox.cashfree.com vs api.cashfree.com)
-   * — real, deliberate config rather than inferring the environment
-   * from NODE_ENV, since a real Cashfree sandbox *account* (separate
-   * credentials, not just a different URL) is what actually determines
-   * which base URL a given client-id/secret pair is valid against.
-   * Getting this wrong doesn't fail loudly — Cashfree would just reject
-   * the credentials — so it's made an explicit, required choice rather
-   * than a silent default.
-   */
-  CASHFREE_ENVIRONMENT: z.enum(['sandbox', 'production'], {
-    errorMap: () => ({
-      message: 'CASHFREE_ENVIRONMENT must be exactly "sandbox" or "production"',
-    }),
-  }),
-
-  /**
-   * NEW — Billing module, webhook route (POST /api/billing/webhooks/cashfree).
-   * Verifies the HMAC-SHA256 signature Cashfree sends on every webhook
-   * delivery (x-webhook-signature header, per
-   * cashfree-webhook-signature.ts's verifyCashfreeWebhookSignature()).
-   * Previously read via raw process.env.CASHFREE_WEBHOOK_SECRET, with
-   * the route handler doing its own per-request null-check, because this
-   * file had never been pasted in any session. Now wired through the
-   * same validated, fail-fast-at-boot pattern as every other secret
-   * here — see route.ts's own updated comment for the behavioral
-   * change this causes (missing secret now fails at app boot, not at
-   * first webhook request). No documented format/prefix, same
-   * non-empty-only posture as CASHFREE_CLIENT_ID/SECRET above.
-   */
-  CASHFREE_WEBHOOK_SECRET: z.string().min(1, 'CASHFREE_WEBHOOK_SECRET is required'),
+  // FIXED — V1 production blocker (build-blocker fix task). Cashfree's
+  // four CASHFREE_* variables used to be required here. Since this
+  // schema is parsed EAGERLY at module load (`export const serverEnv =
+  // loadServerEnv()` below), and admin.ts imports `serverEnv` at module
+  // scope with ~40 files transitively importing admin.ts (including
+  // auth), a missing Cashfree credential could prevent the entire app
+  // from booting — including sign-in — even though Cashfree/Billing is
+  // outside V1 scope. Cashfree credentials are now validated lazily,
+  // only when billing code actually needs them, via
+  // `getBillingEnv()` in `src/core/config/env.billing.ts`. Core app
+  // boot no longer depends on Cashfree being configured; billing itself
+  // still fails clearly (via getBillingEnv()'s own error) if invoked
+  // without configuration.
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -169,10 +138,6 @@ function loadServerEnv(): ServerEnv {
     GOOGLE_CLOUD_VISION_STAGING_BUCKET:
       process.env['GOOGLE_CLOUD_VISION_STAGING_BUCKET'],
     CRON_SECRET: process.env['CRON_SECRET'],
-    CASHFREE_CLIENT_ID: process.env['CASHFREE_CLIENT_ID'],
-    CASHFREE_CLIENT_SECRET: process.env['CASHFREE_CLIENT_SECRET'],
-    CASHFREE_ENVIRONMENT: process.env['CASHFREE_ENVIRONMENT'],
-    CASHFREE_WEBHOOK_SECRET: process.env['CASHFREE_WEBHOOK_SECRET'],
   });
 
   if (!result.success) {

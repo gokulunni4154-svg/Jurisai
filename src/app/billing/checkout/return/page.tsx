@@ -74,7 +74,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
@@ -101,7 +101,11 @@ async function extractErrorMessage(res: Response): Promise<string> {
   }
 }
 
-export default function CheckoutReturnPage() {
+// FIXED — V1 production blocker (build-blocker fix task). See
+// billing/checkout/page.tsx's identical comment: `useSearchParams()`
+// requires a `<Suspense>` boundary for `next build`'s static export to
+// succeed. Component body unchanged, just renamed + wrapped below.
+function CheckoutReturnPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // See file header — the only query param this page reads is our own
@@ -116,7 +120,11 @@ export default function CheckoutReturnPage() {
 
   const fetchSubscription = useCallback(
     async (isRefresh: boolean) => {
-      isRefresh ? setIsRefreshing(true) : setIsLoading(true);
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
       setError(null);
       try {
         const url = firmId
@@ -129,7 +137,11 @@ export default function CheckoutReturnPage() {
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not load subscription status.');
       } finally {
-        isRefresh ? setIsRefreshing(false) : setIsLoading(false);
+        if (isRefresh) {
+          setIsRefreshing(false);
+        } else {
+          setIsLoading(false);
+        }
       }
     },
     [firmId],
@@ -244,5 +256,12 @@ export default function CheckoutReturnPage() {
         </div>
       </main>
     </div>
+  );
+}
+export default function CheckoutReturnPage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutReturnPageInner />
+    </Suspense>
   );
 }

@@ -1689,9 +1689,9 @@ export default function DocumentAnalysisPage() {
             <FileText className="h-6 w-6" />
             <p className="text-[13px]">No analysis exists for this document yet.</p>
             <p className="max-w-sm text-center text-[12px]">
-              This extracts the document's text and runs the first analysis
+              This extracts the document&apos;s text and runs the first analysis
               pass. It can take up to a minute — the page will stay on this
-              screen until it's done, there's no progress bar to watch.
+              screen until it&apos;s done, there&apos;s no progress bar to watch.
             </p>
             <button
               onClick={handleStartAnalysis}
@@ -1817,7 +1817,7 @@ export default function DocumentAnalysisPage() {
                   <p className="text-[13px] text-muted-foreground">
                     No health score has been generated for this analysis yet.
                     This depends on four other Phase 2 modules having already
-                    run — if any haven't, this may fail with a message naming
+                    run — if any haven&apos;t, this may fail with a message naming
                     which one.
                   </p>
                   <button

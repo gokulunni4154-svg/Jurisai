@@ -44,7 +44,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
@@ -77,7 +77,11 @@ async function extractErrorMessage(res: Response): Promise<string> {
   }
 }
 
-export default function NewFirmPage() {
+// FIXED — V1 production blocker (build-blocker fix task). See
+// billing/checkout/page.tsx's identical comment: `useSearchParams()`
+// requires a `<Suspense>` boundary for `next build`'s static export to
+// succeed. Component body unchanged, just renamed + wrapped below.
+function NewFirmPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // Carried through from pricing/page.tsx's firm-plan CTA, if that's
@@ -303,5 +307,12 @@ export default function NewFirmPage() {
         </div>
       </main>
     </div>
+  );
+}
+export default function NewFirmPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewFirmPageInner />
+    </Suspense>
   );
 }

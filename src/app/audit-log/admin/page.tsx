@@ -173,7 +173,7 @@ export default function AdminAuditLogPage() {
           ) : roleStatus === 'unauthorized' ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-16 text-destructive">
               <ShieldAlert className="h-5 w-5" />
-              <p className="text-[13px]">You don't have access to this page.</p>
+              <p className="text-[13px]">You don&apos;t have access to this page.</p>
             </div>
           ) : (
             <>

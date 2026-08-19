@@ -59,14 +59,21 @@
 import 'server-only';
 
 import { ExternalServiceError } from '@/core/errors/app-error';
-import { serverEnv } from '@/core/config/env.server';
+import { getBillingEnv } from '@/core/config/env.billing';
 
 const CASHFREE_API_VERSION = '2023-08-01';
 
-const CASHFREE_BASE_URL =
-  serverEnv.CASHFREE_ENVIRONMENT === 'production'
+// FIXED — V1 production blocker fix. Previously a module-level const
+// computed eagerly from `serverEnv.CASHFREE_ENVIRONMENT` at import time
+// (see env.server.ts's own comment on the same change). Now computed
+// lazily inside `request()`, reading from `getBillingEnv()`, so
+// importing this file never requires Cashfree to be configured — only
+// actually calling a CashfreeService method does.
+function getCashfreeBaseUrl(): string {
+  return getBillingEnv().CASHFREE_ENVIRONMENT === 'production'
     ? 'https://api.cashfree.com'
     : 'https://sandbox.cashfree.com';
+}
 
 /**
  * Thrown when Cashfree's API returns a non-2xx response. Extends the
@@ -182,22 +189,24 @@ export interface ManageCashfreeSubscriptionInput {
  * Stateless wrapper around Cashfree's real Subscriptions API
  * (POST /pg/plans, POST /pg/subscriptions), confirmed against their
  * current (2023-08-01+) docs, not the deprecated v1/"previous" docs.
- * No constructor dependencies — every call reads credentials from the
- * already-validated `serverEnv` singleton, same as every other
- * env-var-consuming module in this project.
+ * No constructor dependencies — every call reads credentials via
+ * `getBillingEnv()` (lazy, validated on first billing call — see
+ * env.billing.ts), not the core `serverEnv` singleton, so importing
+ * this class never requires Cashfree to be configured.
  */
 export class CashfreeService {
   private buildHeaders(): HeadersInit {
+    const billingEnv = getBillingEnv();
     return {
       'Content-Type': 'application/json',
       'x-api-version': CASHFREE_API_VERSION,
-      'x-client-id': serverEnv.CASHFREE_CLIENT_ID,
-      'x-client-secret': serverEnv.CASHFREE_CLIENT_SECRET,
+      'x-client-id': billingEnv.CASHFREE_CLIENT_ID,
+      'x-client-secret': billingEnv.CASHFREE_CLIENT_SECRET,
     };
   }
 
   private async request<T>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(`${CASHFREE_BASE_URL}${path}`, {
+    const response = await fetch(`${getCashfreeBaseUrl()}${path}`, {
       method: 'POST',
       headers: this.buildHeaders(),
       body: JSON.stringify(body),

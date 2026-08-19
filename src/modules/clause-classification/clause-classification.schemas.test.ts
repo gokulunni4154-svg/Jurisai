@@ -85,7 +85,7 @@ describe('clauseClassificationResultSchema', () => {
     });
 
     it('rejects a missing category', () => {
-      const { category, ...rest } = validClause();
+      const { category: _category, ...rest } = validClause();
       const parsed = clauseClassificationResultSchema.safeParse({ clauses: [rest] });
       expect(parsed.success).toBe(false);
     });
@@ -93,7 +93,7 @@ describe('clauseClassificationResultSchema', () => {
 
   describe('classifiedClause.excerpt', () => {
     it('rejects a missing excerpt', () => {
-      const { excerpt, ...rest } = validClause();
+      const { excerpt: _excerpt, ...rest } = validClause();
       const parsed = clauseClassificationResultSchema.safeParse({ clauses: [rest] });
       expect(parsed.success).toBe(false);
     });

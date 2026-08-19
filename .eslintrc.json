@@ -3,6 +3,9 @@
     "next/core-web-vitals",
     "next/typescript"
   ],
+  "ignorePatterns": [
+    "src/core/supabase/database.types.ts"
+  ],
   "rules": {
     "@typescript-eslint/no-unused-vars": [
       "error",

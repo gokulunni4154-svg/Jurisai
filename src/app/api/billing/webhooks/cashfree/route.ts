@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { serverEnv } from '@/core/config/env.server';
+import { getBillingEnv } from '@/core/config/env.billing';
 import { verifyCashfreeWebhookSignature } from '@/modules/billing/cashfree-webhook-signature';
 import {
   cashfreeSubscriptionStatusChangedSchema,
@@ -29,15 +29,17 @@ import { buildBillingService } from '@/modules/billing/billing.factory';
  * null for this unauthenticated webhook request — matching this route's
  * intent), and it's `async`. Corrected below to `await buildBillingService()`.
  *
- * UPDATED — CASHFREE_WEBHOOK_SECRET is now read through the validated
- * `serverEnv` singleton (closes the gap flagged against Item #56's
- * CRON_SECRET precedent). This is a real behavioral change from the
- * prior raw `process.env` read: a missing secret now throws at app
- * boot/cold-start (serverEnv's own module-level `loadServerEnv()` call),
- * not on first webhook request — so the old per-request
- * `if (!secret) return 500` branch is now unreachable and has been
- * removed. If you want a per-request guard kept as defense-in-depth on
- * top of the schema validation, say so and it goes back in.
+ * UPDATED (V1 production blocker fix) — CASHFREE_WEBHOOK_SECRET is read
+ * through `getBillingEnv()` (env.billing.ts), not the core `serverEnv`
+ * singleton. This was previously read via `serverEnv.CASHFREE_WEBHOOK_SECRET`,
+ * which meant a missing secret threw at app boot/cold-start via
+ * serverEnv's eager module-level `loadServerEnv()` call — the exact
+ * problem this fix removes, since serverEnv is imported transitively by
+ * ~40 files including auth. getBillingEnv() validates lazily, on this
+ * route actually being invoked, and throws the same kind of controlled
+ * configuration error if the secret is missing — so a misconfigured
+ * webhook still fails clearly, just without taking the rest of the app
+ * down with it.
  *
  * WHY RAW BODY: request.json() would re-serialize the payload before
  * this handler ever sees the original bytes, and Cashfree's signature is
@@ -58,7 +60,7 @@ import { buildBillingService } from '@/modules/billing/billing.factory';
  * unsafe regardless.
  */
 export async function POST(request: NextRequest) {
-  const secret = serverEnv.CASHFREE_WEBHOOK_SECRET;
+  const secret = getBillingEnv().CASHFREE_WEBHOOK_SECRET;
 
   const rawBody = await request.text();
   const timestamp = request.headers.get('x-webhook-timestamp');

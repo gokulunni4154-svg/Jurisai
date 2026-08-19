@@ -86,9 +86,9 @@ export function SignUpForm() {
       const body: Record<string, string> = { email, password, fullName };
 
       if (accountType === 'lawyer') {
-        body.registrationNumber = registrationNumber;
+        body['registrationNumber'] = registrationNumber;
       } else if (accountType === 'firm') {
-        body.firmName = firmName;
+        body['firmName'] = firmName;
       }
 
       const response = await fetch(ACCOUNT_TYPE_ENDPOINT[accountType], {
