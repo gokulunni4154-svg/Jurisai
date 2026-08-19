@@ -29,24 +29,18 @@ function getSupabaseImageRemotePattern() {
 }
 
 /**
- * Next.js dev mode (Fast Refresh / HMR / webpack's react-refresh runtime)
- * relies on `eval()` and on injecting inline <script> tags at runtime.
- * A strict `script-src 'self'` blocks both, which breaks ALL client-side
- * hydration in `pnpm dev` -- not just one page (this is what caused
- * sign-up's form to silently fall back to a native HTML GET submit:
- * React's JS never executed on the page at all).
- *
- * This relaxation is dev-only. Production keeps the strict OWASP-aligned
- * policy below with no 'unsafe-eval'/'unsafe-inline' on script-src.
- */
-const isDev = process.env.NODE_ENV === 'development';
-
-const scriptSrc = isDev
-  ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
-  : "script-src 'self'";
-
-/**
  * OWASP-aligned security headers applied to every route.
+ *
+ * NOTE: `Content-Security-Policy` is deliberately NOT set here. A nonce
+ * must be freshly generated per-request (a static value baked in at
+ * build time would either be reused across every request — defeating
+ * its purpose — or, if omitted, force `script-src` down to a bare
+ * `'self'` with no nonce/hash/unsafe-inline, which blocks Next.js's own
+ * per-request inline hydration scripts and is what caused the blank
+ * production sign-in form). Per-request headers can only be generated
+ * in Middleware, not in this static config file, so CSP generation
+ * (including the nonce) lives in `src/middleware.ts` instead. See that
+ * file for the actual policy.
  * @type {Array<{ key: string; value: string }>}
  */
 const securityHeaders = [
@@ -73,21 +67,6 @@ const securityHeaders = [
   {
     key: 'X-DNS-Prefetch-Control',
     value: 'on',
-  },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      scriptSrc,
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.openai.com https://generativelanguage.googleapis.com",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      'upgrade-insecure-requests',
-    ].join('; '),
   },
 ];
 

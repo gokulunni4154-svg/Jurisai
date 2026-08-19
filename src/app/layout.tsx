@@ -1,22 +1,12 @@
+import { headers } from 'next/headers';
 import type { Metadata, Viewport } from 'next';
-import { Inter, Newsreader } from 'next/font/google';
 
 import { ThemeProvider } from '@/shared/components/theme-provider';
 
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-sans',
-  display: 'swap',
-});
-
-const newsreader = Newsreader({
-  subsets: ['latin'],
-  variable: '--font-serif',
-  display: 'swap',
-  style: ['normal', 'italic'],
-});
+const inter = { variable: '--font-sans' };
+const newsreader = { variable: '--font-serif' };
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -52,6 +42,18 @@ interface RootLayoutProps {
 }
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  // Reading the nonce here does double duty: (1) it opts this layout —
+  // and therefore every route beneath it — into dynamic (per-request)
+  // rendering, which nonce-based CSP requires (a page baked once at
+  // build time could never carry the correct per-request nonce), and
+  // (2) next-themes' ThemeProvider injects its own dark-mode
+  // flash-prevention <script> directly into the DOM (not one of Next's
+  // own framework scripts), so Next.js's automatic nonce-stamping does
+  // NOT cover it — it must be passed explicitly via the `nonce` prop
+  // below, or that script is silently CSP-blocked too. See
+  // https://nextjs.org/docs/app/guides/content-security-policy.
+  const nonce = headers().get('x-nonce') ?? undefined;
+
   return (
     <html
       lang="en"
@@ -64,6 +66,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
+          nonce={nonce}
         >
           {children}
         </ThemeProvider>
