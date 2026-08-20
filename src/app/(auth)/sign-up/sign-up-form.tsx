@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/modules/auth/auth.schemas';
 
@@ -39,14 +40,37 @@ const ACCOUNT_TYPE_ENDPOINT: Record<AccountType, string> = {
  * (signUpSchema/signUpAsLawyerSchema/signUpAsFirmSchema, all `.strict()`)
  * accept it.
  *
- * SUCCESS BEHAVIOR IS DELIBERATE, confirmed against File 36's real doc
- * comment: with email confirmations enabled, signUp() never establishes
- * a session, so there is nothing to redirect into. A successful submit
- * swaps the form for a static "check your email" panel instead -- do not
- * "fix" this into a redirect without first confirming File 12's email
- * confirmation setting has actually changed. Same behavior confirmed for
- * signUpAsLawyer()/signUpAsFirm() -- both call the same
- * this.supabase.auth.signUp() under the hood.
+ * SUCCESS BEHAVIOR, AMENDED (General User Email Verification Audit,
+ * this session): previously this always swapped in a static "check your
+ * email" panel on any successful submit, regardless of whether Supabase
+ * actually required confirmation for that account. That silently
+ * ignored `emailConfirmationRequired` -- a field the API response
+ * already carries (`data.session === null`, per File 36's signUp() and
+ * this file's own AuthService.signUpAsClient(), computed the same way).
+ * If Supabase's project-level "Confirm email" setting is ever turned
+ * off, signUp() DOES establish a session (written to cookies
+ * automatically -- buildAuthService() uses the same cookie-bridged
+ * client sign-in uses), and the old code would still incorrectly tell
+ * the user to go check an email that will never matter.
+ *
+ * Scoped deliberately to `accountType === 'individual'` only, per this
+ * audit's explicit scope (General Users) -- lawyer/firm accountType
+ * submits are NOT touched here and keep the exact prior "check your
+ * email" behavior unconditionally, regardless of `emailConfirmationRequired`.
+ * That's intentional, not an oversight: this audit did not review
+ * whether the Lawyer/Firm Terminals are prepared to receive a
+ * newly-signed-up, not-yet-professionally-verified user landing there
+ * directly, and changing that is a distinct product decision this task
+ * was not asked to make. See AuthService.signUpAsLawyer()/signUpAsFirm()
+ * for the (separate, non-email) professional-verification gate those
+ * account types still go through either way.
+ *
+ * For 'individual': if `emailConfirmationRequired` is false, this
+ * redirects straight to `/dashboard` (a session already exists by this
+ * point) instead of rendering the "check your email" panel. If true
+ * (Supabase confirmation is enabled -- the default today, unconfirmed
+ * from this repo alone, see the audit report), behavior is completely
+ * unchanged from before.
  *
  * OPEN GAP, carried forward from File 53 and not yet resolved: the exact
  * shape of handleApiError's error JSON (File 21) is still unverified.
@@ -60,6 +84,7 @@ const ACCOUNT_TYPE_ENDPOINT: Record<AccountType, string> = {
  * from the URL) actually serves at `/sign-in` — corrected here to match.
  */
 export function SignUpForm() {
+  const router = useRouter();
   const [accountType, setAccountType] = useState<AccountType>('individual');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -110,8 +135,33 @@ export function SignUpForm() {
         return;
       }
 
-      // No session is established on success (File 36) — show the
-      // confirmation panel instead of redirecting anywhere.
+      // AMENDED, this session: only 'individual' short-circuits past the
+      // "check your email" panel, and only when the API confirms no
+      // confirmation is actually pending. lawyer/firm always fall
+      // through to the panel below, unconditionally, exactly as before.
+      if (accountType === 'individual') {
+        let responseBody: { data?: { emailConfirmationRequired?: unknown } } = {};
+        try {
+          responseBody = await response.json();
+        } catch {
+          // Response wasn't JSON — fall through to the "check your
+          // email" panel below, the same safe default as before this
+          // change (never silently assume a session exists).
+        }
+
+        if (responseBody.data?.emailConfirmationRequired === false) {
+          router.push('/dashboard');
+          // Server Components and middleware read the session from
+          // cookies per-request, same reasoning sign-in-form.tsx's own
+          // router.refresh() comment documents — matched here too.
+          router.refresh();
+          return;
+        }
+      }
+
+      // Either confirmation is genuinely required, accountType isn't
+      // 'individual', or the response couldn't be parsed — show the
+      // confirmation panel, unchanged from before this session.
       setSubmittedEmail(email);
     } catch {
       setErrorMessage('Something went wrong. Please try again.');
