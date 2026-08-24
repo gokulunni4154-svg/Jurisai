@@ -171,7 +171,7 @@ export async function POST(request: Request): Promise<NextResponse> {
  */
 async function resolveDashboardRedirect(user: AuthUser): Promise<string> {
   if (user.role === 'lawyer') {
-    return '/lawyer';
+    return '/lawyer/dashboard';
   }
 
   if (user.role === 'client') {
@@ -183,15 +183,15 @@ async function resolveDashboardRedirect(user: AuthUser): Promise<string> {
     const firmRepository = new FirmRepository(supabase);
     const firm = await firmRepository.findByOwnerId(user.id);
     if (firm) {
-      return `/firm/${firm.id}`;
+      return `/firm/${firm.id}/dashboard`;
     }
 
     const firmMemberRepository = new FirmMemberRepository(supabase);
     const memberships = await firmMemberRepository.findByProfileId(user.id);
     const adminMembership = memberships.find((m) => m.role === 'admin');
-    return adminMembership ? `/firm/${adminMembership.firm_id}` : '/dashboard';
+    return adminMembership ? `/firm/${adminMembership.firm_id}/dashboard` : '/general-user/dashboard';
   } catch {
-    return '/dashboard';
+    return '/general-user/dashboard';
   }
 }
 

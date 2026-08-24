@@ -187,7 +187,7 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
 
   const goToDocument = () => {
     if (!outcome) return;
-    router.push(`/documents/${outcome.documentId}`);
+    router.push(`/general-user/documents/${outcome.documentId}`);
   };
 
   const isBusy = step === 'uploading' || step === 'analyzing';

@@ -148,7 +148,7 @@ function SubscriptionPageInner() {
     <div className="flex min-h-screen w-full flex-col bg-background font-sans text-foreground">
       <header className="flex items-center gap-3 border-b border-border px-8 py-6">
         <button
-          onClick={() => router.push('/documents')}
+          onClick={() => router.push('/general-user/documents')}
           className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
           aria-label="Back to documents"
         >

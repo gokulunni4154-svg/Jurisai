@@ -183,7 +183,7 @@ export function NotificationsPanel({ isOpen, onClose, onUnreadCountChange }: Not
           <button
             onClick={() => {
               onClose();
-              router.push('/notifications');
+              router.push('/lawyer/notifications');
             }}
             className="rounded-md px-2 py-1 text-[12px] font-medium text-primary hover:bg-muted/50"
           >

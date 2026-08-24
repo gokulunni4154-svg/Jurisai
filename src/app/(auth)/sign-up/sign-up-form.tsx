@@ -150,7 +150,7 @@ export function SignUpForm() {
         }
 
         if (responseBody.data?.emailConfirmationRequired === false) {
-          router.push('/dashboard');
+          router.push('/general-user/dashboard');
           // Server Components and middleware read the session from
           // cookies per-request, same reasoning sign-in-form.tsx's own
           // router.refresh() comment documents — matched here too.

@@ -320,23 +320,37 @@ export function AppSidebar({
   // General Portal home (/dashboard, this task) for everyone else.
   const dashboardHref =
     profile?.role === 'lawyer'
-      ? '/lawyer'
+      ? '/lawyer/dashboard'
       : profile?.role === 'client'
         ? '/client'
         : firmId
-          ? `/firm/${firmId}`
-          : '/dashboard';
+          ? `/firm/${firmId}/dashboard`
+          : '/general-user/dashboard';
+
+  // Terminal Route Namespace Migration — AppSidebar previously showed
+  // every non-firm item to every account type regardless of role (only
+  // the firm-scoped items below were gated, on firmId). Lawyer Terminal
+  // and General User Terminal items are now gated on `isLawyer` so each
+  // terminal only sees its own navigation, per the migration brief. Firm
+  // items keep their existing firmId gating, unchanged — a firm-scoped
+  // route can't be linked without one, same as before this migration.
+  const isLawyer = profile?.role === 'lawyer';
 
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: dashboardHref, icon: LayoutDashboard },
-    { label: 'Matters', href: '/cases', icon: Briefcase },
-    { label: 'Inquiries', href: '/lawyer-inquiries', icon: Inbox },
-    { label: 'Hearings & Calendar', href: '/hearings/upcoming', icon: CalendarClock },
-    { label: 'Tasks & Deadlines', href: '/tasks/mine', icon: CheckSquare },
-    { label: 'Documents', href: '/documents', icon: FileText },
-    { label: 'Find a Lawyer', href: '/lawyers', icon: Search },
-    { label: 'My Inquiries', href: '/inquiries/mine', icon: MessageSquare },
-    { label: 'Document Sets', href: '/document-sets', icon: FolderKanban },
+    ...(isLawyer
+      ? [
+          { label: 'Matters', href: '/lawyer/cases', icon: Briefcase },
+          { label: 'Inquiries', href: '/lawyer/inquiries', icon: Inbox },
+          { label: 'Hearings & Calendar', href: '/lawyer/hearings/upcoming', icon: CalendarClock },
+          { label: 'Tasks & Deadlines', href: '/lawyer/tasks', icon: CheckSquare },
+          { label: 'Document Sets', href: '/lawyer/document-sets', icon: FolderKanban },
+        ]
+      : [
+          { label: 'Documents', href: '/general-user/documents', icon: FileText },
+          { label: 'Find a Lawyer', href: '/general-user/lawyers', icon: Search },
+          { label: 'My Inquiries', href: '/general-user/inquiries/mine', icon: MessageSquare },
+        ]),
     { label: 'AI Assistant', href: null, icon: Sparkles, comingSoon: true },
     {
       label: 'Clients',
@@ -359,14 +373,14 @@ export function AppSidebar({
     // Gated on firmId exactly like Clients/Team/Reports/Settings just
     // above/below (a firm-scoped route that can't be linked without
     // one). Distinct from the existing "Tasks & Deadlines" item above,
-    // which points at /tasks/mine (personal, assignee-scoped) — this
+    // which points at /lawyer/tasks (personal, assignee-scoped) — this
     // is the firm-wide standalone to-do list, a different page and a
     // different data shape (TaskService#listStandaloneTasks vs
     // #listMyTasks), so it gets its own label rather than overloading
     // an existing one.
     {
       label: 'Firm Tasks',
-      href: firmId ? `/firms/${firmId}/tasks` : null,
+      href: firmId ? `/firm/${firmId}/tasks` : null,
       icon: ListTodo,
       comingSoon: !firmId,
     },
@@ -378,7 +392,7 @@ export function AppSidebar({
     },
     {
       label: 'Run History',
-      href: firmId ? '/observability' : null,
+      href: firmId ? `/firm/${firmId}/observability` : null,
       icon: Activity,
       comingSoon: !firmId,
     },
@@ -421,18 +435,18 @@ export function AppSidebar({
         {navItems.map((item) => {
           const isActive =
             (item.label === 'Dashboard' && active === 'dashboard') ||
-            (item.href === '/documents' && active === 'documents') ||
-            (item.href === '/tasks/mine' && active === 'tasks') ||
-            (item.href === '/cases' && active === 'matters') ||
-            (item.href === '/lawyer-inquiries' && active === 'inquiries') ||
-            (item.href === '/lawyers' && active === 'lawyers') ||
-            (item.href === '/inquiries/mine' && active === 'inquiries-mine') ||
+            (item.label === 'Documents' && active === 'documents') ||
+            (item.label === 'Tasks & Deadlines' && active === 'tasks') ||
+            (item.label === 'Matters' && active === 'matters') ||
+            (item.label === 'Inquiries' && active === 'inquiries') ||
+            (item.label === 'Find a Lawyer' && active === 'lawyers') ||
+            (item.label === 'My Inquiries' && active === 'inquiries-mine') ||
             (item.label === 'Clients' && active === 'clients') ||
             (item.label === 'Team' && active === 'teams') ||
             (item.label === 'Firm Tasks' && active === 'firm-tasks') ||
             (item.label === 'Reports' && active === 'reports') ||
             (item.label === 'Settings' && active === 'settings') ||
-            (item.href === '/observability' && active === 'observability');
+            (item.label === 'Run History' && active === 'observability');
           const Icon = item.icon;
 
           if (!item.href) {
@@ -523,39 +537,45 @@ export function AppSidebar({
               <User className="h-3.5 w-3.5" strokeWidth={1.75} />
               My Profile
             </button>
-            <button
-              onClick={() => {
-                setMenuOpen(false);
-                router.push('/professional-verification');
-              }}
-              aria-current={active === 'verification' ? 'page' : undefined}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
-            >
-              <BadgeCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
-              My Verification
-            </button>
-            <button
-              onClick={() => {
-                setMenuOpen(false);
-                router.push('/invitations');
-              }}
-              aria-current={active === 'invitations' ? 'page' : undefined}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
-            >
-              <Mail className="h-3.5 w-3.5" strokeWidth={1.75} />
-              My Invitations
-            </button>
-            <button
-              onClick={() => {
-                setMenuOpen(false);
-                router.push('/notifications');
-              }}
-              aria-current={active === 'notifications' ? 'page' : undefined}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
-            >
-              <Bell className="h-3.5 w-3.5" strokeWidth={1.75} />
-              My Notifications
-            </button>
+            {isLawyer && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  router.push('/lawyer/verification');
+                }}
+                aria-current={active === 'verification' ? 'page' : undefined}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+              >
+                <BadgeCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
+                My Verification
+              </button>
+            )}
+            {isLawyer && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  router.push('/lawyer/invitations');
+                }}
+                aria-current={active === 'invitations' ? 'page' : undefined}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+              >
+                <Mail className="h-3.5 w-3.5" strokeWidth={1.75} />
+                My Invitations
+              </button>
+            )}
+            {isLawyer && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  router.push('/lawyer/notifications');
+                }}
+                aria-current={active === 'notifications' ? 'page' : undefined}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+              >
+                <Bell className="h-3.5 w-3.5" strokeWidth={1.75} />
+                My Notifications
+              </button>
+            )}
             <button
               onClick={handleSignOut}
               disabled={signingOut}
