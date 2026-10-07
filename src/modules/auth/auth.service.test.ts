@@ -48,6 +48,12 @@ import { AuthService } from './auth.service';
  * `SupabaseClient<Database>` is actually required: where `supabase` is
  * handed to `new AuthService(...)` in beforeEach() below.
  */
+// Same `vi.mock('server-only', ...)` workaround as the other service
+// tests (e.g. lawyer-inquiry.service.test.ts): AuthService's import chain
+// (audit-log.repository.ts) imports 'server-only', which throws outside a
+// real Next.js server context. Production imports are untouched.
+vi.mock('server-only', () => ({}));
+
 vi.mock('@/core/supabase/admin', () => ({
   createAdminClient: vi.fn(),
 }));
@@ -157,7 +163,10 @@ describe('AuthService', () => {
       expect(supabase.auth.signUp).toHaveBeenCalledWith({
         email: VALID_SIGN_UP_INPUT.email,
         password: VALID_SIGN_UP_INPUT.password,
-        options: { data: { full_name: VALID_SIGN_UP_INPUT.fullName } },
+        options: {
+          data: { full_name: VALID_SIGN_UP_INPUT.fullName },
+          emailRedirectTo: 'https://app.jurisai.test/api/auth/callback',
+        },
       });
       expect(adminClient.auth.admin.updateUserById).toHaveBeenCalledWith('user-123', {
         app_metadata: { role: 'individual' },

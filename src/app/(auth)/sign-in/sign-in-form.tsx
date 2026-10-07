@@ -147,7 +147,7 @@ export function SignInForm() {
               Password
             </label>
             <Link
-              href="/auth/request-password-reset"
+              href="/request-password-reset"
               className="text-xs text-muted-foreground hover:text-primary"
             >
               Forgot password?

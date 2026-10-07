@@ -75,7 +75,7 @@ export function RequestPasswordResetForm() {
         <h1 className="text-lg font-semibold text-foreground">Check your email</h1>
         <p className="text-sm text-muted-foreground">{successMessage}</p>
         <Link
-          href="/auth/sign-in"
+          href="/sign-in"
           className="inline-block text-sm font-medium text-primary hover:underline"
         >
           Back to sign in
@@ -127,7 +127,7 @@ export function RequestPasswordResetForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         Remembered your password?{' '}
-        <Link href="/auth/sign-in" className="font-medium text-primary hover:underline">
+        <Link href="/sign-in" className="font-medium text-primary hover:underline">
           Sign in
         </Link>
       </p>
