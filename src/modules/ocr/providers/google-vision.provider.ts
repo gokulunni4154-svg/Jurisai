@@ -1,19 +1,19 @@
 // src/modules/ocr/providers/google-vision.provider.ts
 // File 71 — JurisAI OCR module
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
-import { ImageAnnotatorClient } from '@google-cloud/vision';
-import { Storage } from '@google-cloud/storage';
+import { ImageAnnotatorClient } from "@google-cloud/vision";
+import { Storage } from "@google-cloud/storage";
 
-import { serverEnv } from '@/core/config/env.server';
+import { serverEnv } from "@/core/config/env.server";
 
 import {
   OCRExtractionInput,
   OCRExtractionResult,
   OCRProvider,
   OCRProviderError,
-} from '../ocr-provider.interface';
+} from "../ocr-provider.interface";
 
 /**
  * Cloud Vision's async batch endpoint (files:asyncBatchAnnotate) only
@@ -22,7 +22,7 @@ import {
  * network call is made, rather than surfacing as a confusing remote
  * API error.
  */
-const SUPPORTED_MIME_TYPES = new Set(['application/pdf', 'image/tiff']);
+const SUPPORTED_MIME_TYPES = new Set(["application/pdf", "image/tiff"]);
 
 /**
  * How many pages Cloud Vision groups into each output JSON file. A
@@ -77,10 +77,16 @@ export class GoogleVisionOCRProvider implements OCRProvider {
 
   constructor() {
     const credentials = {
-      client_email: serverEnv.GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_KEY.client_email,
-      private_key: serverEnv.GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_KEY.private_key,
+      client_email:
+        serverEnv.GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_KEY.client_email,
+      private_key:
+        serverEnv.GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_KEY.private_key.replace(
+          /\\n/g,
+          "\n",
+        ),
     };
-    const projectId = serverEnv.GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_KEY.project_id;
+    const projectId =
+      serverEnv.GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_KEY.project_id;
 
     this.visionClient = new ImageAnnotatorClient({ credentials, projectId });
     this.storageClient = new Storage({ credentials, projectId });
@@ -90,9 +96,9 @@ export class GoogleVisionOCRProvider implements OCRProvider {
   async extractText(input: OCRExtractionInput): Promise<OCRExtractionResult> {
     if (!SUPPORTED_MIME_TYPES.has(input.mimeType)) {
       throw new OCRProviderError(
-        'permanent',
+        "permanent",
         `Unsupported mimeType for OCR: "${input.mimeType}". ` +
-          `Only ${Array.from(SUPPORTED_MIME_TYPES).join(', ')} are supported.`,
+          `Only ${Array.from(SUPPORTED_MIME_TYPES).join(", ")} are supported.`,
       );
     }
 
@@ -135,12 +141,16 @@ export class GoogleVisionOCRProvider implements OCRProvider {
     try {
       response = await fetch(fileUrl);
     } catch (error) {
-      throw new OCRProviderError('transient', 'Failed to fetch source document for OCR', error);
+      throw new OCRProviderError(
+        "transient",
+        "Failed to fetch source document for OCR",
+        error,
+      );
     }
 
     if (!response.ok) {
       throw new OCRProviderError(
-        'transient',
+        "transient",
         `Failed to fetch source document for OCR: HTTP ${response.status}`,
       );
     }
@@ -155,14 +165,17 @@ export class GoogleVisionOCRProvider implements OCRProvider {
     contentType: string,
   ): Promise<void> {
     try {
-      await this.storageClient.bucket(this.bucketName).file(path).save(contents, {
-        contentType,
-        resumable: false,
-      });
+      await this.storageClient
+        .bucket(this.bucketName)
+        .file(path)
+        .save(contents, {
+          contentType,
+          resumable: false,
+        });
     } catch (error) {
       throw new OCRProviderError(
-        'transient',
-        'Failed to stage document in Cloud Storage for OCR',
+        "transient",
+        "Failed to stage document in Cloud Storage for OCR",
         error,
       );
     }
@@ -181,7 +194,7 @@ export class GoogleVisionOCRProvider implements OCRProvider {
       [operation] = await this.visionClient.asyncBatchAnnotateFiles({
         requests: [
           {
-            features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+            features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
             inputConfig: { gcsSource: { uri: gcsSourceUri }, mimeType },
             outputConfig: {
               gcsDestination: { uri: gcsDestinationUri },
@@ -193,7 +206,7 @@ export class GoogleVisionOCRProvider implements OCRProvider {
     } catch (error) {
       throw new OCRProviderError(
         classifyGoogleApiError(error),
-        'Failed to start OCR batch operation',
+        "Failed to start OCR batch operation",
         error,
       );
     }
@@ -203,7 +216,7 @@ export class GoogleVisionOCRProvider implements OCRProvider {
     } catch (error) {
       throw new OCRProviderError(
         classifyGoogleApiError(error),
-        'OCR batch operation failed to complete',
+        "OCR batch operation failed to complete",
         error,
       );
     }
@@ -218,19 +231,25 @@ export class GoogleVisionOCRProvider implements OCRProvider {
    * — not by which file it came from or that file's name. See the
    * class-level doc comment for why filename order is unsafe.
    */
-  private async readResults(destinationPrefix: string): Promise<OCRExtractionResult> {
+  private async readResults(
+    destinationPrefix: string,
+  ): Promise<OCRExtractionResult> {
     const [outputFiles] = await this.storageClient
       .bucket(this.bucketName)
       .getFiles({ prefix: destinationPrefix });
 
     if (outputFiles.length === 0) {
       throw new OCRProviderError(
-        'permanent',
-        'OCR batch operation completed but produced no output files',
+        "permanent",
+        "OCR batch operation completed but produced no output files",
       );
     }
 
-    type PageResponse = { pageNumber: number; text: string; confidence?: number };
+    type PageResponse = {
+      pageNumber: number;
+      text: string;
+      confidence?: number;
+    };
     const pages: PageResponse[] = [];
 
     for (const file of outputFiles) {
@@ -238,14 +257,17 @@ export class GoogleVisionOCRProvider implements OCRProvider {
       let parsed: {
         responses?: Array<{
           context?: { pageNumber?: number };
-          fullTextAnnotation?: { text?: string; pages?: Array<{ confidence?: number }> };
+          fullTextAnnotation?: {
+            text?: string;
+            pages?: Array<{ confidence?: number }>;
+          };
         }>;
       };
       try {
-        parsed = JSON.parse(contents.toString('utf-8'));
+        parsed = JSON.parse(contents.toString("utf-8"));
       } catch (error) {
         throw new OCRProviderError(
-          'permanent',
+          "permanent",
           `OCR output file ${file.name} was not valid JSON`,
           error,
         );
@@ -254,7 +276,7 @@ export class GoogleVisionOCRProvider implements OCRProvider {
       for (const response of parsed.responses ?? []) {
         pages.push({
           pageNumber: response.context?.pageNumber ?? pages.length + 1,
-          text: response.fullTextAnnotation?.text ?? '',
+          text: response.fullTextAnnotation?.text ?? "",
           confidence: response.fullTextAnnotation?.pages?.[0]?.confidence,
         });
       }
@@ -262,24 +284,28 @@ export class GoogleVisionOCRProvider implements OCRProvider {
 
     pages.sort((a, b) => a.pageNumber - b.pageNumber);
 
-    const text = pages.map((page) => page.text).join('\n\n');
+    const text = pages.map((page) => page.text).join("\n\n");
     const confidences = pages
       .map((page) => page.confidence)
-      .filter((value): value is number => typeof value === 'number');
+      .filter((value): value is number => typeof value === "number");
     const confidence =
       confidences.length > 0
-        ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length
+        ? confidences.reduce((sum, value) => sum + value, 0) /
+          confidences.length
         : undefined;
 
     return {
       text,
       pageCount: pages.length,
       confidence,
-      provider: 'google-vision',
+      provider: "google-vision",
     };
   }
 
-  private async cleanupStaging(sourcePath: string, destinationPrefix: string): Promise<void> {
+  private async cleanupStaging(
+    sourcePath: string,
+    destinationPrefix: string,
+  ): Promise<void> {
     try {
       await this.storageClient.bucket(this.bucketName).file(sourcePath).delete({
         ignoreNotFound: true,
@@ -287,28 +313,34 @@ export class GoogleVisionOCRProvider implements OCRProvider {
       const [outputFiles] = await this.storageClient
         .bucket(this.bucketName)
         .getFiles({ prefix: destinationPrefix });
-      await Promise.all(outputFiles.map((file) => file.delete({ ignoreNotFound: true })));
+      await Promise.all(
+        outputFiles.map((file) => file.delete({ ignoreNotFound: true })),
+      );
     } catch (error) {
       // Deliberately swallowed — see class-level doc comment. A bucket
       // lifecycle rule (infra-level, not this code) is the backstop.
-      console.error('OCR staging cleanup failed', { sourcePath, destinationPrefix, error });
+      console.error("OCR staging cleanup failed", {
+        sourcePath,
+        destinationPrefix,
+        error,
+      });
     }
   }
 }
 
 function extensionFor(mimeType: string): string {
   switch (mimeType) {
-    case 'application/pdf':
-      return '.pdf';
-    case 'image/tiff':
-      return '.tiff';
+    case "application/pdf":
+      return ".pdf";
+    case "image/tiff":
+      return ".tiff";
     default:
       // Unreachable in practice — extractText() rejects unsupported
       // MIME types before this is ever called. Kept exhaustive rather
       // than using `as never` here, since a new SUPPORTED_MIME_TYPES
       // entry added later without updating this switch should fail
       // loudly (a generic extension) rather than silently miscompile.
-      return '.bin';
+      return ".bin";
   }
 }
 
@@ -321,10 +353,12 @@ function extensionFor(mimeType: string): string {
  * (once a future orchestration layer exists) is worse than incorrectly
  * not retrying a transient one.
  */
-function classifyGoogleApiError(error: unknown): 'transient' | 'permanent' {
+function classifyGoogleApiError(error: unknown): "transient" | "permanent" {
   const code = (error as { code?: number } | null)?.code;
   // google-gax status codes: 4 = DEADLINE_EXCEEDED, 8 = RESOURCE_EXHAUSTED
   // (quota/rate-limit), 14 = UNAVAILABLE.
   const transientCodes = new Set([4, 8, 14]);
-  return typeof code === 'number' && transientCodes.has(code) ? 'transient' : 'permanent';
+  return typeof code === "number" && transientCodes.has(code)
+    ? "transient"
+    : "permanent";
 }
