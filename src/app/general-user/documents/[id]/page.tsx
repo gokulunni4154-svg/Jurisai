@@ -744,7 +744,7 @@ export default function DocumentAnalysisPage() {
           aiLegalInsightsRes,
           chatConversationsRes,
         ] = await Promise.all([
-          fetch(`/api/documents/${documentId}/analyses/${latest.id}/classifications`, {
+          fetch(`/api/documents/${documentId}/analyses/${latest.id}/clause-classifications`, {
             credentials: 'include',
           }),
           fetch(`/api/documents/${documentId}/analyses/${latest.id}/legal-health-scores`, {
@@ -935,7 +935,7 @@ export default function DocumentAnalysisPage() {
     setClassificationError(null);
     try {
       const res = await fetch(
-        `/api/documents/${documentId}/analyses/${analysis.id}/classifications`,
+        `/api/documents/${documentId}/analyses/${analysis.id}/clause-classifications`,
         { method: 'POST', credentials: 'include' },
       );
       if (!res.ok) throw new Error(await extractErrorMessage(res));
