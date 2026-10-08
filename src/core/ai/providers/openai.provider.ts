@@ -38,7 +38,7 @@ export class OpenAIProvider implements AIProvider {
       throw new Error('OPENAI_API_KEY environment variable is not set');
     }
 
-    this.client = new OpenAI({ apiKey });
+    this.client = new OpenAI({ apiKey, timeout: 45000, maxRetries: 0 });
     this.model = process.env['OPENAI_MODEL'] ?? DEFAULT_MODEL;
   }
 

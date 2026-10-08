@@ -91,7 +91,7 @@ export class GeminiProvider implements AIProvider {
           // same responseJsonSchema config key, Zod v3-compatible producer.
           // Same schema object used for OpenAI's zodResponseFormat, single
           // source of truth for the shape.
-          responseJsonSchema: zodToJsonSchema(schema),
+          responseJsonSchema: zodToJsonSchema(schema), abortSignal: AbortSignal.timeout(45000),
           temperature: options?.temperature,
           maxOutputTokens: options?.maxOutputTokens,
         },
@@ -226,7 +226,7 @@ export class GeminiProvider implements AIProvider {
   }
 
   private mapSdkError(error: unknown): AIProviderError {
-    if (isGeminiSdkError(error)) {
+    if (error instanceof Error) { if (['TimeoutError', 'AbortError'].includes(error.name)) { return new AIProviderError('gemini', ErrorCode.AI_PROVIDER_TIMEOUT, 'Gemini request timed out', error); } } if (isGeminiSdkError(error)) {
       const status = error.status;
 
       if (status === 429) {

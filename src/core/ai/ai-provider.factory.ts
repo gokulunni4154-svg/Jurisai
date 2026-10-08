@@ -39,7 +39,7 @@ export interface AIGenerationOutcome<TSchema extends z.ZodTypeAny> {
  * hide a real prompt/schema problem from whoever's debugging it.
  */
 const RETRYABLE_CODES: ReadonlySet<string> = new Set([
-  ErrorCode.AI_PROVIDER_TIMEOUT,
+  // AI_PROVIDER_TIMEOUT deliberately not retried: after a 45s deadline a fallback call cannot finish inside the 60s route limit.
   ErrorCode.AI_PROVIDER_RATE_LIMITED,
   ErrorCode.AI_PROVIDER_UNAVAILABLE,
 ]);
