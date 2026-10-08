@@ -75,7 +75,7 @@ export async function POST(
     const ocrService = await buildOcrService();
     const missingClauseDetectionService = await buildMissingClauseDetectionService();
 
-    const extraction = await ocrService.getLatestCompletedExtractionForDocument(context.params);
+    const extraction = await ocrService.getLatestCompletedExtractionForDocument({ id: context.params.id });
 
     if (!extraction || !extraction.result) {
       // See OCR-MISSING CHECK above — expected to be unreachable given a
