@@ -89,7 +89,7 @@ export async function POST(
 
     const classification =
       await complianceDetectionService.getLatestCompletedClassificationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -101,7 +101,7 @@ export async function POST(
     }
 
     const complianceDetection = await complianceDetectionService.createComplianceDetection(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -136,7 +136,7 @@ export async function GET(
 
     const complianceDetections =
       await complianceDetectionService.listComplianceDetectionsForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 

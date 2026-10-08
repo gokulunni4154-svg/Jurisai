@@ -72,7 +72,7 @@ export async function POST(
 
     const classification =
       await aiRecommendationService.getLatestCompletedClassificationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -83,7 +83,7 @@ export async function POST(
     }
 
     const riskDetection = await aiRecommendationService.getLatestCompletedRiskDetectionForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -93,7 +93,7 @@ export async function POST(
 
     const missingClauseDetection =
       await aiRecommendationService.getLatestCompletedMissingClauseDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -103,7 +103,7 @@ export async function POST(
 
     const complianceDetection =
       await aiRecommendationService.getLatestCompletedComplianceDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -112,7 +112,7 @@ export async function POST(
     }
 
     const aiRecommendation = await aiRecommendationService.createAIRecommendation(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -148,7 +148,7 @@ export async function GET(
     const aiRecommendationService = await buildAIRecommendationService();
 
     const aiRecommendations = await aiRecommendationService.listAIRecommendationsForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 

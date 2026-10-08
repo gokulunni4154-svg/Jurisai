@@ -73,7 +73,7 @@ export async function POST(
 
     const classification =
       await legalHealthScoreService.getLatestCompletedClassificationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -85,7 +85,7 @@ export async function POST(
 
     const riskDetection =
       await legalHealthScoreService.getLatestCompletedRiskDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -95,7 +95,7 @@ export async function POST(
 
     const missingClauseDetection =
       await legalHealthScoreService.getLatestCompletedMissingClauseDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -105,7 +105,7 @@ export async function POST(
 
     const complianceDetection =
       await legalHealthScoreService.getLatestCompletedComplianceDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -115,7 +115,7 @@ export async function POST(
 
     const aiRecommendation =
       await legalHealthScoreService.getLatestCompletedAIRecommendationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -124,7 +124,7 @@ export async function POST(
     }
 
     const legalHealthScore = await legalHealthScoreService.createLegalHealthScore(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -161,7 +161,7 @@ export async function GET(
     const legalHealthScoreService = await buildLegalHealthScoreService();
 
     const legalHealthScores = await legalHealthScoreService.listLegalHealthScoresForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 

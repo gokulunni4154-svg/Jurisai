@@ -80,7 +80,7 @@ export async function POST(
     }
 
     const classification = await riskDetectionService.getLatestCompletedClassificationForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -92,7 +92,7 @@ export async function POST(
     }
 
     const riskDetection = await riskDetectionService.createRiskDetection(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -125,7 +125,7 @@ export async function GET(
     const riskDetectionService = await buildRiskDetectionService();
 
     const riskDetections = await riskDetectionService.listRiskDetectionsForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 

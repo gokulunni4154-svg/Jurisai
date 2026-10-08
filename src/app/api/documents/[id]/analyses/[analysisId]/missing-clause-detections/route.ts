@@ -85,7 +85,7 @@ export async function POST(
 
     const classification =
       await missingClauseDetectionService.getLatestCompletedClassificationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -97,7 +97,7 @@ export async function POST(
     }
 
     const missingClauseDetection = await missingClauseDetectionService.createMissingClauseDetection(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -132,7 +132,7 @@ export async function GET(
 
     const missingClauseDetections =
       await missingClauseDetectionService.listMissingClauseDetectionsForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
