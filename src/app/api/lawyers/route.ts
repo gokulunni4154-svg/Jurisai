@@ -9,6 +9,9 @@ import { NextResponse } from 'next/server';
 import { handleApiError } from '@/core/errors/error-handler';
 import { buildLawyerDirectoryService } from '@/modules/lawyer-inquiries/lawyer-directory.factory';
 
+// Live directory data: must not be prerendered at build time.
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/lawyers
  *

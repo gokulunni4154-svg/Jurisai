@@ -871,7 +871,10 @@ export class AuthService {
     const { email } = requestPasswordResetSchema.parse(rawInput);
 
     const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/auth/reset-password`,
+      // Routed through the PKCE callback so the emailed `code` is exchanged for a
+      // recovery session before landing on /update-password (a protected page).
+      // `next` is a hardcoded constant, never request input -- no open redirect.
+      redirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/api/auth/callback?next=/update-password`,
     });
 
     if (error) {

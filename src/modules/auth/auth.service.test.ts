@@ -353,7 +353,7 @@ describe('AuthService', () => {
       await service.requestPasswordReset({ email: 'test@example.com' });
 
       expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith('test@example.com', {
-        redirectTo: 'https://app.jurisai.test/auth/reset-password',
+        redirectTo: 'https://app.jurisai.test/api/auth/callback?next=/update-password',
       });
     });
 

@@ -22,11 +22,31 @@ import { AppError, InternalServerError, ValidationError, isAppError } from '@/co
  * that escaped validation, or a completely unexpected error.
  */
 export function handleApiError(error: unknown): NextResponse {
+  // Next.js signals "this route is dynamic" during `next build` by throwing a
+  // DynamicServerError (digest DYNAMIC_SERVER_USAGE) the first time a handler
+  // reads cookies() or request.nextUrl.searchParams. It is control flow, not a
+  // failure: it must propagate to Next, never be wrapped into a 500 AppError.
+  if (isNextDynamicUsageError(error)) {
+    throw error;
+  }
+
   const normalized = normalizeError(error);
 
   logError(normalized);
 
   return NextResponse.json(normalized.toJSON(), { status: normalized.statusCode });
+}
+
+/**
+ * True for Next.js's static-generation bailout signal. Checked by `digest`
+ * rather than `instanceof` so no import from `next/dist` internals is needed.
+ */
+function isNextDynamicUsageError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { digest?: unknown }).digest === 'DYNAMIC_SERVER_USAGE'
+  );
 }
 
 /**

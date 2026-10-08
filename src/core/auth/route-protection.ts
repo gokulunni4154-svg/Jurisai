@@ -26,16 +26,21 @@ import type { User } from '@supabase/supabase-js';
  * The original placeholder assumed a literal `/auth/sign-in` URL, which
  * was wrong given the `(auth)` group; corrected here.
  *
- * `/auth/sign-up` and `/auth/request-password-reset` below are STILL
- * unconfirmed placeholders — no corresponding page route has been pasted
- * as real source yet. Do not assume they follow the same `(auth)` group
- * convention as sign-in without confirming their actual file paths first.
+ * `/request-password-reset` is likewise CONFIRMED against real source: it
+ * renders via `src/app/(auth)/request-password-reset/page.tsx`, so its URL
+ * has no `/auth` prefix. The earlier `/auth/request-password-reset` entry
+ * pointed at a page that does not exist, which sent logged-out users to
+ * sign-in instead of the reset-request form.
+ *
+ * `/sign-up` below is still an unconfirmed placeholder -- no corresponding
+ * page route has been pasted as real source yet. Do not assume it follows
+ * the same `(auth)` group convention without confirming its file path.
  */
 const PUBLIC_ROUTES: readonly string[] = [
   '/',
   '/sign-in',
   '/sign-up',
-  '/auth/request-password-reset',
+  '/request-password-reset',
 ];
 
 /** Where unauthenticated users are sent when hitting a protected page. */
