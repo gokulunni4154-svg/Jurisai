@@ -10,7 +10,7 @@ import { AuditLogRepository } from '@/modules/audit-log/audit-log.repository';
 import { NotificationRepository } from '@/modules/notifications/notification.repository';
 import { NotificationService } from '@/modules/notifications/notification.service';
 
-import { GoogleVisionOCRProvider } from './providers/google-vision.provider';
+import { PdfTextOCRProvider } from './providers/pdf-text.provider';
 import { OCRExtractionRepository } from './ocr-extraction.repository';
 import { OCRService } from './ocr.service';
 import type { OCRProvider } from './ocr-provider.interface';
@@ -51,7 +51,7 @@ import type { OCRProvider } from './ocr-provider.interface';
  * RLS-respecting client, injected into both OCRExtractionRepository and
  * DocumentRepository — never admin.ts.
  */
-const ocrProvider: OCRProvider = new GoogleVisionOCRProvider();
+const ocrProvider: OCRProvider = new PdfTextOCRProvider();
 
 export async function buildOcrService(): Promise<OCRService> {
   const currentUser = await getCurrentUser();

@@ -89,6 +89,9 @@ importers:
       tailwind-merge:
         specifier: 2.5.2
         version: 2.5.2
+      unpdf:
+        specifier: ^1.8.1
+        version: 1.8.1
       zod:
         specifier: 3.23.8
         version: 3.23.8
@@ -4020,6 +4023,15 @@ packages:
   universalify@0.2.0:
     resolution: {integrity: sha512-CJ1QgKmNg3CwvAv/kOFmtnEN05f0D/cn9QntgNOQlQF9dgvVTHj3t+8JPdjqawCHk7V/KA+fbUqzZ9XWhcqPUg==}
     engines: {node: '>= 4.0.0'}
+
+  unpdf@1.8.1:
+    resolution: {integrity: sha512-xkURhy2SoGpOIH0a1gLHNkASPIQYonadDJs2AQwPEfUakafeD9EA1WTWWsaR++gfTCXJpV27W7tU1nXuk82UKQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@napi-rs/canvas': ^0.1.69 || ^1.0.0
+    peerDependenciesMeta:
+      '@napi-rs/canvas':
+        optional: true
 
   unrs-resolver@1.12.2:
     resolution: {integrity: sha512-dmlRxBJJayXjqTwC+JtF1HhJmgf3ftQ3YejFcZrf4+KKtJv0qDsK1pjqaaVjG7wJ5NJ6UVP1OqRMQ71Z4C3rxQ==}
@@ -8442,6 +8454,8 @@ snapshots:
       tiny-inflate: 1.0.3
 
   universalify@0.2.0: {}
+
+  unpdf@1.8.1: {}
 
   unrs-resolver@1.12.2:
     dependencies:
