@@ -70,7 +70,7 @@ export async function POST(
     const ocrService = await buildOcrService();
     const classificationService = await buildClauseClassificationService();
 
-    const extraction = await ocrService.getLatestCompletedExtractionForDocument(context.params);
+    const extraction = await ocrService.getLatestCompletedExtractionForDocument({ id: context.params.id });
 
     if (!extraction || !extraction.result) {
       // See NEW DECISION above — this state is expected to be
@@ -82,7 +82,7 @@ export async function POST(
     }
 
     const classification = await classificationService.createClassification(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -114,7 +114,7 @@ export async function GET(
     const classificationService = await buildClauseClassificationService();
 
     const classifications = await classificationService.listClassificationsForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
