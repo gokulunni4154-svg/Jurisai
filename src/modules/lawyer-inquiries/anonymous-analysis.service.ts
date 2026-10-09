@@ -2,39 +2,59 @@ import { randomUUID } from 'crypto';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { ExternalServiceError, ValidationError } from '@/core/errors/app-error';
+import {
+  ConflictError,
+  DatabaseError,
+  ExternalServiceError,
+  ValidationError,
+} from '@/core/errors/app-error';
+import type { RateLimiter } from '@/core/rate-limit/db-rate-limiter';
 
 import type { AnonymousAnalysisRepository } from './anonymous-analysis.repository';
+import {
+  generateSessionToken,
+  hashSessionToken,
+  isWellFormedSessionToken,
+} from './anonymous-analysis.token';
+import {
+  ANON_ALLOWED_MIME_TYPE,
+  ANON_MAX_EXTRACTED_CHARS,
+  sanitizeFilename,
+  validateAnonymousUpload,
+} from './anonymous-analysis.validation';
 import type { LawyerInquiryRepository } from './lawyer-inquiry.repository';
 
-// Duplicated from File 45's bucket config rather than imported — no
-// shared constants module covering these was found in pasted source
-// this session. Values must stay in sync with the
-// 20260712070007_create_documents_table.sql migration by hand until
-// such a module exists; flagged, not a discovered convention.
+// Must match the bucket id in 20260712070007_create_documents_table.sql.
 const BUCKET = 'legal-vault-documents';
-const MAX_SIZE_BYTES = 26214400; // 25 MiB
-const ALLOWED_MIME_TYPES = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'image/jpeg',
-  'image/png',
-  'image/tiff',
-]);
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // matches the cookie lifetime
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches anonymous_analysis_sessions.expires_at
+// Per-session and session-creation limits (the per-IP limit is applied by
+// the route). Counted before any expensive work.
+const SESSION_UPLOADS_PER_HOUR = 5;
+const NEW_SESSIONS_PER_IP_PER_HOUR = 5;
+const HOUR_SECONDS = 3600;
+
+// Shared across ALL anonymous-analysis requests (deliberately not per-IP or
+// per-session): hard cap on total anonymous AI spend. Consumed only
+// immediately before the AI call, so rejected uploads and failed text
+// extraction never count against it.
+const GLOBAL_AI_KEY = 'anon-analysis:global';
+const GLOBAL_AI_REQUESTS_PER_HOUR = 300;
+
+/** Extracts plain text from PDF bytes; throws ValidationError / ExternalServiceError. */
+export type TextExtractor = (bytes: Uint8Array) => Promise<string>;
+/** Runs the real AI document analysis; throws AppError subclasses only. */
+export type DocumentAnalyzer = (documentText: string) => Promise<unknown>;
 
 interface CreateAnonymousAnalysisInput {
   file: File;
   existingSessionToken: string | null;
+  /** Hashed (never raw) client IP, used only to bucket session creation. */
+  clientKey: string;
 }
 
 interface CreateAnonymousAnalysisResult {
   sessionToken: string;
-  // FLAGGED: should be DocumentAnalysisResult (analysis.schemas.ts,
-  // referenced by document_analyses' own migration comment) once that
-  // type's real shape is confirmed — never pasted this session.
   analysisResult: unknown;
   expiresAt: string;
 }
@@ -51,96 +71,124 @@ export class AnonymousAnalysisService {
     private readonly deps: {
       repository: AnonymousAnalysisRepository;
       storageClient: SupabaseClient;
-      // FLAGGED: pulling LawyerInquiryRepository into
-      // AnonymousAnalysisService's own dependency list is a real module-
-      // boundary judgment call — reattachSession() straddles both
-      // anonymous_analysis_sessions and lawyer_inquiries by definition
-      // (§2 step 5's whole point is connecting the two), so it has to
-      // live somewhere that can reach both. Kept it here rather than
-      // inventing a separate coordinator/orchestrator class, since no
-      // precedent for a cross-module coordinator was found in pasted
-      // source this session — if one exists elsewhere in the project,
-      // this method probably belongs there instead.
       lawyerInquiryRepository: LawyerInquiryRepository;
-    }
+      rateLimiter: RateLimiter;
+      extractText: TextExtractor;
+      analyze: DocumentAnalyzer;
+    },
   ) {}
 
   async createAnonymousAnalysis(
-    input: CreateAnonymousAnalysisInput
+    input: CreateAnonymousAnalysisInput,
   ): Promise<CreateAnonymousAnalysisResult> {
-    this.validateFile(input.file);
+    // 1. Cheap validation first: nothing below runs for a bad file.
+    const bytes = await validateAnonymousUpload(input.file);
 
-    // ASSUMPTION, not decided in the scoping doc: since
-    // anonymous_analysis_sessions holds exactly one document per
-    // session_token (no per-document id of its own), a second upload
-    // under an existing token is treated as replacing the session's
-    // document + analysis, not adding a second one. If the intended
-    // behavior is "one upload per session, reject a second," this method
-    // needs a findByToken() guard added before upload — flagged rather
-    // than silently picked.
-    const sessionToken = input.existingSessionToken ?? randomUUID();
-    const documentId = randomUUID();
-    const sanitizedFilename = this.sanitizeFilename(input.file.name);
-    const storagePath = `anon/${sessionToken}/${documentId}/${sanitizedFilename}`;
+    // 2. Resolve the session. A cookie token only ever selects a session
+    //    when it is well-formed, hashes to an existing row, is unexpired,
+    //    and has not been reattached. Anything else — unknown, expired,
+    //    reattached, malformed — is indistinguishable to the caller: a
+    //    fresh session is minted, and no detail about other sessions leaks.
+    const existing = await this.resolveLiveSession(input.existingSessionToken);
+
+    if (existing) {
+      await this.deps.rateLimiter.consume(
+        `anon-analysis:session:${hashSessionToken(existing.token)}`,
+        SESSION_UPLOADS_PER_HOUR,
+        HOUR_SECONDS,
+      );
+    } else {
+      await this.deps.rateLimiter.consume(
+        `anon-analysis:new-session:${input.clientKey}`,
+        NEW_SESSIONS_PER_IP_PER_HOUR,
+        HOUR_SECONDS,
+      );
+    }
+
+    // 3. Analyse in memory BEFORE touching Storage or the DB, so a parser or
+    //    AI failure leaves nothing behind to clean up.
+    const text = await this.deps.extractText(bytes);
+    if (text.length > ANON_MAX_EXTRACTED_CHARS) {
+      throw new ValidationError('This document is too long to analyse.');
+    }
+
+    //    Global AI quota: last gate before spend. Fail-closed — a
+    //    RateLimitError (or a limiter failure) propagates and analyze() is
+    //    never reached.
+    await this.deps.rateLimiter.consume(
+      GLOBAL_AI_KEY,
+      GLOBAL_AI_REQUESTS_PER_HOUR,
+      HOUR_SECONDS,
+    );
+    const analysisResult = await this.deps.analyze(text);
+
+    // 4. Persist. Storage path is derived server-side from the token HASH
+    //    and a fresh UUID; no client-supplied path component except the
+    //    sanitised filename.
+    const sessionToken = existing?.token ?? generateSessionToken();
+    const tokenHash = hashSessionToken(sessionToken);
+    const storagePath = `anon/${tokenHash}/${randomUUID()}/${sanitizeFilename(input.file.name)}`;
 
     const { error: uploadError } = await this.deps.storageClient.storage
       .from(BUCKET)
-      .upload(storagePath, input.file, {
-        contentType: input.file.type,
-        upsert: false,
-      });
+      .upload(storagePath, bytes, { contentType: ANON_ALLOWED_MIME_TYPE, upsert: false });
 
     if (uploadError) {
-      // FIX, tsc pass — real AppError constructor takes ONE argument, an
-      // options object requiring `code` (confirmed via real, pasted
-      // app-error.ts), not (message, { statusCode }). ExternalServiceError
-      // is the confirmed real subclass fitting this call site's actual
-      // semantics (a Supabase Storage failure) — takes
-      // (serviceName, message, cause, context) and sets code/statusCode
-      // (502) internally.
-      throw new ExternalServiceError('supabase-storage', 'Failed to store the uploaded document.', uploadError);
+      throw new ExternalServiceError(
+        'supabase-storage',
+        'Failed to store the uploaded document.',
+        uploadError,
+      );
     }
 
-    // FLAGGED — the biggest open assumption in this file. The real AI
-    // Document Analysis entry point was never pasted this session, so
-    // runDocumentAnalysis() below is a stand-in: name, signature, and
-    // even whether analysis is synchronous are all unconfirmed.
-    // document_analyses' own status enum (pending/processing/completed/
-    // failed) suggests the real pipeline may be async/queued — if so,
-    // this method's shape changes materially: it would need to persist a
-    // 'pending' analysis_result placeholder and let a separate
-    // completion path update the row, rather than awaiting a result
-    // inline as written here. Not resolved without the real source.
-    const analysisResult = await runDocumentAnalysis({ storagePath, bucket: BUCKET });
+    let expiresAt: string;
 
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    try {
+      if (existing) {
+        const swapped = await this.deps.repository.replaceDocument(
+          sessionToken,
+          existing.row.document_storage_path,
+          { documentStoragePath: storagePath, analysisResult },
+        );
+        if (!swapped) {
+          // Lost a race with a concurrent upload / expiry / reattach.
+          throw new ConflictError('Your session changed during upload. Please try again.');
+        }
+        expiresAt = existing.row.expires_at;
+      } else {
+        expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+        await this.deps.repository.create(sessionToken, {
+          documentStoragePath: storagePath,
+          analysisResult,
+          expiresAt,
+        });
+      }
+    } catch (error) {
+      await this.removeObject(storagePath); // no orphaned file
+      if (error instanceof ConflictError) throw error;
+      throw new DatabaseError('Failed to save the anonymous analysis session.', error);
+    }
 
-    await this.deps.repository.upsertByToken(sessionToken, {
-      documentStoragePath: storagePath,
-      analysisResult,
-      expiresAt,
-    });
+    // 5. The previous document is now unreferenced. Only delete it if it is
+    //    inside THIS session's own prefix (defence in depth: the path came
+    //    from the DB, but never delete outside anon/<this-hash>/).
+    if (existing && existing.row.document_storage_path.startsWith(`anon/${tokenHash}/`)) {
+      await this.removeObject(existing.row.document_storage_path);
+    }
 
     return { sessionToken, analysisResult, expiresAt };
   }
 
   /**
-   * Called from POST /api/auth/sign-in after a successful sign-in (see
-   * that route's own doc comment for why reattachment lives there and
-   * not inside AuthService). Finds the anonymous session by token, and
-   * if it's still eligible, creates the real lawyer_inquiries row and
-   * marks the session reattached.
-   *
-   * Deliberately silent/no-op, not throwing, on every ineligible case
-   * (missing, expired, already reattached) — this method's only caller
-   * swallows errors anyway (see the sign-in route's doc comment on why),
-   * so throwing here would just be a slower way to reach the same
-   * outcome. Kept as explicit early returns rather than one combined
-   * condition, so each ineligible case is individually legible if this
-   * ever gets real logging/observability wired in — flagged as the
-   * natural place to add that once a logging hook exists.
+   * Called from POST /api/auth/sign-in after a successful sign-in. Silent
+   * no-op on every ineligible case (missing, malformed, expired, already
+   * reattached) — see that route for why errors are swallowed.
    */
   async reattachSession(input: ReattachSessionInput): Promise<void> {
+    if (!isWellFormedSessionToken(input.sessionToken)) {
+      return;
+    }
+
     const session = await this.deps.repository.findByToken(input.sessionToken);
 
     if (!session) {
@@ -166,33 +214,26 @@ export class AnonymousAnalysisService {
     await this.deps.repository.markReattached(input.sessionToken, input.profileId);
   }
 
-  private validateFile(file: File): void {
-    // FIX, tsc pass — same real-constructor-shape fix as the upload-error
-    // call above. ValidationError already sets statusCode 400 internally
-    // and takes (message, context?) — the exact shape these two calls
-    // were already trying to use, just against the wrong class.
-    if (file.size > MAX_SIZE_BYTES) {
-      throw new ValidationError('File exceeds the 25 MiB limit.');
+  private async resolveLiveSession(token: string | null) {
+    if (!token || !isWellFormedSessionToken(token)) {
+      return null;
     }
 
-    if (!ALLOWED_MIME_TYPES.has(file.type)) {
-      throw new ValidationError('Unsupported file type.');
+    const row = await this.deps.repository.findByToken(token);
+
+    if (!row || row.reattached_profile_id || new Date(row.expires_at).getTime() <= Date.now()) {
+      return null;
     }
+
+    return { token, row };
   }
 
-  private sanitizeFilename(filename: string): string {
-    // FLAGGED: File 45's doc comment references "sanitized_filename" as
-    // an established convention, but no sanitizeFilename() utility was
-    // found anywhere in pasted source this session. Implemented fresh,
-    // narrowly, here — not confirmed against a real shared utility if
-    // one exists elsewhere in the project.
-    return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  /** Best-effort cleanup; a failure here must never mask the real outcome. */
+  private async removeObject(path: string): Promise<void> {
+    try {
+      await this.deps.storageClient.storage.from(BUCKET).remove([path]);
+    } catch {
+      /* ignored on purpose — see doc comment */
+    }
   }
 }
-
-// FLAGGED placeholder for the real AI Document Analysis entry point —
-// see the call site comment above. Remove once the real import exists.
-declare function runDocumentAnalysis(args: {
-  storagePath: string;
-  bucket: string;
-}): Promise<unknown>;
