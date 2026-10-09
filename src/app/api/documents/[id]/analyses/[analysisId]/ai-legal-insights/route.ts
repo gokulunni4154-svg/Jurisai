@@ -72,7 +72,7 @@ export async function POST(
 
     const classification =
       await aiLegalInsightService.getLatestCompletedClassificationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -84,7 +84,7 @@ export async function POST(
 
     const riskDetection =
       await aiLegalInsightService.getLatestCompletedRiskDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -94,7 +94,7 @@ export async function POST(
 
     const missingClauseDetection =
       await aiLegalInsightService.getLatestCompletedMissingClauseDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -104,7 +104,7 @@ export async function POST(
 
     const complianceDetection =
       await aiLegalInsightService.getLatestCompletedComplianceDetectionForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -114,7 +114,7 @@ export async function POST(
 
     const aiRecommendation =
       await aiLegalInsightService.getLatestCompletedAIRecommendationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -124,7 +124,7 @@ export async function POST(
 
     const legalHealthScore =
       await aiLegalInsightService.getLatestCompletedLegalHealthScoreForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -133,7 +133,7 @@ export async function POST(
     }
 
     const aiLegalInsight = await aiLegalInsightService.createAiLegalInsight(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -171,7 +171,7 @@ export async function GET(
     const aiLegalInsightService = await buildAiLegalInsightService();
 
     const aiLegalInsights = await aiLegalInsightService.listAiLegalInsightsForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
