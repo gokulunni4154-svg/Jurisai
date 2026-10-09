@@ -43,7 +43,7 @@ export async function POST(
     const chatService = await buildChatService();
 
     const conversation = await chatService.startConversation(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -70,7 +70,7 @@ export async function GET(
     const chatService = await buildChatService();
 
     const conversations = await chatService.listConversationsForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
