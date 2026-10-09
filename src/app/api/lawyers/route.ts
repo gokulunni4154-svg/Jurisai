@@ -6,6 +6,8 @@
 
 import { NextResponse } from 'next/server';
 
+import { getCurrentUser } from '@/core/auth/session';
+import { AuthenticationError } from '@/core/errors/app-error';
 import { handleApiError } from '@/core/errors/error-handler';
 import { buildLawyerDirectoryService } from '@/modules/lawyer-inquiries/lawyer-directory.factory';
 
@@ -15,11 +17,17 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/lawyers
  *
- * Public, pre-auth listing of verified individual lawyers -- scoping
- * doc §2 step 2. No auth check here at all, matching
- * LawyerDirectoryService's own no-currentUser design (see that file's
- * header comment) -- there is nothing to authenticate against for a
- * visitor who hasn't even uploaded a document yet, let alone signed up.
+ * Listing of verified individual lawyers -- scoping doc §2 step 2.
+ *
+ * AUTH REQUIRED (P2-01 fix): this route previously had no auth check
+ * and read through the admin (service-role) client, so any anonymous
+ * caller on the internet could enumerate every verified lawyer
+ * (including registrationNumber). Its only consumer is the
+ * authenticated /general-user/lawyers page, which already sends
+ * credentials, so anonymous requests now get 401. The service itself
+ * still takes no currentUser (see LawyerDirectoryService's header);
+ * the gate lives here, in the route, matching the
+ * getCurrentUser()-in-route pattern used by /api/lawyer-inquires.
  *
  * FLAGGED: no query params handled (no pagination, no filtering) --
  * same reasoning as LawyerDirectoryService's own flag: nothing in the
@@ -45,6 +53,12 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(): Promise<NextResponse> {
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      throw new AuthenticationError();
+    }
+
     const service = await buildLawyerDirectoryService();
     const lawyers = await service.listVerifiedLawyers();
 
