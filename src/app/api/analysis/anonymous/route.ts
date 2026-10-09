@@ -1,91 +1,88 @@
+import { createHash } from 'node:crypto';
+
 import { NextRequest, NextResponse } from 'next/server';
 
+import { RateLimitError, ValidationError } from '@/core/errors/app-error';
 import { handleApiError } from '@/core/errors/error-handler';
+import { getClientIp } from '@/core/http/client-ip';
+import { readMultipartWithLimit } from '@/core/http/read-multipart';
+import { DbRateLimiter } from '@/core/rate-limit/db-rate-limiter';
+import { createAdminClient } from '@/core/supabase/admin';
 import { buildAnonymousAnalysisService } from '@/modules/lawyer-inquiries/anonymous-analysis.factory';
+import { ANON_MAX_FILE_BYTES } from '@/modules/lawyer-inquiries/anonymous-analysis.validation';
+
+// Same ceiling as the other AI pipeline routes (AI provider deadline is 45s).
+export const maxDuration = 60;
+
+const COOKIE_NAME = 'anon_session_token';
+
+// Per-IP abuse limit, applied BEFORE the body is read. Deliberately
+// conservative; tune with real traffic data. The global AI-spend cap is NOT
+// enforced here: AnonymousAnalysisService consumes it immediately before the
+// AI call, so uploads that fail validation or text extraction never count.
+const IP_LIMIT_PER_HOUR = 10;
+const HOUR_SECONDS = 3600;
 
 /**
  * POST /api/analysis/anonymous
  *
- * Entry point for the "upload without an account" step of the Lawyer
- * Inquiry flow (§2, steps 1). Accepts a multipart file upload from an
- * unauthenticated visitor, kicks off analysis, and returns the result —
- * no auth required, by design.
+ * Unauthenticated by design (Lawyer Inquiry "upload without an account"
+ * step). Pipeline: per-IP rate limit -> bounded multipart read -> file
+ * validation (PDF only, size, signature) -> per-session / new-session limit
+ * -> in-memory text extraction + length check -> global AI quota (service) ->
+ * AI analysis -> Storage + DB write.
  *
- * Mirrors /api/documents' (File 50) division of responsibility: this
- * route's only job is pulling the file + any existing session cookie out
- * of the request and shaping the response. Validation (file size, mime
- * type against the same allow-list the legal-vault-documents bucket
- * enforces — see File 45's own doc comment on defense-in-depth not being
- * a substitute for application-level checks), the actual Storage write
- * via the admin client, running analysis, and the
- * anonymous_analysis_sessions upsert all live in
- * AnonymousAnalysisService — not written yet, this route's import is
- * forward-declared against the contract described in this session's
- * scoping doc / chat, same working pattern as building any other
- * multi-file module in this project.
- *
- * FLAGGED, all invented for this file, no existing precedent found in
- * pasted source this session:
- *   - Cookie name "anon_session_token" — no anon-flow cookie exists
- *     anywhere else in the project to match against.
- *   - request.formData() for a multipart body — every other route seen
- *     this session (documents, profiles, auth) is request.json(); this is
- *     the first file-upload route, so there's no existing convention to
- *     confirm this against.
- *   - Cookie options below (httpOnly/secure/sameSite=lax/path=/,
- *     maxAge = 7 days matching expires_at) — reasonable defaults, not
- *     copied from an existing cookie-setting call site, since none was
- *     found in pasted source.
- *
- * Response shape `{ data: { analysisResult, expiresAt } }` — deliberately
- * does NOT return document_storage_path or the session_token itself to
- * the client; the token only ever travels via the httpOnly cookie, never
- * in a JSON body, so it can't be read or exfiltrated by client JS.
+ * Response contract is unchanged: `{ data: { analysisResult, expiresAt } }`.
+ * The session token only ever travels in the httpOnly cookie, never in JSON.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const formData = await request.formData();
+    // Hashed so raw IPs are never stored in rate-limit keys.
+    // No determinable IP => one shared 'unknown' bucket (stricter, not looser).
+    const ip = getClientIp(request.headers);
+    const clientKey = createHash('sha256').update(ip ?? 'unknown').digest('hex');
+
+    const limiter = new DbRateLimiter(createAdminClient());
+    await limiter.consume(`anon-analysis:ip:${clientKey}`, IP_LIMIT_PER_HOUR, HOUR_SECONDS);
+
+    const formData = await readMultipartWithLimit(request, ANON_MAX_FILE_BYTES);
     const file = formData.get('file');
 
-    // Deliberately not an AppError subclass here — no existing
-    // "missing/invalid multipart field" error type was found in pasted
-    // source this session (File 21's app-error.ts hierarchy wasn't
-    // pasted). Flagged: this should likely become a real ValidationError
-    // once that hierarchy is confirmed, not stay a bare Response.
     if (!(file instanceof File)) {
-      return NextResponse.json(
-        { error: { message: 'A file is required.' } },
-        { status: 400 }
-      );
+      throw new ValidationError('A file is required.');
     }
 
-    const existingSessionToken = request.cookies.get('anon_session_token')?.value ?? null;
+    const existingSessionToken = request.cookies.get(COOKIE_NAME)?.value ?? null;
 
     const service = await buildAnonymousAnalysisService();
     const { sessionToken, analysisResult, expiresAt } = await service.createAnonymousAnalysis({
       file,
       existingSessionToken,
+      clientKey,
     });
 
-    const response = NextResponse.json(
-      { data: { analysisResult, expiresAt } },
-      { status: 201 }
-    );
+    const response = NextResponse.json({ data: { analysisResult, expiresAt } }, { status: 201 });
 
-    // Only (re)set the cookie when the service minted a new token — an
-    // existing session reusing its token doesn't need the cookie rewritten.
-    if (sessionToken !== existingSessionToken) {
-      response.cookies.set('anon_session_token', sessionToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 7, // 7 days — matches expires_at
-      });
-    }
+    // Always (re)set so the cookie lifetime tracks the SERVER-side expiry
+    // exactly (a reused session keeps its original expiry, not a fresh 7d).
+    const maxAge = Math.max(1, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+    response.cookies.set(COOKIE_NAME, sessionToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge,
+    });
 
     return response;
   } catch (error) {
-    return handleApiError(error);
+    const response = handleApiError(error);
+    if (error instanceof RateLimitError) {
+      const retryAfter = error.context?.['retryAfterSeconds'];
+      if (typeof retryAfter === 'number') {
+        response.headers.set('Retry-After', String(Math.max(1, Math.ceil(retryAfter))));
+      }
+    }
+    return response;
   }
 }

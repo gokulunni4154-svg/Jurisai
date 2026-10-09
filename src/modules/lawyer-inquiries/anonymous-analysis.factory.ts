@@ -1,40 +1,72 @@
-// FIX, tsc pass — was '@/lib/supabase/admin' (TS2307, module not found).
-// Same wrong-path guess as lawyer-inquiry.factory.ts's identical bug,
-// now fixed twice against the same confirmed real source
-// (document.factory.ts's own working Amendment #15 import).
+import { generateWithFallback } from '@/core/ai/ai-provider.factory';
+import { AIProviderError, ExternalServiceError, ValidationError } from '@/core/errors/app-error';
+import { DbRateLimiter } from '@/core/rate-limit/db-rate-limiter';
 import { createAdminClient } from '@/core/supabase/admin';
+import { documentAnalysisResultSchema } from '@/modules/document-analysis/analysis.schemas';
+import { buildSystemPrompt } from '@/modules/document-analysis/document-analysis.service';
+import { OCRProviderError } from '@/modules/ocr/ocr-provider.interface';
+import { PdfTextOCRProvider } from '@/modules/ocr/providers/pdf-text.provider';
 
 import { AnonymousAnalysisRepository } from './anonymous-analysis.repository';
-import { AnonymousAnalysisService } from './anonymous-analysis.service';
+import {
+  AnonymousAnalysisService,
+  type DocumentAnalyzer,
+  type TextExtractor,
+} from './anonymous-analysis.service';
 import { LawyerInquiryRepository } from './lawyer-inquiry.repository';
+
+const pdfText = new PdfTextOCRProvider();
+
+const extractText: TextExtractor = async (bytes) => {
+  try {
+    return (await pdfText.extractTextFromBytes(bytes)).text;
+  } catch (error) {
+    if (error instanceof OCRProviderError && error.category === 'permanent') {
+      throw new ValidationError(
+        'We could not read text from this PDF. Scanned or password-protected PDFs are not supported yet.',
+      );
+    }
+    throw new ExternalServiceError('pdf-text', 'Document analysis is temporarily unavailable.', error);
+  }
+};
+
+// Same pipeline pieces the authenticated flow uses (generateWithFallback +
+// documentAnalysisResultSchema + the shared system prompt), minus the
+// document_analyses row, which requires an owning auth user.
+const analyze: DocumentAnalyzer = async (documentText) => {
+  try {
+    const { result } = await generateWithFallback({
+      systemPrompt: buildSystemPrompt(),
+      userPrompt: documentText,
+      schema: documentAnalysisResultSchema,
+    });
+    return result;
+  } catch (error) {
+    if (error instanceof AIProviderError) {
+      // Never forward provider messages (or codes) to the visitor.
+      throw new ExternalServiceError('ai-provider', 'Document analysis is temporarily unavailable.', error);
+    }
+    throw error;
+  }
+};
 
 /**
  * Builds an AnonymousAnalysisService wired to the admin (service-role)
- * Supabase client — deliberately not the RLS-respecting server client
- * every other factory in this project uses (e.g. buildDocumentService()),
- * because the whole point of the anon-upload design (this session's
- * chat / scoping doc §4.3) is that there is no auth.uid() for RLS to
- * check against here. Both the Storage write and the
- * anonymous_analysis_sessions row write go through this same admin
- * client, matching anonymous_analysis_sessions' own migration comment
- * that the table has zero client-facing RLS policies by design.
- *
- * RESOLVED, tsc pass — `createAdminClient`'s name and path are no longer
- * invented. document.factory.ts's real, pasted source confirms both:
- * `createAdminClient` from `@/core/supabase/admin`, a cached
- * module-level service-role client. This file previously guessed
- * `@/lib/supabase/admin`, the same wrong path lawyer-inquiry.factory.ts
- * independently guessed — now corrected against real confirmed source,
- * not left as an open assumption.
+ * client — deliberately not the RLS client, since there is no auth.uid().
+ * The service-role client is used for exactly: Storage upload/remove under
+ * `anon/<sha256(token)>/…`, anonymous_analysis_sessions rows addressed only
+ * by token hash, lawyer_inquiries insert on reattach, and the rate-limit RPC.
+ * It never leaves server code (admin.ts is `server-only`).
  */
 export async function buildAnonymousAnalysisService(): Promise<AnonymousAnalysisService> {
   const adminClient = createAdminClient();
-  const repository = new AnonymousAnalysisRepository(adminClient);
-  const lawyerInquiryRepository = new LawyerInquiryRepository(adminClient);
 
   return new AnonymousAnalysisService({
-    repository,
+    repository: new AnonymousAnalysisRepository(adminClient),
     storageClient: adminClient,
-    lawyerInquiryRepository,
+    lawyerInquiryRepository: new LawyerInquiryRepository(adminClient),
+    rateLimiter: new DbRateLimiter(adminClient),
+    extractText,
+    analyze,
   });
 }

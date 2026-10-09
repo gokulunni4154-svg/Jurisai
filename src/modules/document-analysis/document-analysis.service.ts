@@ -258,7 +258,7 @@ export class DocumentAnalysisService extends BaseService {
  * worth the redundancy — a model can satisfy a field's shape while
  * still producing genuinely generic content within it.
  */
-function buildSystemPrompt(): string {
+export function buildSystemPrompt(): string {
   return [
     'You are a legal document analysis engine for JurisAI, an AI legal',
     'operating system serving customers in India. You analyze legal',

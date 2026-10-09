@@ -44,7 +44,15 @@ export class PdfTextOCRProvider implements OCRProvider {
       );
     }
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    return this.extractTextFromBytes(new Uint8Array(await response.arrayBuffer()));
+  }
+
+  /**
+   * Same text-layer extraction as extractText(), for callers that already
+   * hold the bytes in memory (e.g. the anonymous upload route, which
+   * analyses BEFORE writing anything to Storage).
+   */
+  async extractTextFromBytes(bytes: Uint8Array): Promise<OCRExtractionResult> {
 
     let totalPages: number;
     let text: string;
