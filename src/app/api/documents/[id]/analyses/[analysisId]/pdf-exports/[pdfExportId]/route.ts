@@ -43,7 +43,7 @@ export async function GET(
   try {
     const pdfExportService = await buildPdfExportService();
     const pdfExport = await pdfExportService.getPdfExportById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.pdfExportId,
     );
