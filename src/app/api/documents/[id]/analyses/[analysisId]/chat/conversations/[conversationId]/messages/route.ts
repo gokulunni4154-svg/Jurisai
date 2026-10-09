@@ -89,7 +89,7 @@ export async function GET(
     const chatService = await buildChatService();
 
     const messages = await chatService.listMessagesForConversation(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.conversationId,
     );
@@ -146,7 +146,7 @@ export async function POST(
 
   const chatService = await buildChatService();
   const generator = chatService.sendMessage(
-    context.params,
+    { id: context.params.id },
     context.params.analysisId,
     rawInput,
   );

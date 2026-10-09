@@ -73,7 +73,7 @@ export async function GET(
     const chatService = await buildChatService();
 
     const conversation = await chatService.getConversationById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.conversationId,
     );
