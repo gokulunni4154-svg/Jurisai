@@ -71,6 +71,10 @@ interface VerifiedLawyerListingRow {
 
 const PROFESSIONAL_VERIFICATIONS_TABLE = 'professional_verifications';
 
+// P2-01: the only organization_type the firm directory may expose.
+// 'personal' orgs are private by design (see listFirms() below).
+const FIRM_ORGANIZATION_TYPE = 'firm';
+
 // FLAGGED: hand-typed raw select-result shape, not from generated
 // Supabase types -- same caveat as VerifiedLawyerListingRow above. Only
 // used to replace an `any` on the .map() callback below with something
@@ -166,10 +170,17 @@ export class LawyerDirectoryRepository {
    * listVerifiedLawyers() above, there is no verification concept for
    * FIRMS anywhere in this schema -- professional_verifications is 1:1
    * on individual profiles only, and signUpAsFirm()'s own doc comment
-   * confirms no verification row is created for a firm signup. This
-   * method therefore returns EVERY firm, unfiltered -- there is nothing
-   * to filter on. Revisit if/when a firm-level verification concept is
-   * ever built.
+   * confirms no verification row is created for a firm signup. So
+   * every 'firm'-type organization is listed -- there is nothing
+   * further to filter on. Revisit if/when a firm-level verification
+   * concept is ever built.
+   *
+   * P2-01 FIX: only organization_type = 'firm' rows are returned.
+   * 'personal' organizations (private, single-member orgs created for
+   * independent lawyers -- migration 20260813035544) must never appear
+   * in this directory: this method runs on the admin client, which
+   * bypasses the RLS that otherwise keeps them private, and a personal
+   * org's name is typically derived from its owner.
    *
    * Admin client, same reasoning as every other method in this file --
    * this is a public, pre-auth-safe read in principle (reused by the
@@ -180,6 +191,7 @@ export class LawyerDirectoryRepository {
     const { data, error } = await this.client
       .from('firms')
       .select('id, name')
+      .eq('organization_type', FIRM_ORGANIZATION_TYPE)
       .order('name', { ascending: true });
 
     if (error) {
@@ -214,8 +226,31 @@ export class LawyerDirectoryRepository {
    * instead, so the caller (frontend) can label each entry (e.g. "Jane
    * Doe -- Owner", "John Smith -- Lawyer") and let the person judge who
    * to contact, rather than this layer silently deciding for them.
+   *
+   * P2-01 FIX: returns an empty array unless `firmId` is an existing
+   * organization_type = 'firm' row. A 'personal' organization's roster
+   * (its owner) must never be reachable through this directory, and
+   * this method runs on the admin client, which bypasses the RLS that
+   * otherwise protects it. A nonexistent firm and a personal org are
+   * deliberately indistinguishable to the caller (both -> []), so the
+   * response doesn't confirm that a given ID is a private org.
    */
   async listFirmMembers(firmId: string): Promise<FirmMemberListingRow[]> {
+    const { data: firm, error: firmError } = await this.client
+      .from('firms')
+      .select('id')
+      .eq('id', firmId)
+      .eq('organization_type', FIRM_ORGANIZATION_TYPE)
+      .maybeSingle();
+
+    if (firmError) {
+      throw firmError;
+    }
+
+    if (!firm) {
+      return [];
+    }
+
     const { data, error } = await this.client
       .from('firm_members')
       .select(
