@@ -56,7 +56,7 @@ export async function GET(
   try {
     const service = await buildClauseClassificationService();
     const classification = await service.getClassificationById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.classificationId,
     );

@@ -68,7 +68,7 @@ export async function GET(
   try {
     const service = await buildAIRecommendationService();
     const aiRecommendation = await service.getAIRecommendationById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.aiRecommendationId,
     );

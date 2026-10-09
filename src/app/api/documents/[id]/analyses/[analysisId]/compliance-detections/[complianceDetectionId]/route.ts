@@ -63,7 +63,7 @@ export async function GET(
   try {
     const service = await buildComplianceDetectionService();
     const complianceDetection = await service.getComplianceDetectionById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.complianceDetectionId,
     );

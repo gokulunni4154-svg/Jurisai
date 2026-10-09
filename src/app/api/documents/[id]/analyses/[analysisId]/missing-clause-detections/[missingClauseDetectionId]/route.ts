@@ -60,7 +60,7 @@ export async function GET(
   try {
     const service = await buildMissingClauseDetectionService();
     const missingClauseDetection = await service.getMissingClauseDetectionById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.missingClauseDetectionId,
     );

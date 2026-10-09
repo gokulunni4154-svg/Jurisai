@@ -59,7 +59,7 @@ export async function GET(
   try {
     const service = await buildRiskDetectionService();
     const riskDetection = await service.getRiskDetectionById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.riskDetectionId,
     );

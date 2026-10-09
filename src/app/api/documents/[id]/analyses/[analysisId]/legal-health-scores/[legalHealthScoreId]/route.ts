@@ -64,7 +64,7 @@ export async function GET(
   try {
     const service = await buildLegalHealthScoreService();
     const legalHealthScore = await service.getLegalHealthScoreById(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
       context.params.legalHealthScoreId,
     );
