@@ -59,7 +59,7 @@ export async function POST(
 
     const classification =
       await pdfExportService.getLatestCompletedClassificationForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -69,7 +69,7 @@ export async function POST(
 
     const legalHealthScore =
       await pdfExportService.getLatestCompletedLegalHealthScoreForAnalysis(
-        context.params,
+        { id: context.params.id },
         context.params.analysisId,
       );
 
@@ -78,7 +78,7 @@ export async function POST(
     }
 
     const pdfExport = await pdfExportService.createPdfExport(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
@@ -112,7 +112,7 @@ export async function GET(
     const pdfExportService = await buildPdfExportService();
 
     const pdfExports = await pdfExportService.listPdfExportsForAnalysis(
-      context.params,
+      { id: context.params.id },
       context.params.analysisId,
     );
 
