@@ -6,15 +6,23 @@
 // a plain synchronous object, not a Promise.
 //
 // No request-body/query parsing beyond the route param itself -- thin
-// route, same posture as File 68. firmId is passed straight through to
-// the service; LawyerDirectoryRepository#listFirmMembers() simply
-// returns an empty array for a firmId with no members (or a
-// nonexistent one), matching Postgrest's own `.eq()` semantics for "no
-// match" -- no explicit not-found handling needed here.
+// route, same posture as File 68.
+//
+// P2-01 fix: (1) requires a session (401 otherwise) -- previously this
+// route was reachable anonymously through the admin client; (2) firmId
+// is validated with the shared uuidSchema before reaching the service
+// (a ZodError becomes a 400 ValidationError via handleApiError, same
+// as api/profiles/[id]); (3) LawyerDirectoryRepository#listFirmMembers()
+// returns an empty array for a firmId that is nonexistent OR belongs to
+// a 'personal' organization, so a personal org's roster can never be
+// fetched through this directory.
 
 import { NextResponse } from 'next/server';
 
+import { getCurrentUser } from '@/core/auth/session';
+import { AuthenticationError } from '@/core/errors/app-error';
 import { handleApiError } from '@/core/errors/error-handler';
+import { uuidSchema } from '@/core/validation/common.schemas';
 import { buildLawyerDirectoryService } from '@/modules/lawyer-inquiries/lawyer-directory.factory';
 
 interface RouteContext {
@@ -26,8 +34,16 @@ export async function GET(
   context: RouteContext
 ): Promise<NextResponse> {
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      throw new AuthenticationError();
+    }
+
+    const firmId = uuidSchema.parse(context.params.firmId);
+
     const service = await buildLawyerDirectoryService();
-    const members = await service.listFirmMembers(context.params.firmId);
+    const members = await service.listFirmMembers(firmId);
 
     return NextResponse.json({ data: { members } });
   } catch (error) {

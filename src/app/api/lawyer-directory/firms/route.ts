@@ -9,15 +9,21 @@
 // exists yet).
 //
 // Deliberately reuses buildLawyerDirectoryService() as-is -- that
-// factory takes no arguments and was built for a pre-auth, public read
-// (see lawyer-directory.factory.ts's own header). This route is
-// reached only by an authenticated caller in practice (the picker lives
-// inside documents/[id], an authenticated page), but the service itself
-// has no currentUser concept either way -- no factory change was needed
-// to reuse it here.
+// factory takes no arguments (see lawyer-directory.factory.ts's own
+// header) and the service has no currentUser concept.
+//
+// AUTH REQUIRED (P2-01 fix): previously this route was reachable by
+// anonymous callers (middleware lets every /api/* request through, and
+// the route itself never checked), exposing the directory through the
+// admin client. The route now requires a session and returns 401
+// otherwise; the gate is here, in the route, not in the service. Only
+// organization_type = 'firm' rows are listed -- see
+// LawyerDirectoryRepository#listFirms().
 
 import { NextResponse } from 'next/server';
 
+import { getCurrentUser } from '@/core/auth/session';
+import { AuthenticationError } from '@/core/errors/app-error';
 import { handleApiError } from '@/core/errors/error-handler';
 import { buildLawyerDirectoryService } from '@/modules/lawyer-inquiries/lawyer-directory.factory';
 
@@ -26,6 +32,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      throw new AuthenticationError();
+    }
+
     const service = await buildLawyerDirectoryService();
     const firms = await service.listFirms();
 
