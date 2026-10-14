@@ -267,7 +267,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="notifications" />
+      <AppSidebar active="notifications" terminal="lawyer" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}

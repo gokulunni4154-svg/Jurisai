@@ -26,9 +26,20 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/modules/auth/auth.sc
  *      confirmed source -- no real "invalid invite" UI precedent has
  *      been pasted anywhere in this project.
  *
- *   2. Posts to /api/auth/client-sign-up (this session's new route, see
- *      its own file header), not /api/auth/sign-up, and includes
- *      inviteToken in the JSON body.
+ *   2. Posts to /api/auth/client-signup (src/app/api/auth/client-signup/
+ *      route.ts), not /api/auth/sign-up, and sends inviteToken as the
+ *      `inviteToken` QUERY param, not in the JSON body.
+ *
+ *      AMENDMENT -- audit batch 2. This form previously posted to
+ *      /api/auth/client-sign-up (a path with no route -> 404) and put
+ *      inviteToken in the body. Both were wrong: the route directory is
+ *      `client-signup`, and the route hands the raw body to
+ *      signUpAsClient() -> signUpSchema.parse(), which is .strict() and
+ *      rejects an unrecognized `inviteToken` key (VALIDATION_FAILED).
+ *      The route already reads the token from the query string (see its
+ *      own queryInviteToken fallback), so the body is now exactly
+ *      { email, password, fullName }. Client-side only; the server
+ *      contract is unchanged.
  *
  *   3. Copy is client-portal-specific ("Set up your client account")
  *      rather than the generic sign-up copy -- cosmetic only, no
@@ -60,7 +71,7 @@ export function ClientSignUpForm() {
           This link is missing or malformed. Ask your firm to resend your invitation.
         </p>
         <Link
-          href="/auth/sign-in"
+          href="/sign-in"
           className="inline-block text-sm font-medium text-primary hover:underline"
         >
           Back to sign in
@@ -81,11 +92,14 @@ export function ClientSignUpForm() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/auth/client-sign-up', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, fullName, inviteToken }),
-      });
+      const response = await fetch(
+        `/api/auth/client-signup?inviteToken=${encodeURIComponent(inviteToken as string)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, fullName }),
+        },
+      );
 
       if (!response.ok) {
         let message = 'Unable to create your account. Please try again.';
@@ -119,7 +133,7 @@ export function ClientSignUpForm() {
           the link to activate your account, then sign in.
         </p>
         <Link
-          href="/auth/sign-in"
+          href="/sign-in"
           className="inline-block text-sm font-medium text-primary hover:underline"
         >
           Back to sign in

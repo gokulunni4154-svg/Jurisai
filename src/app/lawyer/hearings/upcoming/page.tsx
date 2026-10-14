@@ -99,23 +99,23 @@
 // the Dashboard can never classify the same hearing as "today" on one
 // page and "tomorrow" on the other.
 
+// AMENDMENT -- Lawyer terminal navigation (audit batch 2): the inline icon
+// rail this file used to carry is removed in favor of the shared
+// <AppSidebar terminal="lawyer" />, the same shell every other lawyer page
+// uses. The old rail linked to /general-user/documents and /audit-log/firm
+// (which redirects into the firm terminal) from inside the lawyer
+// terminal. Billing / Plans / Create firm moved to the lawyer account menu
+// (see terminal-nav.ts). The notifications bell + panel stay page-local,
+// now in the header (same pattern as lawyer/tasks). References above to
+// "the nav rail below" / "inline JSX" describe the previous implementation.
+
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Scale,
-  LayoutDashboard,
-  Briefcase,
   CalendarClock,
-  ListTodo,
-  FolderOpen,
   Bell,
-  CreditCard,
-  Tag,
-  Building2,
-  ScrollText,
-  Settings,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -127,6 +127,7 @@ import {
   StickyNote,
   ArrowRight,
 } from 'lucide-react';
+import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
 
 type HearingType = 'first_hearing' | 'arguments' | 'evidence' | 'judgment' | 'other';
@@ -431,97 +432,7 @@ export default function UpcomingHearingsPage() {
 
   return (
     <div className="relative flex h-screen w-full bg-background font-sans text-foreground">
-      {/* Left rail -- same inline pattern as (dashboard)/lawyer/page.tsx and
-          cases/page.tsx, see file header re: no shared layout for this route family. */}
-      <aside className="flex w-16 flex-col items-center bg-primary py-5">
-        <div className="mb-8 flex h-9 w-9 items-center justify-center rounded-md bg-primary-foreground/15">
-          <Scale className="h-[18px] w-[18px] text-primary-foreground" strokeWidth={1.75} />
-        </div>
-        <nav className="flex flex-1 flex-col items-center gap-1">
-          <button
-            onClick={() => router.push('/lawyer/dashboard')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Dashboard"
-          >
-            <LayoutDashboard className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => router.push('/lawyer/cases')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Matters"
-          >
-            <Briefcase className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-foreground/10 text-primary-foreground"
-            aria-current="page"
-            aria-label="Hearings & Calendar"
-          >
-            <CalendarClock className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => router.push('/lawyer/tasks')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Tasks & Deadlines"
-          >
-            <ListTodo className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => router.push('/general-user/documents')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Documents"
-          >
-            <FolderOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => setIsNotificationsPanelOpen((prev) => !prev)}
-            className="relative flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Notifications"
-            aria-expanded={isNotificationsPanelOpen}
-          >
-            <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} />
-            {unreadCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-none text-destructive-foreground">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => router.push('/billing/subscription')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Billing"
-          >
-            <CreditCard className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => router.push('/pricing')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Plans"
-          >
-            <Tag className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => router.push('/billing/firms/new')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Create firm"
-          >
-            <Building2 className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            onClick={() => router.push('/audit-log/firm')}
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/70 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-            aria-label="Audit log"
-          >
-            <ScrollText className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-          <button
-            className="flex h-10 w-10 items-center justify-center rounded-md text-primary-foreground/40"
-            aria-label="Settings"
-          >
-            <Settings className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-        </nav>
-      </aside>
+      <AppSidebar active="hearings" terminal="lawyer" />
 
       <NotificationsPanel
         isOpen={isNotificationsPanelOpen}
@@ -588,6 +499,19 @@ export default function UpcomingHearingsPage() {
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
+            <button
+              onClick={() => setIsNotificationsPanelOpen((prev) => !prev)}
+              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
+              aria-label="Notifications"
+              aria-expanded={isNotificationsPanelOpen}
+            >
+              <Bell className="h-4 w-4" strokeWidth={1.75} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-none text-destructive-foreground">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
           </div>
         </header>
 

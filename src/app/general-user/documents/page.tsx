@@ -461,7 +461,7 @@ export default function DocumentsPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="documents" />
+      <AppSidebar active="documents" terminal="general" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}

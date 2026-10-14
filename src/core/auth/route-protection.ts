@@ -35,12 +35,33 @@ import type { User } from '@supabase/supabase-js';
  * `/sign-up` below is still an unconfirmed placeholder -- no corresponding
  * page route has been pasted as real source yet. Do not assume it follows
  * the same `(auth)` group convention without confirming its file path.
+ *
+ * AMENDMENT -- audit batch 1 (F3): `/client-signup` and `/pricing` added.
+ * Both were verified against real source before being made public:
+ *   - `/client-signup` (src/app/client-signup/page.tsx) is a static form
+ *     shell. It fetches nothing server-side and reads only the `invite`
+ *     query param, which it forwards to POST /api/auth/client-signup;
+ *     the invitation itself is validated by that API, not this page. It
+ *     must be public: its audience is an invited client with no account
+ *     yet, who was previously bounced to /sign-in.
+ *   - `/pricing` (src/app/pricing/page.tsx) renders only public plan
+ *     data from GET /api/billing/plans, whose service method
+ *     (listActivePlans) deliberately skips authentication. FLAGGED, not
+ *     changed here (no DB changes in this batch): the plans_select_active
+ *     RLS policy is `to authenticated`, so a signed-out visitor's request
+ *     returns an empty plan list. Nothing protected is exposed; the page
+ *     just cannot show plans to logged-out visitors until that policy
+ *     also covers the `anon` role.
+ * Exact-match only (see isPublicRoute): this does NOT make sub-paths such
+ * as /pricing/anything or /client-signup/anything public.
  */
 const PUBLIC_ROUTES: readonly string[] = [
   '/',
   '/sign-in',
   '/sign-up',
   '/request-password-reset',
+  '/client-signup',
+  '/pricing',
 ];
 
 /** Where unauthenticated users are sent when hitting a protected page. */

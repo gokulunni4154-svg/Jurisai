@@ -355,7 +355,7 @@ export default function TasksAndDeadlinesPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="tasks" />
+      <AppSidebar active="tasks" terminal="lawyer" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}

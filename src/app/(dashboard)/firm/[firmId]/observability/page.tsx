@@ -126,7 +126,7 @@ function StatusPill({ status }: { status: string | null }) {
  * populated from the 403 AuthorizationError handleApiError translates
  * server-side.
  */
-export default function ObservabilityFirmPage() {
+export default function ObservabilityFirmPage({ params }: { params: { firmId: string } }) {
   const [runs, setRuns] = useState<ObservabilityRun[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -152,7 +152,7 @@ export default function ObservabilityFirmPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="observability" />
+      <AppSidebar active="observability" terminal="firm" firmId={params.firmId} />
       <div className="flex flex-1 flex-col overflow-hidden">
       <header className="border-b px-8 py-5">
         <div className="flex items-center gap-2">

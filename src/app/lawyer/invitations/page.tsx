@@ -222,7 +222,7 @@ export default function InvitationsPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="invitations" />
+      <AppSidebar active="invitations" terminal="lawyer" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}

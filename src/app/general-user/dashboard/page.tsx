@@ -171,7 +171,7 @@ export default function GeneralDashboardPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="dashboard" />
+      <AppSidebar active="dashboard" terminal="general" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Welcome header */}

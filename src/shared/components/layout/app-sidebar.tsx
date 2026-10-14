@@ -194,58 +194,55 @@
 // URL too, never linked from this sidebar) -- adding one here would
 // expose a platform-admin link to every ordinary firm user, which is
 // out of this task's Firm Terminal scope regardless.
+//
+// AMENDMENT -- Terminal Navigation Isolation (audit batch 1, F1/F2/F5):
+// the sidebar no longer INFERS which terminal's links to show from a mix
+// of `role` and `firmId` (that inference put /firm/{id}/* links in every
+// lawyer's sidebar -- signUpAsLawyer() gives each lawyer a solo firm and
+// sets profiles.firm_id -- and /general-user/* links in every firm
+// owner's and client's sidebar). Navigation now comes from ONE explicit
+// per-terminal config in ./terminal-nav.ts, selected by a `terminal`
+// prop that each page passes (a page's terminal is known from its own
+// route namespace; it is not a role question). `firmId` is required with
+// terminal="firm" and comes from the page's route param, never from the
+// profile fetch.
+//
+// LOADING (F5): when `terminal` is passed, the nav renders immediately
+// and never waits for, or changes after, GET /api/profiles/me -- the
+// fetch now only fills the footer name/avatar. When `terminal` is
+// OMITTED (shared pages that belong to no terminal, today only /profile)
+// the terminal is resolved from the profile, and until it loads the nav
+// shows a neutral skeleton with NO links, so a lawyer can no longer
+// click a "Dashboard" that briefly pointed at the general portal. If
+// that fetch fails on such a page the nav stays empty (footer/account
+// menu still work) rather than guessing a terminal.
+//
+// UNCHANGED: shell, brand, footer, account menu behavior, sign-out. This
+// change makes no authorization decision; route/API/RLS enforcement is a
+// separate phase.
 
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Scale, ChevronDown, LogOut, Loader2 } from 'lucide-react';
+
 import {
-  Scale,
-  LayoutDashboard,
-  Briefcase,
-  CalendarClock,
-  CheckSquare,
-  FileText,
-  FolderKanban,
-  Inbox,
-  Sparkles,
-  Users,
-  UserSquare2,
-  BarChart3,
-  Settings,
-  ChevronDown,
-  LogOut,
-  Loader2,
-  User,
-  BadgeCheck,
-  Mail,
-  Bell,
-  Activity,
-  ListTodo,
-  Search,
-  MessageSquare,
-  type LucideIcon,
-} from 'lucide-react';
+  getAccountMenu,
+  getTerminalNav,
+  resolveTerminalFromProfile,
+  type ResolvedTerminal,
+  type SidebarActive,
+} from './terminal-nav';
 
 interface MeProfile {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
   firm_id: string | null;
-  // NEW — General Portal Phase 1. GET /api/profiles/me already returns
-  // `role` (merged in from the session's AuthUser, confirmed real
-  // source — see that route's own doc comment); it just had no
-  // consumer in this file before. Used below solely to resolve the
-  // "Dashboard" nav item to the right home for the caller's actual
-  // account type, not to gate rendering of anything.
+  // GET /api/profiles/me merges the session's role into the profile. Used
+  // ONLY on shared pages (no `terminal` prop) to resolve a terminal.
   role: string | null;
-}
-
-interface NavItem {
-  label: string;
-  href: string | null;
-  icon: LucideIcon;
-  comingSoon?: boolean;
 }
 
 function initials(name: string | null): string {
@@ -254,28 +251,19 @@ function initials(name: string | null): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
-export function AppSidebar({
-  active,
-}: {
-  active:
-    | 'documents'
-    | 'tasks'
-    | 'matters'
-    | 'profile'
-    | 'verification'
-    | 'inquiries'
-    | 'inquiries-mine'
-    | 'invitations'
-    | 'notifications'
-    | 'lawyers'
-    | 'clients'
-    | 'teams'
-    | 'observability'
-    | 'reports'
-    | 'settings'
-    | 'firm-tasks'
-    | 'dashboard';
-}) {
+/**
+ * `terminal` is explicit for every page inside a terminal's route
+ * namespace. Omit it only on shared pages (e.g. /profile), where it is
+ * resolved from the signed-in profile instead.
+ */
+export type AppSidebarProps = { active: SidebarActive } & (
+  | { terminal?: undefined; firmId?: undefined }
+  | { terminal: 'lawyer' | 'general' | 'client'; firmId?: undefined }
+  | { terminal: 'firm'; firmId: string }
+);
+
+export function AppSidebar(props: AppSidebarProps) {
+  const { active } = props;
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -301,108 +289,20 @@ export function AppSidebar({
     };
   }, []);
 
-  const firmId = profile?.firm_id ?? null;
+  // Explicit terminal wins and is available on the very first render.
+  // Only shared pages fall back to resolving from the fetched profile.
+  const resolved: ResolvedTerminal | null =
+    props.terminal !== undefined
+      ? { terminal: props.terminal, firmId: props.terminal === 'firm' ? props.firmId : null }
+      : profile
+        ? resolveTerminalFromProfile(profile)
+        : null;
 
-  // NEW — General Portal Phase 1. This "Dashboard" item previously
-  // hardcoded '/lawyer' for every caller, regardless of account type —
-  // fine for the lawyer pages that were this sidebar's only consumer
-  // when it was written, but AppSidebar is also the shell
-  // documents/page.tsx uses (the real landing page for 'individual'/
-  // 'business' accounts today, per sign-in's own resolveDashboardRedirect()),
-  // so a general user clicking "Dashboard" was being sent to a
-  // lawyer-only page. Resolved the same priority order
-  // resolveDashboardRedirect() itself uses (lawyer checked first, since
-  // signUpAsLawyer() also creates a solo owner-role firm — see that
-  // route's own doc comment for why ordering here matters), plus a
-  // 'client' branch (the real, already-built /client page — see
-  // src/app/client/page.tsx — had no sidebar entry point at all before
-  // this change) and a firm-owner branch, falling back to the new
-  // General Portal home (/dashboard, this task) for everyone else.
-  const dashboardHref =
-    profile?.role === 'lawyer'
-      ? '/lawyer/dashboard'
-      : profile?.role === 'client'
-        ? '/client'
-        : firmId
-          ? `/firm/${firmId}/dashboard`
-          : '/general-user/dashboard';
-
-  // Terminal Route Namespace Migration — AppSidebar previously showed
-  // every non-firm item to every account type regardless of role (only
-  // the firm-scoped items below were gated, on firmId). Lawyer Terminal
-  // and General User Terminal items are now gated on `isLawyer` so each
-  // terminal only sees its own navigation, per the migration brief. Firm
-  // items keep their existing firmId gating, unchanged — a firm-scoped
-  // route can't be linked without one, same as before this migration.
-  const isLawyer = profile?.role === 'lawyer';
-
-  const navItems: NavItem[] = [
-    { label: 'Dashboard', href: dashboardHref, icon: LayoutDashboard },
-    ...(isLawyer
-      ? [
-          { label: 'Matters', href: '/lawyer/cases', icon: Briefcase },
-          { label: 'Inquiries', href: '/lawyer/inquiries', icon: Inbox },
-          { label: 'Hearings & Calendar', href: '/lawyer/hearings/upcoming', icon: CalendarClock },
-          { label: 'Tasks & Deadlines', href: '/lawyer/tasks', icon: CheckSquare },
-          { label: 'Document Sets', href: '/lawyer/document-sets', icon: FolderKanban },
-        ]
-      : [
-          { label: 'Documents', href: '/general-user/documents', icon: FileText },
-          { label: 'Find a Lawyer', href: '/general-user/lawyers', icon: Search },
-          { label: 'My Inquiries', href: '/general-user/inquiries/mine', icon: MessageSquare },
-        ]),
-    { label: 'AI Assistant', href: null, icon: Sparkles, comingSoon: true },
-    {
-      label: 'Clients',
-      href: firmId ? `/firm/${firmId}/clients` : null,
-      icon: Users,
-      comingSoon: !firmId,
-    },
-    {
-      label: 'Team',
-      href: firmId ? `/firm/${firmId}/teams` : null,
-      icon: UserSquare2,
-      comingSoon: !firmId,
-    },
-    // NEW — Navigation + Polish Cleanup task. Closes the confirmed
-    // stranded-page gap: GET/POST /api/firms/[id]/tasks (standalone,
-    // non-case firm to-dos) and src/app/firms/[id]/tasks/page.tsx were
-    // both fully built, authorized (tasks_select RLS scopes correctly
-    // to firm_members of that firm), and had ZERO navigation entry
-    // anywhere in the repo — reachable only by typing the URL directly.
-    // Gated on firmId exactly like Clients/Team/Reports/Settings just
-    // above/below (a firm-scoped route that can't be linked without
-    // one). Distinct from the existing "Tasks & Deadlines" item above,
-    // which points at /lawyer/tasks (personal, assignee-scoped) — this
-    // is the firm-wide standalone to-do list, a different page and a
-    // different data shape (TaskService#listStandaloneTasks vs
-    // #listMyTasks), so it gets its own label rather than overloading
-    // an existing one.
-    {
-      label: 'Firm Tasks',
-      href: firmId ? `/firm/${firmId}/tasks` : null,
-      icon: ListTodo,
-      comingSoon: !firmId,
-    },
-    {
-      label: 'Reports',
-      href: firmId ? `/firm/${firmId}/reports` : null,
-      icon: BarChart3,
-      comingSoon: !firmId,
-    },
-    {
-      label: 'Run History',
-      href: firmId ? `/firm/${firmId}/observability` : null,
-      icon: Activity,
-      comingSoon: !firmId,
-    },
-    {
-      label: 'Settings',
-      href: firmId ? `/firm/${firmId}/settings` : null,
-      icon: Settings,
-      comingSoon: !firmId,
-    },
-  ];
+  const navPending = resolved === null && profileLoading;
+  const navItems = resolved ? getTerminalNav(resolved.terminal, { firmId: resolved.firmId }) : [];
+  // Until a terminal is known the account menu offers only the shared
+  // "My Profile" entry (same output as the general terminal's menu).
+  const accountItems = getAccountMenu(resolved?.terminal ?? 'general');
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -431,28 +331,25 @@ export function AppSidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2">
+      <nav
+        className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2"
+        aria-busy={navPending ? 'true' : undefined}
+      >
+        {navPending && (
+          <div data-testid="sidebar-nav-loading" className="flex flex-col gap-2 px-3 py-2">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-4 w-full animate-pulse rounded bg-sidebar-accent/40" />
+            ))}
+          </div>
+        )}
         {navItems.map((item) => {
-          const isActive =
-            (item.label === 'Dashboard' && active === 'dashboard') ||
-            (item.label === 'Documents' && active === 'documents') ||
-            (item.label === 'Tasks & Deadlines' && active === 'tasks') ||
-            (item.label === 'Matters' && active === 'matters') ||
-            (item.label === 'Inquiries' && active === 'inquiries') ||
-            (item.label === 'Find a Lawyer' && active === 'lawyers') ||
-            (item.label === 'My Inquiries' && active === 'inquiries-mine') ||
-            (item.label === 'Clients' && active === 'clients') ||
-            (item.label === 'Team' && active === 'teams') ||
-            (item.label === 'Firm Tasks' && active === 'firm-tasks') ||
-            (item.label === 'Reports' && active === 'reports') ||
-            (item.label === 'Settings' && active === 'settings') ||
-            (item.label === 'Run History' && active === 'observability');
+          const isActive = item.key === active;
           const Icon = item.icon;
 
           if (!item.href) {
             return (
               <div
-                key={item.label}
+                key={item.key}
                 aria-disabled="true"
                 title="Coming soon"
                 className="flex cursor-not-allowed items-center justify-between rounded-md px-3 py-2 text-[13.5px] text-sidebar-muted/60"
@@ -472,7 +369,7 @@ export function AppSidebar({
 
           return (
             <button
-              key={item.label}
+              key={item.key}
               onClick={() => router.push(item.href!)}
               aria-current={isActive ? 'page' : undefined}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-left text-[13.5px] transition-colors ${
@@ -515,67 +412,23 @@ export function AppSidebar({
 
         {menuOpen && (
           <div className="absolute bottom-[calc(100%+4px)] left-3 right-3 rounded-md border border-sidebar-border bg-sidebar shadow-lg">
-            {/*
-              NEW, Lawyer Profile page (this session): "View account" in the
-              footer button below previously had nothing behind it -- this
-              menu only ever contained "Sign out". /profile (GET/PATCH
-              /api/profiles/me, both real, confirmed this session) is that
-              real destination now. Kept inside this existing dropdown
-              rather than adding a new top-level nav item, since the
-              account menu is already the established place this kind of
-              "about me" action lives (the footer button's own copy says
-              "View account").
-            */}
-            <button
-              onClick={() => {
-                setMenuOpen(false);
-                router.push('/profile');
-              }}
-              aria-current={active === 'profile' ? 'page' : undefined}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
-            >
-              <User className="h-3.5 w-3.5" strokeWidth={1.75} />
-              My Profile
-            </button>
-            {isLawyer && (
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  router.push('/lawyer/verification');
-                }}
-                aria-current={active === 'verification' ? 'page' : undefined}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
-              >
-                <BadgeCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
-                My Verification
-              </button>
-            )}
-            {isLawyer && (
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  router.push('/lawyer/invitations');
-                }}
-                aria-current={active === 'invitations' ? 'page' : undefined}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
-              >
-                <Mail className="h-3.5 w-3.5" strokeWidth={1.75} />
-                My Invitations
-              </button>
-            )}
-            {isLawyer && (
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  router.push('/lawyer/notifications');
-                }}
-                aria-current={active === 'notifications' ? 'page' : undefined}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
-              >
-                <Bell className="h-3.5 w-3.5" strokeWidth={1.75} />
-                My Notifications
-              </button>
-            )}
+            {accountItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push(item.href);
+                  }}
+                  aria-current={active === item.key ? 'page' : undefined}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+                >
+                  <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  {item.label}
+                </button>
+              );
+            })}
             <button
               onClick={handleSignOut}
               disabled={signingOut}

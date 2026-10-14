@@ -304,7 +304,7 @@ export default function LawyerInquiriesPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="inquiries" />
+      <AppSidebar active="inquiries" terminal="lawyer" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}

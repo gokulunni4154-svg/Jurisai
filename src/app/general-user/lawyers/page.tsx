@@ -123,7 +123,7 @@ export default function FindALawyerPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="lawyers" />
+      <AppSidebar active="lawyers" terminal="general" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="border-b border-border bg-background px-8 py-6">

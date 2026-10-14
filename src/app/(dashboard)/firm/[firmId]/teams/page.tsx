@@ -584,7 +584,7 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="teams" />
+      <AppSidebar active="teams" terminal="firm" firmId={firmId} />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-10">
       <div>

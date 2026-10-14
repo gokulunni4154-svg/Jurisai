@@ -207,7 +207,7 @@ export default function MySentInquiriesPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="inquiries-mine" />
+      <AppSidebar active="inquiries-mine" terminal="general" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="border-b border-border bg-background px-8 py-6">

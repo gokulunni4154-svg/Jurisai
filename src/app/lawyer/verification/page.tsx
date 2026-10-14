@@ -256,7 +256,7 @@ export default function ProfessionalVerificationPage() {
 
   return (
     <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="verification" />
+      <AppSidebar active="verification" terminal="lawyer" />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
