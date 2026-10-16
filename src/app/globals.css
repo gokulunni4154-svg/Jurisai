@@ -122,4 +122,170 @@
   :focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
+}/* JurisAI mobile layout safeguards for General User, Lawyer, and Firm terminals. */
+@layer base {
+  html,
+  body {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  body {
+    overflow-x: clip;
+  }
+
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.flex.h-screen.w-full.bg-muted\/30,
+  div.flex.h-screen.w-full.bg-background,
+  div.relative.flex.h-screen.w-full.bg-background {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 > aside,
+  div.flex.h-screen.w-full.bg-background > aside,
+  div.relative.flex.h-screen.w-full.bg-background > aside {
+    width: 100%;
+    height: auto;
+    max-height: none;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 > aside nav,
+  div.flex.h-screen.w-full.bg-background > aside nav,
+  div.relative.flex.h-screen.w-full.bg-background > aside nav {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0.75rem 0.75rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 > aside nav > *,
+  div.flex.h-screen.w-full.bg-background > aside nav > *,
+  div.relative.flex.h-screen.w-full.bg-background > aside nav > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 header,
+  div.flex.h-screen.w-full.bg-muted\/30 main,
+  div.flex.h-screen.w-full.bg-background header,
+  div.flex.h-screen.w-full.bg-background main,
+  div.relative.flex.h-screen.w-full.bg-background header,
+  div.relative.flex.h-screen.w-full.bg-background main {
+    min-width: 0;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 main,
+  div.flex.h-screen.w-full.bg-background main,
+  div.relative.flex.h-screen.w-full.bg-background main {
+    padding-top: 1rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 main .grid.grid-cols-2,
+  div.flex.h-screen.w-full.bg-background main .grid.grid-cols-2,
+  div.relative.flex.h-screen.w-full.bg-background main .grid.grid-cols-2,
+  div.flex.h-screen.w-full.flex-col.bg-background main .grid.grid-cols-2,
+  div.flex.min-h-screen.w-full.flex-col.bg-background main .grid.grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 main .overflow-x-auto,
+  div.flex.h-screen.w-full.bg-background main .overflow-x-auto,
+  div.relative.flex.h-screen.w-full.bg-background main .overflow-x-auto {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  div.flex.h-screen.w-full.flex-col.bg-background,
+  div.flex.min-h-screen.w-full.flex-col.bg-background {
+    min-width: 0;
+  }
+
+  div.flex.h-screen.w-full.flex-col.bg-background header,
+  div.flex.h-screen.w-full.flex-col.bg-background main,
+  div.flex.min-h-screen.w-full.flex-col.bg-background header,
+  div.flex.min-h-screen.w-full.flex-col.bg-background main {
+    min-width: 0;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  div.flex.h-screen.w-full.flex-col.bg-background header,
+  div.flex.min-h-screen.w-full.flex-col.bg-background header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  div.flex.h-screen.w-full.flex-col.bg-background main,
+  div.flex.min-h-screen.w-full.flex-col.bg-background main {
+    padding-top: 1rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 main .overflow-x-auto table,
+  div.flex.h-screen.w-full.bg-background main .overflow-x-auto table,
+  div.relative.flex.h-screen.w-full.bg-background main .overflow-x-auto table,
+  div.flex.h-screen.w-full.flex-col.bg-background main .overflow-x-auto table,
+  div.flex.min-h-screen.w-full.flex-col.bg-background main .overflow-x-auto table {
+    min-width: max-content;
+  }
+
+  div.flex.h-screen.w-full.bg-muted\/30 h1,
+  div.flex.h-screen.w-full.bg-muted\/30 h2,
+  div.flex.h-screen.w-full.bg-muted\/30 p,
+  div.flex.h-screen.w-full.bg-background h1,
+  div.flex.h-screen.w-full.bg-background h2,
+  div.flex.h-screen.w-full.bg-background p,
+  div.flex.min-h-screen.w-full.flex-col.bg-background h1,
+  div.flex.min-h-screen.w-full.flex-col.bg-background h2,
+  div.flex.min-h-screen.w-full.flex-col.bg-background p {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  div.flex.h-screen.w-full.bg-muted\/30 header,
+  div.flex.h-screen.w-full.bg-muted\/30 main,
+  div.flex.h-screen.w-full.bg-background header,
+  div.flex.h-screen.w-full.bg-background main,
+  div.relative.flex.h-screen.w-full.bg-background header,
+  div.relative.flex.h-screen.w-full.bg-background main,
+  div.flex.h-screen.w-full.flex-col.bg-background header,
+  div.flex.h-screen.w-full.flex-col.bg-background main,
+  div.flex.min-h-screen.w-full.flex-col.bg-background header,
+  div.flex.min-h-screen.w-full.flex-col.bg-background main {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
 }
