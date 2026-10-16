@@ -445,28 +445,28 @@ export default function LawyerDashboardPage() {
 
       {/* Main column */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-border px-8 py-6">
+        <header className="flex flex-col gap-4 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-6">
           <div>
             <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               JurisAI
             </p>
-            <h1 className="font-serif text-[26px] leading-none text-foreground">
+            <h1 className="whitespace-normal break-normal font-serif text-[22px] leading-tight text-foreground sm:text-[26px]">
               My cases, tasks &amp; hearings
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 sm:flex-none">
               <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search cases, tasks, hearings"
-                className="w-56 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                className="w-full min-w-0 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none sm:w-56"
               />
             </div>
             <button
               onClick={() => setIsNewCaseOpen(true)}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
+              className="flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
               New case

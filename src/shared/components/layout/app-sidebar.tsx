@@ -411,7 +411,7 @@ export function AppSidebar(props: AppSidebarProps) {
         </button>
 
         {menuOpen && (
-          <div className="absolute bottom-[calc(100%+4px)] left-3 right-3 rounded-md border border-sidebar-border bg-sidebar shadow-lg">
+          <div className="fixed bottom-20 left-4 right-4 z-50 max-h-[70dvh] overflow-y-auto rounded-md border border-sidebar-border bg-sidebar shadow-lg md:absolute md:bottom-[calc(100%+4px)] md:left-3 md:right-3 md:z-auto md:max-h-[min(70dvh,32rem)]">
             {accountItems.map((item) => {
               const Icon = item.icon;
               return (
