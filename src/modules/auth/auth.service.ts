@@ -561,6 +561,8 @@ export class AuthService {
     userId: string;
     email: string;
     emailConfirmationRequired: boolean;
+    /** The firm just created -- lets the sign-up UI land the owner on /firm/[firmId]/dashboard. */
+    firmId: string;
   }> {
     const { email, password, fullName, firmName } = signUpAsFirmSchema.parse(rawInput);
 
@@ -637,6 +639,7 @@ export class AuthService {
       userId: data.user.id,
       email: data.user.email ?? email,
       emailConfirmationRequired: data.session === null,
+      firmId: firm.id,
     };
   }
 
@@ -843,7 +846,27 @@ export class AuthService {
       );
     }
 
-    return mapSupabaseUserToAuthUser(data.user);
+    const authUser = mapSupabaseUserToAuthUser(data.user);
+
+    // DEFENSE IN DEPTH (email-confirmation audit). Supabase Auth normally
+    // refuses password sign-in for an unconfirmed account itself
+    // ("Email not confirmed", mapped above) -- but that is the ONLY
+    // enforcement there was, so this method returned a session for any
+    // account GoTrue was willing to sign in. If a session was issued for
+    // an account whose email is not confirmed, it is revoked here and the
+    // sign-in is rejected, so confirmation no longer depends solely on a
+    // dashboard/project setting. Same message and code as the mapped
+    // GoTrue error above, so callers see one consistent failure.
+    if (!authUser.emailVerified) {
+      await this.supabase.auth.signOut();
+      throw new AuthenticationError(
+        'Please confirm your email address before signing in.',
+        ErrorCode.AUTH_INVALID_CREDENTIALS,
+        { reason: 'email_not_confirmed' },
+      );
+    }
+
+    return authUser;
   }
 
   /**

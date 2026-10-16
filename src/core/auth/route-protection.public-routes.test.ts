@@ -49,7 +49,7 @@ describe('public routes for logged-out visitors (audit F3)', () => {
   });
 
   it('signed-in users are allowed everywhere (role gating is a later phase)', () => {
-    const user = { id: 'u1' } as never;
+    const user = { id: 'u1', email_confirmed_at: '2026-01-01T00:00:00.000Z' } as never;
     expect(resolveRouteProtection(at('/lawyer/dashboard'), user).action).toBe('allow');
   });
 });

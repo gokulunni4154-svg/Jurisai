@@ -58,6 +58,19 @@ function sanitizeRedirectTarget(raw: string | null): string {
  * assume it follows the same route-group convention as sign-in/sign-up
  * without confirming its actual file path first.
  */
+/**
+ * Messages for the `?error=` codes other routes redirect here with:
+ * `email_not_confirmed` (middleware, session exists but unconfirmed) and
+ * `confirmation_failed` (/api/auth/callback, bad/expired/used code).
+ * Unknown codes show nothing -- the param is attacker-controllable, so
+ * only a fixed allowlist of static strings is ever rendered.
+ */
+const REDIRECT_ERROR_MESSAGES: Record<string, string> = {
+  email_not_confirmed: 'Please confirm your email address before signing in.',
+  confirmation_failed:
+    'That confirmation link is invalid or has expired. Sign in, or sign up again to get a new link.',
+};
+
 export function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,6 +79,12 @@ export function SignInForm() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const errorCode = searchParams.get('error');
+  const redirectErrorMessage =
+    errorCode !== null && Object.hasOwn(REDIRECT_ERROR_MESSAGES, errorCode)
+      ? REDIRECT_ERROR_MESSAGES[errorCode]
+      : null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,9 +184,9 @@ export function SignInForm() {
           />
         </div>
 
-        {errorMessage !== null && (
+        {(errorMessage ?? redirectErrorMessage) !== null && (
           <p role="alert" className="text-sm text-destructive">
-            {errorMessage}
+            {errorMessage ?? redirectErrorMessage}
           </p>
         )}
 

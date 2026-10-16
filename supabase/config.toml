@@ -71,7 +71,15 @@ enabled = true
 # Must match NEXT_PUBLIC_APP_URL in .env.example for local dev. Auth email
 # links (confirmation, magic link, password reset) redirect here.
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+# AuthService passes `${NEXT_PUBLIC_APP_URL}/api/auth/callback` as emailRedirectTo
+# (sign-up confirmation + password reset). GoTrue silently falls back to
+# site_url (`/?code=...`, no code exchange, no session) when that URL is not on
+# this allow-list, so the real callback path must be listed. The older
+# `/auth/callback` entry is kept untouched.
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "http://localhost:3000/api/auth/callback",
+]
 
 # Access tokens: short-lived by design. A stolen access token should have a
 # small blast-radius window; long-lived sessions are handled via refresh

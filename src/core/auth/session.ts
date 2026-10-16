@@ -45,6 +45,16 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
 
   const authUser = mapSupabaseUserToAuthUser(user);
 
+  // Fail closed on unconfirmed accounts. This is the single choke point
+  // every service factory and Route Handler resolves the caller through,
+  // so an account whose email is not confirmed is treated as having no
+  // session -- regardless of whether Supabase issued it a token. Confirmed
+  // accounts (including all accounts created before this check) are
+  // unaffected: `email_confirmed_at` is set for them.
+  if (!authUser.emailVerified) {
+    return null;
+  }
+
   // Safe to read expiry from getSession() now — identity was already
   // verified above via getUser(). We are not trusting getSession() for
   // *who* the user is, only for the numeric expires_at timestamp.

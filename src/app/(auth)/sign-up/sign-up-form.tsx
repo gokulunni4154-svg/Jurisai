@@ -53,24 +53,14 @@ const ACCOUNT_TYPE_ENDPOINT: Record<AccountType, string> = {
  * client sign-in uses), and the old code would still incorrectly tell
  * the user to go check an email that will never matter.
  *
- * Scoped deliberately to `accountType === 'individual'` only, per this
- * audit's explicit scope (General Users) -- lawyer/firm accountType
- * submits are NOT touched here and keep the exact prior "check your
- * email" behavior unconditionally, regardless of `emailConfirmationRequired`.
- * That's intentional, not an oversight: this audit did not review
- * whether the Lawyer/Firm Terminals are prepared to receive a
- * newly-signed-up, not-yet-professionally-verified user landing there
- * directly, and changing that is a distinct product decision this task
- * was not asked to make. See AuthService.signUpAsLawyer()/signUpAsFirm()
- * for the (separate, non-email) professional-verification gate those
- * account types still go through either way.
- *
- * For 'individual': if `emailConfirmationRequired` is false, this
- * redirects straight to `/dashboard` (a session already exists by this
- * point) instead of rendering the "check your email" panel. If true
- * (Supabase confirmation is enabled -- the default today, unconfirmed
- * from this repo alone, see the audit report), behavior is completely
- * unchanged from before.
+ * AMENDED AGAIN (email-confirmation audit): `emailConfirmationRequired`
+ * is honoured for ALL account types. When it is false a session already
+ * exists, so the user is sent straight to their dashboard (individual,
+ * lawyer, or firm owner) with no message and no sign-in detour. When it is
+ * true (Supabase "Confirm email" on) no session exists, so the "check your
+ * email" panel is accurate and unavoidable -- clicking the link signs the
+ * user in via /api/auth/callback. An unreadable response defaults to that
+ * panel (never assume a session exists).
  *
  * OPEN GAP, carried forward from File 53 and not yet resolved: the exact
  * shape of handleApiError's error JSON (File 21) is still unverified.
@@ -95,6 +85,7 @@ export function SignUpForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const [confirmationRequired, setConfirmationRequired] = useState(true);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -135,38 +126,80 @@ export function SignUpForm() {
         return;
       }
 
-      // AMENDED, this session: only 'individual' short-circuits past the
-      // "check your email" panel, and only when the API confirms no
-      // confirmation is actually pending. lawyer/firm always fall
-      // through to the panel below, unconditionally, exactly as before.
-      if (accountType === 'individual') {
-        let responseBody: { data?: { emailConfirmationRequired?: unknown } } = {};
-        try {
-          responseBody = await response.json();
-        } catch {
-          // Response wasn't JSON — fall through to the "check your
-          // email" panel below, the same safe default as before this
-          // change (never silently assume a session exists).
+      // The API reports whether email confirmation is actually pending
+      // (`emailConfirmationRequired`, i.e. `data.session === null`). It is
+      // read for EVERY account type so the success message never claims an
+      // email was sent when Supabase has already issued a session.
+      //   - Unparseable body / field missing -> treated as "confirmation
+      //     required" (the safe default: never imply a session exists).
+      //   - 'individual' + no confirmation pending -> straight to the
+      //     dashboard, unchanged from before.
+      //   - 'lawyer'/'firm' + no confirmation pending -> deliberately NOT
+      //     auto-redirected (their post-sign-up landing is a separate
+      //     product decision, see the professional-verification gate), but
+      //     they get an accurate "account created" panel instead of a false
+      //     "check your email" one.
+      let responseBody: { data?: { emailConfirmationRequired?: unknown; firmId?: unknown } } = {};
+      try {
+        responseBody = await response.json();
+      } catch {
+        // Fall through with the safe default described above.
+      }
+
+      if (responseBody.data?.emailConfirmationRequired === false) {
+        // A session already exists (cookies were set by the sign-up call),
+        // so land the user directly on their dashboard -- no message, no
+        // detour through /sign-in. Destinations match the sign-in route's
+        // own resolveDashboardRedirect(): lawyer -> /lawyer/dashboard,
+        // firm owner -> /firm/[firmId]/dashboard, everyone else ->
+        // /general-user/dashboard.
+        const firmId = responseBody.data.firmId;
+        let destination: string | null = null;
+        if (accountType === 'individual') {
+          destination = '/general-user/dashboard';
+        } else if (accountType === 'lawyer') {
+          destination = '/lawyer/dashboard';
+        } else if (typeof firmId === 'string' && firmId.length > 0) {
+          destination = `/firm/${encodeURIComponent(firmId)}/dashboard`;
         }
 
-        if (responseBody.data?.emailConfirmationRequired === false) {
-          router.push('/general-user/dashboard');
+        if (destination !== null) {
+          router.push(destination);
           // Server Components and middleware read the session from
           // cookies per-request, same reasoning sign-in-form.tsx's own
           // router.refresh() comment documents — matched here too.
           router.refresh();
           return;
         }
+        // Firm response without a firmId (should not happen): fall back to
+        // the accurate "Account created" panel rather than guessing a URL.
+        setConfirmationRequired(false);
       }
 
-      // Either confirmation is genuinely required, accountType isn't
-      // 'individual', or the response couldn't be parsed — show the
-      // confirmation panel, unchanged from before this session.
       setSubmittedEmail(email);
     } catch {
       setErrorMessage('Something went wrong. Please try again.');
       setIsSubmitting(false);
     }
+  }
+
+  if (submittedEmail !== null && !confirmationRequired) {
+    return (
+      <div className="space-y-4 text-center">
+        <h1 className="text-lg font-semibold text-foreground">Account created</h1>
+        <p className="text-sm text-muted-foreground">
+          Your account for{' '}
+          <span className="font-medium text-foreground">{submittedEmail}</span> is ready. No
+          email confirmation is needed &mdash; you can sign in now.
+        </p>
+        <Link
+          href="/sign-in"
+          className="inline-block text-sm font-medium text-primary hover:underline"
+        >
+          Go to sign in
+        </Link>
+      </div>
+    );
   }
 
   if (submittedEmail !== null) {

@@ -70,6 +70,10 @@ const SIGN_IN_ROUTE = '/sign-in';
 /** Query param carrying the original destination, for post-login redirect. */
 const REDIRECT_PARAM = 'redirectTo';
 
+/** Query param + value telling the sign-in page why the user was bounced. */
+const ERROR_PARAM = 'error';
+const EMAIL_NOT_CONFIRMED_ERROR = 'email_not_confirmed';
+
 export type RouteProtectionDecision = { action: 'allow' } | { action: 'redirect'; url: URL };
 
 /**
@@ -115,12 +119,18 @@ export function resolveRouteProtection(
     return { action: 'allow' };
   }
 
-  if (user !== null) {
+  if (user !== null && user.email_confirmed_at != null) {
     return { action: 'allow' };
   }
 
   const redirectUrl = new URL(SIGN_IN_ROUTE, request.url);
   redirectUrl.searchParams.set(REDIRECT_PARAM, `${pathname}${request.nextUrl.search}`);
+
+  // A session exists but the email is unconfirmed: treated as not signed
+  // in for protected pages, and the sign-in page is told why.
+  if (user !== null) {
+    redirectUrl.searchParams.set(ERROR_PARAM, EMAIL_NOT_CONFIRMED_ERROR);
+  }
 
   return { action: 'redirect', url: redirectUrl };
 }
