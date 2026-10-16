@@ -1,7 +1,7 @@
 import { BaseService } from '@/core/services/base.service';
-import type { AuthUser } from '@/core/auth/types';
+import type { AuthUser, UserRole } from '@/core/auth/types';
 import type { Database } from '@/core/supabase/database.types';
-import { ConflictError } from '@/core/errors/app-error';
+import { AuthorizationError, ConflictError } from '@/core/errors/app-error';
 import {
   ProfessionalVerificationRepository,
   type VerificationStatus,
@@ -9,6 +9,17 @@ import {
 
 type ProfessionalVerificationRow =
   Database['public']['Tables']['professional_verifications']['Row'];
+
+/**
+ * Roles allowed to submit a verification. Subset of the
+ * `professional_verifications_role_check` DB constraint
+ * ('individual','lawyer','law_firm','business','admin','support'):
+ * staff roles never need verification, and 'client' is not in the
+ * constraint at all. The DB guard trigger
+ * (20261016000000_harden_professional_verification_lifecycle.sql)
+ * enforces the same list as a backstop.
+ */
+const VERIFIABLE_ROLES: readonly UserRole[] = ['individual', 'lawyer', 'law_firm', 'business'];
 
 /**
  * ProfessionalVerificationService
@@ -87,15 +98,12 @@ export class ProfessionalVerificationService extends BaseService {
    *   - No existing row -> create one, `status: 'pending'`.
    *   - Existing row, `status === 'rejected'` -> update in place:
    *     new `registration_number`, `status: 'resubmitted'`.
-   *     FLAGGED, NEW DECISION (still open, unchanged by this edit): this
-   *     also clears `reviewed_at`/`reviewed_by` back to `null` on
-   *     resubmission, on the reasoning that a resubmitted application
-   *     hasn't been reviewed yet and stale reviewer/timestamp data from
-   *     the earlier rejection shouldn't linger on the row it's
-   *     resubmitted under. If the original rejection's review metadata
-   *     should be kept for an audit trail, this needs to change to
-   *     write history to a separate table instead of overwriting the
-   *     same row.
+   *     RESOLVED: this clears `reviewed_at`/`reviewed_by` on the live
+   *     row, but the rejection is no longer lost -- the DB archive
+   *     trigger (20261016000000) snapshots the closed decision into
+   *     `professional_verification_history` before it is overwritten.
+   *     `role` is re-stamped from the session too, which also repairs
+   *     legacy rows that were rejected while role was still NULL.
    *   - Existing row, any other status (`pending`, `verified`,
    *     `resubmitted`) -> rejected with a `ConflictError`; there's
    *     nothing to resubmit from those states.
@@ -103,12 +111,23 @@ export class ProfessionalVerificationService extends BaseService {
   async submit(registrationNumber: string): Promise<ProfessionalVerificationRow> {
     const user = this.requireAuthentication();
 
+    // Role comes ONLY from the authenticated session (app_metadata, the
+    // source of truth) -- never from the request body. The DB guard trigger
+    // re-derives it from the JWT, so a crafted direct write cannot differ.
+    if (!VERIFIABLE_ROLES.includes(user.role)) {
+      throw new AuthorizationError(
+        `Accounts with role "${user.role}" cannot submit a professional verification.`,
+        { actualRole: user.role, allowedRoles: VERIFIABLE_ROLES },
+      );
+    }
+
     const existing = await this.repository.findByProfileId(user.id);
 
     if (!existing) {
       return this.repository.create({
         profile_id: user.id,
         registration_number: registrationNumber,
+        role: user.role,
         status: 'pending' satisfies VerificationStatus,
       });
     }
@@ -123,6 +142,7 @@ export class ProfessionalVerificationService extends BaseService {
 
     return this.repository.update(existing.id, {
       registration_number: registrationNumber,
+      role: user.role,
       status: 'resubmitted' satisfies VerificationStatus,
       reviewed_at: null,
       reviewed_by: null,
@@ -183,6 +203,12 @@ export class ProfessionalVerificationService extends BaseService {
 
     const existing = await this.repository.findByIdOrThrow(verificationId);
 
+    if (existing.profile_id === user.id) {
+      throw new AuthorizationError('You cannot review your own verification request.', {
+        verificationId: existing.id,
+      });
+    }
+
     if (existing.status !== 'pending' && existing.status !== 'resubmitted') {
       throw new ConflictError(
         `Cannot review a professional verification with status "${existing.status}". ` +
@@ -191,6 +217,21 @@ export class ProfessionalVerificationService extends BaseService {
       );
     }
 
+    // A verified row with no role would silently never appear in the
+    // directory (and cannot be told apart from a non-lawyer). Refuse
+    // instead of guessing; legacy rows are handled by the migration's
+    // trusted backfill or by the applicant resubmitting.
+    if (decision === 'verified' && !existing.role) {
+      throw new ConflictError(
+        'Cannot approve a verification request whose professional role is not established. ' +
+          'Reject it so the applicant can resubmit, or have it backfilled from the account role.',
+        { verificationId: existing.id },
+      );
+    }
+
+    // `role` is deliberately NOT part of this update: approval preserves
+    // whatever role the request was submitted with. reviewed_by /
+    // reviewed_at are also re-set server-side by the DB guard trigger.
     return this.repository.update(verificationId, {
       status: decision,
       reviewed_by: user.id,

@@ -18,6 +18,7 @@ interface AdminVerificationRow {
   id: string;
   profile_id: string;
   registration_number: string;
+  role: string | null;
   status: VerificationStatus;
   reviewed_at: string | null;
   reviewed_by: string | null;
@@ -269,6 +270,7 @@ export default function ProfessionalVerificationAdminPage() {
                   <tr>
                     <th className="px-4 py-2.5">Registration No.</th>
                     <th className="px-4 py-2.5">Profile</th>
+                    <th className="px-4 py-2.5">Role</th>
                     <th className="px-4 py-2.5">Status</th>
                     <th className="px-4 py-2.5">Submitted</th>
                     <th className="px-4 py-2.5">Reviewed</th>
@@ -281,6 +283,11 @@ export default function ProfessionalVerificationAdminPage() {
                       <td className="px-4 py-2.5">{row.registration_number}</td>
                       <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">
                         {row.profile_id}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {row.role ?? (
+                          <span className="text-[12px] text-amber-600">Not set</span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         <StatusPill status={row.status} />

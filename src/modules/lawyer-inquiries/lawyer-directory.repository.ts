@@ -38,10 +38,11 @@
 // source of truth, and is NOT backfilled for pre-existing rows -- any
 // verified-lawyer row created before that migration ran will have
 // role IS NULL and will be silently excluded from this query until
-// backfilled. Also still pending: the actual write of this column on
-// new rows lives in ProfessionalVerificationService#submitVerification(),
-// which has not been pasted this session -- this repository fix does
-// nothing to populate the column going forward, only to filter on it.
+// backfilled. UPDATE (migration 20261016000000 + service fixes): the
+// column is now written on every insert/resubmission (submit(),
+// signUpAsLawyer()), enforced by a DB guard trigger, and legacy rows are
+// backfilled ONLY from auth.users app_metadata. The filter below is
+// intentionally unchanged: role IS NULL rows are still excluded.
 //
 // FLAGGED: no `firms` table row shape confirmed either -- so this file
 // covers ONLY the "browse individual verified lawyers" half of step 2.
