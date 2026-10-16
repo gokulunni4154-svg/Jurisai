@@ -143,9 +143,9 @@ export default function DocumentSetsPage() {
     <div className="flex min-h-screen w-full flex-col bg-background font-sans text-foreground">
       <header className="flex items-center gap-3 border-b border-border px-8 py-6">
         <button
-          onClick={() => router.push('/general-user/documents')}
+          onClick={() => router.push('/lawyer/dashboard')}
           className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
-          aria-label="Back to documents"
+          aria-label="Back to dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
