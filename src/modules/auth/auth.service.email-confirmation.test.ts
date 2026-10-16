@@ -179,6 +179,29 @@ describe('AuthService: email confirmation', () => {
       await expect(service.signUpAsLawyer(input)).resolves.toMatchObject({ emailConfirmationRequired: false });
     });
 
+    it('signUpAsLawyer: stores role "lawyer" and pending status on the verification row', async () => {
+      repo.firmCreate.mockResolvedValue({ id: 'firm-1', name: 'x' });
+      supabase.auth.signUp.mockResolvedValueOnce(signUpResult(null));
+
+      await service.signUpAsLawyer({ ...SIGN_UP, registrationNumber: 'MH/1234/2020' });
+
+      expect(repo.verificationCreate).toHaveBeenCalledWith({
+        profile_id: 'user-1',
+        registration_number: 'MH/1234/2020',
+        role: 'lawyer',
+        status: 'pending',
+      });
+    });
+
+    it('signUpAsFirm: creates no verification row', async () => {
+      repo.firmCreate.mockResolvedValue({ id: 'firm-1', name: 'Acme LLP' });
+      supabase.auth.signUp.mockResolvedValueOnce(signUpResult(null));
+
+      await service.signUpAsFirm({ ...SIGN_UP, firmName: 'Acme LLP' });
+
+      expect(repo.verificationCreate).not.toHaveBeenCalled();
+    });
+
     it('signUpAsFirm: flag follows the session', async () => {
       repo.firmCreate.mockResolvedValue({ id: 'firm-1', name: 'Acme LLP' });
       const input = { ...SIGN_UP, firmName: 'Acme LLP' };

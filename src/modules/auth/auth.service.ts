@@ -403,12 +403,11 @@ export class AuthService {
    * Step 7: professionalVerificationRepository.create() with
    * status: 'pending' and the submitted registration_number. This is
    * what actually gates lawyer-only features later -- NOT the account
-   * role, NOT firm_members.role. Deliberately leaves the `role` column
-   * on professional_verifications unset: its real accepted values were
-   * not confirmed/pasted this session (VerificationStatus, the sibling
-   * enum for `status`, IS confirmed; `role` is not), so setting it would
-   * be a guess this project's own Source Verification Rule exists to
-   * prevent.
+   * role, NOT firm_members.role. FIXED: `role` is now set to
+   * LAWYER_SIGNUP_ROLE -- the same trusted server constant just written
+   * to app_metadata in this method. Leaving it NULL (the earlier
+   * behavior) is what made approved lawyers invisible in the Find a
+   * Lawyer directory, which filters on role = 'lawyer'.
    *
    * Step 8: one audit entry, action 'firm.create' (matching
    * FirmService.createFirm()'s own convention exactly, since this is
@@ -501,6 +500,7 @@ export class AuthService {
     await professionalVerificationRepository.create({
       profile_id: data.user.id,
       registration_number: registrationNumber,
+      role: LAWYER_SIGNUP_ROLE,
       status: 'pending',
     });
 

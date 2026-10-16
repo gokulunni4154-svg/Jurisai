@@ -103,3 +103,111 @@ describe('LawyerDirectoryRepository#listFirmMembers', () => {
     );
   });
 });
+
+/**
+ * Behavioural tests for listVerifiedLawyers(): an in-memory table that
+ * actually APPLIES the .eq() filters, so these assert which rows come back
+ * (not merely which filters were requested). Models the post-fix data
+ * states: verified+lawyer, pending, rejected, resubmitted, verified with
+ * role NULL (legacy / unbackfilled), and verified non-lawyer roles.
+ */
+interface PvRow {
+  profile_id: string;
+  registration_number: string;
+  reviewed_at: string | null;
+  status: string;
+  role: string | null;
+  profiles: { full_name: string | null } | null;
+}
+
+function createVerificationsClient(rows: PvRow[]) {
+  const filters: Array<[string, unknown]> = [];
+  const query = {
+    select: vi.fn(),
+    eq: vi.fn((column: string, value: unknown) => {
+      filters.push([column, value]);
+      return query;
+    }),
+    then: (resolve: (value: QueryResult) => unknown, reject: (reason: unknown) => unknown) => {
+      const data = rows
+        .filter((row) => filters.every(([column, value]) => (row as unknown as Record<string, unknown>)[column] === value))
+        // The real query embeds profiles with !inner: no profile => no row.
+        .filter((row) => row.profiles !== null)
+        .map(({ profile_id, registration_number, reviewed_at, profiles }) => ({
+          profile_id,
+          registration_number,
+          reviewed_at,
+          profiles,
+        }));
+      return Promise.resolve({ data, error: null }).then(resolve, reject);
+    },
+  };
+  query.select.mockReturnValue(query);
+  const from = vi.fn(() => query);
+  return { client: { from } as unknown as SupabaseClient, from, query };
+}
+
+const pv = (overrides: Partial<PvRow>): PvRow => ({
+  profile_id: 'p1',
+  registration_number: 'MH/1/2020',
+  reviewed_at: '2026-08-01T00:00:00.000Z',
+  status: 'verified',
+  role: 'lawyer',
+  profiles: { full_name: 'Asha Rao' },
+  ...overrides,
+});
+
+describe('LawyerDirectoryRepository#listVerifiedLawyers', () => {
+  it('lists an approved lawyer (status verified, role lawyer) with the mapped shape', async () => {
+    const { client, from } = createVerificationsClient([pv({})]);
+
+    const result = await new LawyerDirectoryRepository(client).listVerifiedLawyers();
+
+    expect(from).toHaveBeenCalledWith('professional_verifications');
+    expect(result).toEqual([
+      {
+        profile_id: 'p1',
+        full_name: 'Asha Rao',
+        registration_number: 'MH/1/2020',
+        verified_at: '2026-08-01T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('does NOT list a verified record whose role is NULL', async () => {
+    const { client } = createVerificationsClient([pv({ role: null })]);
+    expect(await new LawyerDirectoryRepository(client).listVerifiedLawyers()).toEqual([]);
+  });
+
+  it.each(['individual', 'law_firm', 'business'])('does NOT list a verified %s', async (role) => {
+    const { client } = createVerificationsClient([pv({ role })]);
+    expect(await new LawyerDirectoryRepository(client).listVerifiedLawyers()).toEqual([]);
+  });
+
+  it.each(['pending', 'rejected', 'resubmitted'])('does NOT list a %s lawyer', async (status) => {
+    const { client } = createVerificationsClient([pv({ status, reviewed_at: null })]);
+    expect(await new LawyerDirectoryRepository(client).listVerifiedLawyers()).toEqual([]);
+  });
+
+  it('keeps the profile join requirement and returns only eligible rows from a mixed set', async () => {
+    const { client } = createVerificationsClient([
+      pv({ profile_id: 'ok' }),
+      pv({ profile_id: 'pending', status: 'pending' }),
+      pv({ profile_id: 'rejected', status: 'rejected' }),
+      pv({ profile_id: 'norole', role: null }),
+      pv({ profile_id: 'noprofile', profiles: null }),
+    ]);
+
+    const result = await new LawyerDirectoryRepository(client).listVerifiedLawyers();
+
+    expect(result.map((r) => r.profile_id)).toEqual(['ok']);
+  });
+
+  it('propagates database errors', async () => {
+    const dbError = new Error('boom');
+    const query = createQuery({ data: null, error: dbError });
+    const client = { from: vi.fn(() => query) } as unknown as SupabaseClient;
+
+    await expect(new LawyerDirectoryRepository(client).listVerifiedLawyers()).rejects.toBe(dbError);
+  });
+});
