@@ -45,6 +45,24 @@ const RETRYABLE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Normalize provider initialization failures. Constructors currently throw
+ * ordinary Errors for missing API keys, which otherwise bypasses fallback.
+ */
+function buildProviderForGeneration(name: AIProviderName): AIProvider {
+  try {
+    return buildAIProvider(name);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Provider initialization failed';
+    throw new AIProviderError(
+      name,
+      ErrorCode.AI_PROVIDER_UNAVAILABLE,
+      `${name} provider could not be initialized: ${message}`,
+      error,
+    );
+  }
+}
+
+/**
  * Builds a single named provider. Never cached at module scope, per
  * project convention — each call constructs a fresh instance, consistent
  * with buildProfileService()/buildDocumentService().
@@ -99,9 +117,8 @@ export async function generateWithFallback<TSchema extends z.ZodTypeAny>(
   const primaryName = resolveDefaultProviderName();
   const fallbackName: AIProviderName = primaryName === 'openai' ? 'gemini' : 'openai';
 
-  const primary = buildAIProvider(primaryName);
-
   try {
+    const primary = buildProviderForGeneration(primaryName);
     const result = await primary.generateStructured(request);
     return { result, providerUsed: primaryName };
   } catch (error) {
@@ -111,7 +128,7 @@ export async function generateWithFallback<TSchema extends z.ZodTypeAny>(
       throw error;
     }
 
-    const fallback = buildAIProvider(fallbackName);
+    const fallback = buildProviderForGeneration(fallbackName);
     const result = await fallback.generateStructured(request);
     return { result, providerUsed: fallbackName };
   }
@@ -160,11 +177,10 @@ export async function* generateStreamingWithFallback(
   const primaryName = resolveDefaultProviderName();
   const fallbackName: AIProviderName = primaryName === 'openai' ? 'gemini' : 'openai';
 
-  const primary = buildAIProvider(primaryName);
-
   let primaryStream: AsyncGenerator<string, void, undefined>;
 
   try {
+    const primary = buildProviderForGeneration(primaryName);
     primaryStream = primary.generateStreamingText(request);
     const first = await primaryStream.next();
 
@@ -178,7 +194,7 @@ export async function* generateStreamingWithFallback(
       throw error;
     }
 
-    const fallback = buildAIProvider(fallbackName);
+    const fallback = buildProviderForGeneration(fallbackName);
     yield* fallback.generateStreamingText(request);
     return fallbackName;
   }
