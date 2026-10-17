@@ -895,7 +895,9 @@ export default function DocumentAnalysisPage() {
         // switcher), not something File 149/150/154 themselves impose.
         if (chatConversationsRes.ok) {
           const json = await chatConversationsRes.json();
-          const conversations: ChatConversation[] = json.data;
+          const conversations: ChatConversation[] = (json.data as ChatConversation[]).filter(
+            (c) => c.document_analysis_id === latest.id,
+          );
           const sorted = [...conversations].sort(
             (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
           );

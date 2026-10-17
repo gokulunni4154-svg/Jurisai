@@ -85,6 +85,35 @@ export class ChatConversationRepository extends BaseRepository<'chat_conversatio
   }
 
   /**
+   * Lists a user's conversations for ONE analysis, most recently active
+   * first. Scoping by document_analysis_id is required: the chat UI picks
+   * the most recent conversation from this list and sends messages
+   * against the current analysis, so an unscoped list can hand the UI a
+   * conversation belonging to a different analysis/document.
+   */
+  async findManyForUserAndAnalysis(
+    userId: string,
+    analysisId: string,
+  ): Promise<ChatConversation[]> {
+    const { data, error } = await this.supabase
+      .from('chat_conversations')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('document_analysis_id', analysisId)
+      .order('last_message_at', { ascending: false });
+
+    if (error) {
+      throw new DatabaseError('Failed to list chat_conversations for user and analysis', error, {
+        table: 'chat_conversations',
+        userId,
+        analysisId,
+      });
+    }
+
+    return (data ?? []) as ChatConversation[];
+  }
+
+  /**
    * NEW — added for the Observability module (Phase 3). Confirmed this
    * session (via the real, re-pasted database.types.ts) that
    * chat_conversations DOES have a real FK to document_analyses

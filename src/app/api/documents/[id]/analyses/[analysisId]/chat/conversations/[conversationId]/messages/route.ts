@@ -49,6 +49,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { ValidationError } from '@/core/errors/app-error';
 import { handleApiError } from '@/core/errors/error-handler';
 import { buildChatService } from '@/modules/chat/chat.factory';
 
@@ -143,6 +144,23 @@ export async function POST(
       { status: 400 },
     );
   }
+
+  // The URL's [conversationId] is authoritative. A body that names a
+  // different conversation is rejected rather than silently preferred.
+  const bodyConversationId =
+    rawInput && typeof rawInput === 'object'
+      ? (rawInput as { conversationId?: unknown }).conversationId
+      : undefined;
+
+  if (bodyConversationId !== undefined && bodyConversationId !== context.params.conversationId) {
+    return handleApiError(
+      new ValidationError('conversationId in the request body does not match the URL.', {
+        field: 'conversationId',
+      }),
+    );
+  }
+
+  rawInput = { ...(rawInput as object), conversationId: context.params.conversationId };
 
   const chatService = await buildChatService();
   const generator = chatService.sendMessage(

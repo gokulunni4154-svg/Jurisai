@@ -130,9 +130,9 @@ export class ChatService extends BaseService {
   ): Promise<ChatConversation[]> {
     const user = this.requireAuthentication();
 
-    await this.analysisService.getAnalysisById(rawParams, analysisId);
+    const analysis = await this.analysisService.getAnalysisById(rawParams, analysisId);
 
-    return this.chatConversationRepository.findManyForUser(user.id);
+    return this.chatConversationRepository.findManyForUserAndAnalysis(user.id, analysis.id);
   }
 
   /**
@@ -156,6 +156,15 @@ export class ChatService extends BaseService {
     const conversation = await this.chatConversationRepository.findByIdOrThrow(conversationId);
 
     if (conversation.document_analysis_id !== analysis.id) {
+      // Same 404 as a missing row (do not reveal anything extra to the
+      // caller), but log server-side so a stale/cross-analysis ID is
+      // distinguishable from a missing or RLS-hidden row. IDs only; no
+      // document content.
+      console.warn('[chat] conversation/analysis mismatch', {
+        conversationId,
+        requestedAnalysisId: analysis.id,
+        conversationAnalysisId: conversation.document_analysis_id,
+      });
       throw new NotFoundError('chat_conversations', conversationId);
     }
 
