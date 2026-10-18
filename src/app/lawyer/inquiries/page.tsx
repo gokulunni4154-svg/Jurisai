@@ -80,6 +80,7 @@
 
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
@@ -99,7 +100,7 @@ import { NotificationsPanel } from '@/shared/components/notifications/notificati
 // field-for-field -- same "mirrored, not imported" convention every
 // other client page in this project follows for a table with no
 // shared client-safe types module.
-type InquiryStatus = 'pending' | 'accepted' | 'converted_to_case';
+type InquiryStatus = 'pending' | 'accepted' | 'converted_to_case' | 'declined';
 
 interface LawyerInquiryListing {
   id: string;
@@ -108,8 +109,10 @@ interface LawyerInquiryListing {
   targetFirmId: string;
   teamId: string | null;
   status: InquiryStatus;
-  documentStoragePath: string;
-  analysisResult: unknown;
+  documentName: string;
+  analysisAvailable: boolean;
+  caseId: string | null;
+  reviewExpiresAt: string;
   createdAt: string;
 }
 
@@ -132,33 +135,24 @@ function formatTimestamp(isoString: string): string {
   });
 }
 
-// Last path segment of document_storage_path, decoded, as a
-// human-readable filename -- same "closest existing equivalent, labeled
-// honestly" posture as app-sidebar.tsx's own "Document Sets" comment.
-function filenameFromStoragePath(path: string): string {
-  const segment = path.split('/').pop() ?? path;
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
 function StatusPill({ status }: { status: InquiryStatus }) {
   const styles: Record<InquiryStatus, string> = {
     pending: 'bg-amber-500/10 text-amber-600',
     accepted: 'bg-primary/10 text-primary',
     converted_to_case: 'bg-emerald-500/10 text-emerald-600',
+    declined: 'bg-muted text-muted-foreground',
   };
   const labels: Record<InquiryStatus, string> = {
     pending: 'Pending your response',
     accepted: 'Accepted',
     converted_to_case: 'Converted to case',
+    declined: 'Declined',
   };
   const Icon: Record<InquiryStatus, typeof Clock> = {
     pending: Clock,
     accepted: CheckCircle2,
     converted_to_case: Scale,
+    declined: X,
   };
   const IconComponent = Icon[status];
 
@@ -218,6 +212,7 @@ export default function LawyerInquiriesPage() {
       pending: inquiries.filter((i) => i.status === 'pending').length,
       accepted: inquiries.filter((i) => i.status === 'accepted').length,
       converted: inquiries.filter((i) => i.status === 'converted_to_case').length,
+      declined: inquiries.filter((i) => i.status === 'declined').length,
     }),
     [inquiries],
   );
@@ -252,7 +247,7 @@ export default function LawyerInquiriesPage() {
       if (!res.ok) throw new Error(await extractErrorMessage(res));
       // declineInquiry() deletes the row outright (§4.2) -- drop it from
       // the list rather than trying to update it in place.
-      setInquiries((prev) => prev.filter((i) => i.id !== id));
+      setInquiries((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'declined' as const } : i)));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not decline this inquiry.');
     } finally {
@@ -300,6 +295,7 @@ export default function LawyerInquiriesPage() {
     { key: 'pending', label: 'Pending', count: counts.pending },
     { key: 'accepted', label: 'Accepted', count: counts.accepted },
     { key: 'converted_to_case', label: 'Converted', count: counts.converted },
+    { key: 'declined', label: 'Declined', count: counts.declined },
   ];
 
   return (
@@ -416,7 +412,7 @@ export default function LawyerInquiriesPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="truncate text-[13.5px] font-medium text-foreground">
-                                {filenameFromStoragePath(inquiry.documentStoragePath)}
+                                {inquiry.documentName}
                               </p>
                               <p className="text-[12px] text-muted-foreground">
                                 Received {formatTimestamp(inquiry.createdAt)}
@@ -426,14 +422,22 @@ export default function LawyerInquiriesPage() {
                           <StatusPill status={inquiry.status} />
                         </div>
 
-                        {inquiry.analysisResult !== null && inquiry.analysisResult !== undefined && (
+                        {inquiry.analysisAvailable && (
                           <p className="text-[12px] text-muted-foreground">
-                            Analysis attached — full detail unlocks once accepted.
+                            Analysis attached — open the review to read the document and report
+                            before you decide.
                           </p>
                         )}
 
                         {inquiry.status === 'pending' && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                              href={`/lawyer/inquiries/${inquiry.id}`}
+                              className="flex items-center gap-2 rounded-md border border-input px-3.5 py-2 text-[13px] font-medium text-foreground hover:bg-muted"
+                            >
+                              <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
+                              Review documents
+                            </Link>
                             <button
                               onClick={() => handleAccept(inquiry.id)}
                               disabled={isBusy}
@@ -453,6 +457,7 @@ export default function LawyerInquiriesPage() {
                         )}
 
                         {inquiry.status === 'accepted' &&
+                          !inquiry.caseId &&
                           (convertingId === inquiry.id ? (
                             <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 px-3.5 py-3">
                               <label
@@ -499,6 +504,12 @@ export default function LawyerInquiriesPage() {
                               </button>
                             </div>
                           ))}
+
+                        {inquiry.status === 'accepted' && inquiry.caseId && (
+                          <p className="text-[12.5px] text-muted-foreground">
+                            Accepted — a case was created from this inquiry.
+                          </p>
+                        )}
 
                         {inquiry.status === 'converted_to_case' && (
                           <p className="text-[12.5px] text-muted-foreground">

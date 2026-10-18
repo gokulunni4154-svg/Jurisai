@@ -33,7 +33,7 @@ vi.mock('server-only', () => ({}));
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { AuthenticationError, AuthorizationError, ConflictError } from '@/core/errors/app-error';
+import { AuthenticationError, AuthorizationError, ConflictError, ValidationError } from '@/core/errors/app-error';
 import type { AuthUser } from '@/core/auth/types';
 
 import { LawyerInquiryService } from './lawyer-inquiry.service';
@@ -93,11 +93,18 @@ describe('LawyerInquiryService#listMySentInquiries', () => {
         targetFirmId: 'firm-1',
         teamId: null,
         status: 'pending',
-        documentStoragePath: 'individual/sender-1/doc-1/agreement.pdf',
-        analysisResult: BASE_ROW.analysis_result,
+        documentName: 'agreement.pdf',
+        analysisAvailable: true,
+        caseId: undefined,
+        decision: undefined,
+        decidedAt: undefined,
+        reviewExpiresAt: undefined,
         createdAt: '2026-08-01T00:00:00.000Z',
       },
     ]);
+    // The raw report and storage path never travel on a listing.
+    expect(result[0]).not.toHaveProperty('analysisResult');
+    expect(result[0]).not.toHaveProperty('documentStoragePath');
   });
 
   it('TEST 2 — queries only the authenticated caller’s own id, never a browser-supplied one', async () => {
@@ -275,41 +282,39 @@ describe('LawyerInquiryService#convertInquiry', () => {
   });
 });
 
-// NEW — Final Lawyer Terminal V1 Launch Audit, Blocker #1 regression
-// coverage. declineInquiry() previously ran every check below and then
-// returned WITHOUT ever calling repository.decline() -- the row was
-// never deleted, so the audit's whole point is: "authorization passing"
-// and "the inquiry is actually gone" are two different assertions, and
-// the old code only ever proved the first one. TEST G is written so it
-// would have FAILED against the pre-fix implementation (which never
-// called repository.decline() at all).
+// Soft decline (pre-acceptance review). declineInquiry() now calls the atomic
+// decline_lawyer_inquiry() function through repository.declineAtomic(); the row
+// is kept with reviewer + timestamp. Authority is unchanged for an inquiry
+// addressed to a lawyer, and a firm owner/admin may now decline a firm-routed
+// (unassigned) inquiry.
 describe('LawyerInquiryService#declineInquiry', () => {
   const ASSIGNED_LAWYER = { id: 'lawyer-assigned', role: 'lawyer' } as unknown as AuthUser;
   const OTHER_FIRM_LAWYER = { id: 'lawyer-other-firm-member', role: 'lawyer' } as unknown as AuthUser;
+  const FIRM_ADMIN = { id: 'firm-admin', role: 'law_firm' } as unknown as AuthUser;
 
   const PENDING_ROW = {
     ...BASE_ROW,
     status: 'pending' as const,
     target_profile_id: ASSIGNED_LAWYER.id,
+    decision: null,
+    decided_by: null,
   };
 
   function buildDeclineService(
     currentUser: AuthUser | null,
-    row:
-      | (Omit<typeof PENDING_ROW, 'target_profile_id' | 'status'> & {
-          target_profile_id: string | null;
-          status: 'pending' | 'accepted' | 'converted_to_case';
-        })
-      | null,
-    repositoryOverrides: Partial<LawyerInquiryRepository> = {}
+    row: Record<string, unknown> | null,
+    options: { firmRole?: string | null; declineAtomic?: ReturnType<typeof vi.fn> } = {}
   ) {
     const repository = {
       findById: vi.fn().mockResolvedValue(row),
-      decline: vi.fn().mockResolvedValue(undefined),
-      ...repositoryOverrides,
+      declineAtomic:
+        options.declineAtomic ??
+        vi.fn().mockResolvedValue({ inquiry_id: 'inquiry-1', already_declined: false }),
     } as unknown as LawyerInquiryRepository;
 
-    const firmMemberRepository = {} as unknown as FirmMemberRepository;
+    const firmMemberRepository = {
+      findByFirmAndProfile: vi.fn().mockResolvedValue(options.firmRole ?? null),
+    } as unknown as FirmMemberRepository;
     const caseService = {} as unknown as CaseService;
     const documentService = {} as unknown as DocumentService;
 
@@ -324,35 +329,28 @@ describe('LawyerInquiryService#declineInquiry', () => {
     return { service, repository };
   }
 
-  it('TEST G (REGRESSION — fails on the old implementation) — the assigned lawyer declining a pending inquiry actually deletes the row', async () => {
+  it('TEST G — the assigned lawyer declining a pending inquiry records the decline through the atomic function', async () => {
     const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, PENDING_ROW);
 
-    await service.declineInquiry('inquiry-1');
+    await service.declineInquiry('inquiry-1', { note: 'conflict of interest' });
 
-    // This is the assertion the pre-fix implementation could never
-    // satisfy: it ran the authorization checks and returned without
-    // ever touching the repository's decline() method.
-    expect(repository.decline).toHaveBeenCalledTimes(1);
-    expect(repository.decline).toHaveBeenCalledWith('inquiry-1');
+    expect(repository.declineAtomic).toHaveBeenCalledTimes(1);
+    expect(repository.declineAtomic).toHaveBeenCalledWith('inquiry-1', ASSIGNED_LAWYER.id, 'conflict of interest');
   });
 
   it('TEST H — a same-firm lawyer who is NOT the assigned lawyer cannot decline the inquiry', async () => {
-    const { service, repository } = buildDeclineService(OTHER_FIRM_LAWYER, PENDING_ROW);
+    const { service, repository } = buildDeclineService(OTHER_FIRM_LAWYER, PENDING_ROW, { firmRole: 'lawyer' });
 
     await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
-    expect(repository.decline).not.toHaveBeenCalled();
+    expect(repository.declineAtomic).not.toHaveBeenCalled();
   });
 
   it('TEST I — a lawyer at a different firm entirely cannot decline the inquiry', async () => {
-    // Same check as TEST H (target_profile_id ownership is firm-agnostic
-    // by construction — any non-owning caller is rejected identically,
-    // whether same-firm or a different firm) — kept as its own case since
-    // the audit brief lists it separately.
-    const OTHER_FIRM_ENTIRELY_LAWYER = { id: 'lawyer-elsewhere', role: 'lawyer' } as unknown as AuthUser;
-    const { service, repository } = buildDeclineService(OTHER_FIRM_ENTIRELY_LAWYER, PENDING_ROW);
+    const OTHER = { id: 'lawyer-elsewhere', role: 'lawyer' } as unknown as AuthUser;
+    const { service, repository } = buildDeclineService(OTHER, PENDING_ROW);
 
     await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
-    expect(repository.decline).not.toHaveBeenCalled();
+    expect(repository.declineAtomic).not.toHaveBeenCalled();
   });
 
   it('TEST J — an unauthenticated caller cannot decline', async () => {
@@ -360,30 +358,170 @@ describe('LawyerInquiryService#declineInquiry', () => {
 
     await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthenticationError);
     expect(repository.findById).not.toHaveBeenCalled();
-    expect(repository.decline).not.toHaveBeenCalled();
+    expect(repository.declineAtomic).not.toHaveBeenCalled();
   });
 
-  it('TEST K — a missing inquiry resolves silently (existing service semantics: declineInquiry no-ops on an already-gone row, unlike acceptInquiry/convertInquiry which throw NotFoundError)', async () => {
+  it('TEST K — a missing inquiry resolves silently (unchanged semantics)', async () => {
     const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, null);
 
     await expect(service.declineInquiry('inquiry-missing')).resolves.toBeUndefined();
-    expect(repository.decline).not.toHaveBeenCalled();
+    expect(repository.declineAtomic).not.toHaveBeenCalled();
   });
 
-  it('TEST L — an unassigned inquiry (target_profile_id null) cannot be declined by anyone', async () => {
-    const UNASSIGNED_ROW = { ...PENDING_ROW, target_profile_id: null };
-    const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, UNASSIGNED_ROW);
+  it('TEST L — a firm-routed inquiry (no assigned lawyer) cannot be declined by a non-member, an employee or a plain firm lawyer', async () => {
+    const UNASSIGNED = { ...PENDING_ROW, target_profile_id: null };
 
-    await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
-    expect(repository.decline).not.toHaveBeenCalled();
+    for (const firmRole of [null, 'employee', 'lawyer']) {
+      const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, UNASSIGNED, { firmRole });
+      await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
+      expect(repository.declineAtomic).not.toHaveBeenCalled();
+    }
   });
 
-  it('TEST M — the existing implementation does not gate decline on status: an already-accepted inquiry is still declined by its assigned lawyer via the same ownership check (documents current behavior — no status-based protection exists here, unlike convertInquiry, and this fix does not add one)', async () => {
-    const ACCEPTED_ROW = { ...PENDING_ROW, status: 'accepted' as const };
-    const { service, repository } = buildDeclineService(ASSIGNED_LAWYER, ACCEPTED_ROW);
+  it('TEST L2 — a firm owner or admin can decline a firm-routed inquiry', async () => {
+    const UNASSIGNED = { ...PENDING_ROW, target_profile_id: null };
 
-    await service.declineInquiry('inquiry-1');
+    for (const firmRole of ['owner', 'admin']) {
+      const { service, repository } = buildDeclineService(FIRM_ADMIN, UNASSIGNED, { firmRole });
+      await service.declineInquiry('inquiry-1');
+      expect(repository.declineAtomic).toHaveBeenCalledWith('inquiry-1', FIRM_ADMIN.id, null);
+    }
+  });
 
-    expect(repository.decline).toHaveBeenCalledWith('inquiry-1');
+  it('TEST M — declining an already-accepted inquiry surfaces a Conflict from the database function, not a 500', async () => {
+    const declineAtomic = vi.fn().mockRejectedValue({ message: 'inquiry_already_accepted', code: '55000' });
+    const { service } = buildDeclineService(
+      ASSIGNED_LAWYER,
+      { ...PENDING_ROW, status: 'accepted', decision: 'accepted', decided_by: ASSIGNED_LAWYER.id },
+      { declineAtomic }
+    );
+
+    await expect(service.declineInquiry('inquiry-1')).rejects.toThrow(ConflictError);
+  });
+
+  it('TEST M2 — an unrecognised database error is not disguised as a 4xx', async () => {
+    const boom = { message: 'connection reset', code: '08006' };
+    const { service } = buildDeclineService(ASSIGNED_LAWYER, PENDING_ROW, {
+      declineAtomic: vi.fn().mockRejectedValue(boom),
+    });
+
+    await expect(service.declineInquiry('inquiry-1')).rejects.toBe(boom);
+  });
+});
+
+describe('LawyerInquiryService#acceptInquiry', () => {
+  const LAWYER = { id: 'lawyer-assigned', role: 'lawyer' } as unknown as AuthUser;
+  const ADMIN = { id: 'firm-admin', role: 'law_firm' } as unknown as AuthUser;
+  const PENDING = {
+    ...BASE_ROW,
+    status: 'pending' as const,
+    target_profile_id: LAWYER.id,
+    decision: null,
+    decided_by: null,
+    case_id: null,
+    decided_at: null,
+    review_expires_at: '2026-10-24T00:00:00.000Z',
+  };
+
+  function build(currentUser: AuthUser | null, row: Record<string, unknown> | null, firmRole: string | null = null) {
+    const accepted = { ...(row ?? {}), status: 'accepted', decision: 'accepted', case_id: 'case-1' };
+    const repository = {
+      findById: vi.fn().mockResolvedValueOnce(row).mockResolvedValue(accepted),
+      listDocumentsForInquiry: vi.fn().mockResolvedValue([{ file_name: 'agreement.pdf' }]),
+      acceptAtomic: vi.fn().mockResolvedValue({ case_id: 'case-1', already_accepted: false }),
+    } as unknown as LawyerInquiryRepository;
+    const caseService = { assertCanCreateCase: vi.fn().mockResolvedValue(undefined) } as unknown as CaseService;
+    const firmMemberRepository = {
+      findByFirmAndProfile: vi.fn().mockResolvedValue(firmRole),
+    } as unknown as FirmMemberRepository;
+    const service = new LawyerInquiryService(currentUser, repository, firmMemberRepository, caseService, {} as unknown as DocumentService);
+    return { service, repository, caseService };
+  }
+
+  it('the assigned lawyer accepts through the atomic function and gets the case back on the listing', async () => {
+    const { service, repository, caseService } = build(LAWYER, PENDING);
+
+    const result = await service.acceptInquiry('inquiry-1');
+
+    expect(caseService.assertCanCreateCase).toHaveBeenCalledWith(PENDING.target_firm_id, null);
+    expect(repository.acceptAtomic).toHaveBeenCalledWith({
+      inquiryId: 'inquiry-1',
+      actorId: LAWYER.id,
+      assigneeId: null,
+      teamId: null,
+      title: 'Inquiry: agreement.pdf',
+    });
+    expect(result.caseId).toBe('case-1');
+    expect(result.status).toBe('accepted');
+  });
+
+  it('a listing never carries the report or the storage path', async () => {
+    const { service } = build(LAWYER, PENDING);
+
+    const result = await service.acceptInquiry('inquiry-1');
+
+    expect(result).not.toHaveProperty('analysisResult');
+    expect(result).not.toHaveProperty('documentStoragePath');
+  });
+
+  it('an unrelated lawyer cannot accept and nothing is written', async () => {
+    const { service, repository } = build({ id: 'someone-else', role: 'lawyer' } as unknown as AuthUser, PENDING);
+
+    await expect(service.acceptInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
+    expect(repository.acceptAtomic).not.toHaveBeenCalled();
+  });
+
+  it('an employee of the firm cannot accept a firm-routed inquiry', async () => {
+    const { service, repository } = build(ADMIN, { ...PENDING, target_profile_id: null }, 'employee');
+
+    await expect(service.acceptInquiry('inquiry-1', { assigneeProfileId: 'lawyer-2' })).rejects.toThrow(AuthorizationError);
+    expect(repository.acceptAtomic).not.toHaveBeenCalled();
+  });
+
+  it('a firm admin accepts a firm-routed inquiry and passes the chosen assignee and team', async () => {
+    const { service, repository } = build(ADMIN, { ...PENDING, target_profile_id: null }, 'admin');
+
+    await service.acceptInquiry('inquiry-1', { assigneeProfileId: 'lawyer-2', teamId: 'team-1', title: '  Matter X ' });
+
+    expect(repository.acceptAtomic).toHaveBeenCalledWith({
+      inquiryId: 'inquiry-1',
+      actorId: ADMIN.id,
+      assigneeId: 'lawyer-2',
+      teamId: 'team-1',
+      title: 'Matter X',
+    });
+  });
+
+  it('missing assignee on a firm-routed inquiry is a validation error from the database function', async () => {
+    const { service, repository } = build(ADMIN, { ...PENDING, target_profile_id: null }, 'owner');
+    (repository.acceptAtomic as ReturnType<typeof vi.fn>).mockRejectedValue({ message: 'assignee_required', code: '22023' });
+
+    await expect(service.acceptInquiry('inquiry-1')).rejects.toThrow(ValidationError);
+  });
+
+  it('an expired window and a declined inquiry both surface as Conflict', async () => {
+    for (const message of ['review_window_expired', 'inquiry_declined']) {
+      const { service, repository } = build(LAWYER, PENDING);
+      (repository.acceptAtomic as ReturnType<typeof vi.fn>).mockRejectedValue({ message, code: '55000' });
+      await expect(service.acceptInquiry('inquiry-1')).rejects.toThrow(ConflictError);
+    }
+  });
+
+  it('a repeat accept by the decider skips the create-access check and returns the existing case', async () => {
+    const accepted = { ...PENDING, status: 'accepted', decision: 'accepted', decided_by: LAWYER.id, case_id: 'case-1' };
+    const { service, repository, caseService } = build(LAWYER, accepted);
+
+    const result = await service.acceptInquiry('inquiry-1');
+
+    expect(caseService.assertCanCreateCase).not.toHaveBeenCalled();
+    expect(repository.acceptAtomic).toHaveBeenCalledTimes(1);
+    expect(result.caseId).toBe('case-1');
+  });
+
+  it('an unauthenticated caller is rejected before any lookup', async () => {
+    const { service, repository } = build(null, PENDING);
+
+    await expect(service.acceptInquiry('inquiry-1')).rejects.toThrow(AuthenticationError);
+    expect(repository.findById).not.toHaveBeenCalled();
   });
 });

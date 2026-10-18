@@ -77,7 +77,7 @@ import { AppSidebar } from '@/shared/components/layout/app-sidebar';
 // Mirrors LawyerInquiryService's own LawyerInquiryListing DTO
 // field-for-field — same "mirrored, not imported" convention the
 // Lawyer Terminal's own lawyer-inquiries/page.tsx already follows.
-type InquiryStatus = 'pending' | 'accepted' | 'converted_to_case';
+type InquiryStatus = 'pending' | 'accepted' | 'converted_to_case' | 'declined';
 
 interface LawyerInquiryListing {
   id: string;
@@ -86,8 +86,8 @@ interface LawyerInquiryListing {
   targetFirmId: string;
   teamId: string | null;
   status: InquiryStatus;
-  documentStoragePath: string;
-  analysisResult: unknown;
+  documentName: string;
+  analysisAvailable: boolean;
   createdAt: string;
 }
 
@@ -115,32 +115,24 @@ function formatTimestamp(isoString: string): string {
   });
 }
 
-// Same convention as lawyer-inquiries/page.tsx's own
-// filenameFromStoragePath() helper.
-function filenameFromStoragePath(path: string): string {
-  const segment = path.split('/').pop() ?? path;
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
 function StatusPill({ status }: { status: InquiryStatus }) {
   const styles: Record<InquiryStatus, string> = {
     pending: 'bg-amber-500/10 text-amber-600',
     accepted: 'bg-primary/10 text-primary',
     converted_to_case: 'bg-emerald-500/10 text-emerald-600',
+    declined: 'bg-muted text-muted-foreground',
   };
   const labels: Record<InquiryStatus, string> = {
     pending: 'Waiting for a response',
     accepted: 'Accepted',
     converted_to_case: 'Converted to a case',
+    declined: 'Declined',
   };
   const Icon: Record<InquiryStatus, typeof Clock> = {
     pending: Clock,
     accepted: CheckCircle2,
     converted_to_case: Scale,
+    declined: Clock,
   };
   const IconComponent = Icon[status];
 
@@ -263,7 +255,7 @@ export default function MySentInquiriesPage() {
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">
                           <FileText className="h-3.5 w-3.5" />
-                          {filenameFromStoragePath(inquiry.documentStoragePath)}
+                          {inquiry.documentName}
                         </span>
                         <span>Sent {formatTimestamp(inquiry.createdAt)}</span>
                         {inquiry.targetProfileId ? (

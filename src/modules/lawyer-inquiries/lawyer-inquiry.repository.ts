@@ -56,12 +56,31 @@
 // real path to get target_profile_id set before accept/decline are
 // ever called), but doesn't resolve the underlying question.
 
+// REVISED -- pre-acceptance document review (migrations 20261017000000 /
+// 20261017000001):
+//   - accept() and decline() are GONE. accept() was an unconditional status
+//     flip and decline() deleted the row; both are replaced by the atomic
+//     Postgres functions accept_lawyer_inquiry() / decline_lawyer_inquiry(),
+//     wrapped by acceptAtomic() / declineAtomic() below. Declining is now a
+//     soft decline (status 'declined', reviewer + timestamp kept).
+//   - create() also writes the lawyer_inquiry_documents row(s) that tie the
+//     inquiry to the exact document and AI report it was sent with, so BOTH
+//     the authenticated flow and AnonymousAnalysisService#reattachSession()
+//     (which calls create() directly) get them without any change to the
+//     anonymous module.
+//   - openReview() wraps open_lawyer_inquiry_review(), the single decision
+//     for who may preview/download before acceptance.
+//   - convert()/assign() now carry state guards in the WHERE clause and
+//     return null when the guard does not match.
+// Trust posture is unchanged: always constructed with the admin client, every
+// caller id is passed in and trusted, authorization lives in the services.
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// FLAGGED: hand-typed to match the migration column-for-column, same
-// caveat as AnonymousAnalysisSessionRow -- no generated-types
-// convention confirmed against pasted source this session.
-interface LawyerInquiryRow {
+export type LawyerInquiryStatus = 'pending' | 'accepted' | 'converted_to_case' | 'declined';
+export type InquiryAnalysisState = 'complete' | 'processing' | 'unavailable';
+
+export interface LawyerInquiryRow {
   id: string;
   client_profile_id: string;
   target_profile_id: string | null;
@@ -71,10 +90,34 @@ interface LawyerInquiryRow {
   assigned_at: string | null;
   document_storage_path: string;
   analysis_result: unknown;
-  status: 'pending' | 'accepted' | 'converted_to_case';
+  status: LawyerInquiryStatus;
   case_id: string | null;
+  decision: 'accepted' | 'declined' | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  review_expires_at: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface InquiryDocumentRow {
+  id: string;
+  inquiry_id: string;
+  document_id: string | null;
+  storage_path: string;
+  file_name: string;
+  analysis_id: string | null;
+  analysis_state: InquiryAnalysisState;
+  analysis_snapshot: unknown;
+  created_at: string;
+}
+
+/** The document + report an inquiry is sent with. Omitted => anonymous-origin. */
+export interface InquiryAttachmentInput {
+  documentId: string | null;
+  analysisId: string | null;
+  analysisState: InquiryAnalysisState;
 }
 
 interface CreateInquiryInput {
@@ -83,37 +126,74 @@ interface CreateInquiryInput {
   targetFirmId: string;
   documentStoragePath: string;
   analysisResult: unknown;
+  attachment?: InquiryAttachmentInput;
 }
 
 interface AssignInquiryInput {
   targetProfileId: string;
   assignedBy: string;
-  // NEW: caller-supplied, matching CaseService#createCase()'s own
-  // "teamId is explicit input, never inferred" posture. Null is valid --
-  // a solo-firm or no-team inquiry stays team_id: null through
-  // assignment and conversion, same as a solo case.
   teamId: string | null;
 }
 
+export interface AcceptInquiryRpcInput {
+  inquiryId: string;
+  actorId: string;
+  assigneeId: string | null;
+  teamId: string | null;
+  title: string;
+}
+
+export interface AcceptInquiryRpcResult {
+  inquiry_id: string;
+  case_id: string;
+  already_accepted: boolean;
+  assignee_id: string | null;
+  linked_documents: number;
+  unlinked_documents: number;
+}
+
+export interface DeclineInquiryRpcResult {
+  inquiry_id: string;
+  already_declined: boolean;
+}
+
+export interface OpenReviewRpcResult {
+  review_id: string;
+  inquiry_id: string;
+  capacity: 'assigned_lawyer' | 'firm_reviewer';
+  expires_at: string;
+}
+
 const TABLE = 'lawyer_inquiries';
+const DOCUMENTS_TABLE = 'lawyer_inquiry_documents';
+const DOCUMENTS_BUCKET = 'legal-vault-documents';
+
+function fileNameFromPath(path: string): string {
+  const segment = path.split('/').pop() ?? path;
+  try {
+    return decodeURIComponent(segment) || 'document';
+  } catch {
+    return segment || 'document';
+  }
+}
 
 /**
- * Thin Postgres access for lawyer_inquiries. Always called with the
- * admin (service-role) client -- this table's own RLS is SELECT-only
- * (see the migration), so every write, including create(), has to go
- * through service-role, not the caller's own session, even though
- * create() happens right after a real signup and the caller does have a
- * session at that point. Flagged: this means create() can't rely on
- * client_profile_id being implicitly auth.uid() the way an RLS-backed
- * insert would -- it's passed explicitly and trusted, so whatever calls
- * this repository must independently confirm clientProfileId is really
- * the newly-signed-up user before calling create(), not assume the DB
- * layer enforces that for it. Same trust posture now applies to
- * accept()/decline()/assign() below -- see this file's header comment.
+ * Thin Postgres access for lawyer_inquiries and its review tables. Always
+ * called with the admin (service-role) client: lawyer_inquiries' RLS is
+ * SELECT-only and lawyer_inquiry_documents / lawyer_inquiry_reviews have no
+ * reviewer policies at all. The trust posture of every method is therefore
+ * "the caller passes an already-authorized id" -- see this file's header.
  */
 export class LawyerInquiryRepository {
   constructor(private readonly client: SupabaseClient) {}
 
+  /**
+   * Inserts the inquiry AND its lawyer_inquiry_documents row. The two inserts
+   * are not one transaction (no cross-table transaction precedent in this
+   * codebase); if the second fails the just-created inquiry row is removed so
+   * no inquiry exists without its attachment. That compensating delete only
+   * ever targets the row this call created seconds earlier.
+   */
   async create(input: CreateInquiryInput): Promise<LawyerInquiryRow> {
     const { data, error } = await this.client
       .from(TABLE)
@@ -127,25 +207,35 @@ export class LawyerInquiryRepository {
       .select()
       .single();
 
-    // FLAGGED: raw error thrown, matching AnonymousAnalysisRepository's
-    // existing (also-flagged) inconsistency with the service layer's
-    // AppError wrapping -- same open question, not re-decided here.
     if (error) {
       throw error;
+    }
+
+    const attachment: InquiryAttachmentInput = input.attachment ?? {
+      documentId: null,
+      analysisId: null,
+      analysisState: 'complete',
+    };
+
+    const { error: docError } = await this.client.from(DOCUMENTS_TABLE).insert({
+      inquiry_id: data.id,
+      document_id: attachment.documentId,
+      storage_path: input.documentStoragePath,
+      file_name: fileNameFromPath(input.documentStoragePath),
+      analysis_id: attachment.analysisId,
+      analysis_state: attachment.analysisState,
+      analysis_snapshot: attachment.analysisState === 'complete' ? input.analysisResult : null,
+    });
+
+    if (docError) {
+      await this.client.from(TABLE).delete().eq('id', data.id).eq('status', 'pending');
+      throw docError;
     }
 
     return data;
   }
 
-  /**
-   * Fetches a single inquiry row by id, or null if it doesn't exist --
-   * including the "already declined" case, since decline() deletes
-   * rather than marking status (§4.2), so a declined inquiry and a
-   * never-existed one are indistinguishable at this layer. Whatever
-   * calls this is responsible for deciding what a null result means in
-   * context (e.g. accept() below treats it as "already gone, nothing to
-   * accept").
-   */
+  /** Row by id, or null. A declined inquiry still exists (soft decline). */
   async findById(inquiryId: string): Promise<LawyerInquiryRow | null> {
     const { data, error } = await this.client
       .from(TABLE)
@@ -161,31 +251,9 @@ export class LawyerInquiryRepository {
   }
 
   /**
-   * NEW -- lists every inquiry currently assigned to a specific lawyer
-   * (target_profile_id = targetProfileId), most recent first. Built for
-   * the Lawyer Terminal "My Inquiries" gap (accept/decline/convert all
-   * pre-existed with zero list/read entry point for the lawyer they act
-   * on) -- see lawyer-inquiry.service.ts's listMyInquiries() and the
-   * accompanying implementation report for the full audit writeup.
-   *
-   * FLAGGED, same trust posture as create() above (this file's own
-   * header comment): targetProfileId is passed in and trusted, not
-   * derived from anything this repository method checks itself --
-   * whatever calls this (LawyerInquiryService#listMyInquiries()) is
-   * responsible for passing the AUTHENTICATED caller's own id, never a
-   * client-supplied one. This mirrors lawyer_inquiries' own real SELECT
-   * RLS policy (lawyer_inquiries_select_assigned_lawyer: `target_profile_id
-   * = auth.uid()`), even though this repository is constructed with the
-   * admin client (RLS bypassed) -- the filter here is what actually
-   * enforces the same boundary the RLS policy would, for the one caller
-   * (the Service layer) that is expected to ever invoke this method with
-   * anything other than a self-scoped id.
-   *
-   * No status filter -- returns pending, accepted, AND converted_to_case
-   * rows for this lawyer. The UI consuming this can filter/group
-   * client-side; keeping this method's own contract simple (one lawyer's
-   * full inquiry history) avoids inventing a query-param shape with no
-   * existing precedent elsewhere in this file.
+   * Every inquiry assigned to a lawyer (pending, accepted, converted,
+   * declined), most recent first. targetProfileId must be the authenticated
+   * caller's own id -- never client-supplied.
    */
   async listForTargetProfile(targetProfileId: string): Promise<LawyerInquiryRow[]> {
     const { data, error } = await this.client
@@ -202,36 +270,17 @@ export class LawyerInquiryRepository {
   }
 
   /**
-   * NEW -- General User Terminal, "My Sent Inquiries" gap. Lists every
-   * inquiry SENT BY a specific sender (client_profile_id =
-   * senderProfileId), most recent first. Mirrors listForTargetProfile()
-   * above field-for-field (same query shape, same trust posture, same
-   * "no status filter, let the caller filter/group client-side"
-   * decision) -- the only difference is which column is filtered on:
-   * client_profile_id (who sent it) instead of target_profile_id (who
-   * it's assigned to). Confirmed against this table's real, live SELECT
-   * RLS this session (`lawyer_inquiries_select_client`: client_profile_id
-   * = auth.uid()) -- that policy already covers exactly this access
-   * pattern, so no RLS change was needed for this method to be safe in
-   * principle. It still doesn't rely on that policy directly, though:
-   * this repository is always constructed with the admin client (RLS
-   * bypassed -- see this file's own header comment), so the
-   * `.eq('client_profile_id', senderProfileId)` filter below is what
-   * actually enforces the boundary the RLS policy would, not the policy
-   * itself.
-   *
-   * FLAGGED, same trust posture as listForTargetProfile() above:
-   * senderProfileId is passed in and trusted, not derived from anything
-   * this repository method checks itself -- whatever calls this
-   * (LawyerInquiryService#listMySentInquiries()) is responsible for
-   * passing the AUTHENTICATED caller's own id, never a client-supplied
-   * one.
+   * Every inquiry a sender sent, most recent first. Declined inquiries are
+   * left out: before soft decline a declined inquiry vanished from the
+   * sender's list, and surfacing the decision to the sender is a product call
+   * not made here. senderProfileId must be the authenticated caller's own id.
    */
   async listForSenderProfile(senderProfileId: string): Promise<LawyerInquiryRow[]> {
     const { data, error } = await this.client
       .from(TABLE)
       .select('*')
       .eq('client_profile_id', senderProfileId)
+      .neq('status', 'declined')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -242,27 +291,53 @@ export class LawyerInquiryRepository {
   }
 
   /**
-   * Transitions an inquiry from pending to accepted (§2 step 9).
-   *
-   * FLAGGED: does not verify the row's CURRENT status is 'pending'
-   * before updating -- a straight unconditional update. This means
-   * calling accept() on an already-'converted_to_case' inquiry would
-   * silently move it back to 'accepted', which is a real regression the
-   * status enum's own ordering implies shouldn't be possible. Left as a
-   * flat update rather than adding a `.eq('status', 'pending')` guard
-   * here because IF such a guard is added, the caller needs to be able
-   * to distinguish "row not found" from "row found but not pending" --
-   * Supabase's update().select().single() can't cleanly express that
-   * distinction without a follow-up read. Flagged as the most
-   * load-bearing gap in this file, not silently guarded one way.
+   * Every inquiry routed to a firm, most recent first (Firm Terminal inbox).
+   * Whether the caller may see the firm's inquiries is decided by the service
+   * (firm owner/admin only).
    */
-  async accept(inquiryId: string): Promise<LawyerInquiryRow> {
+  async listForFirm(firmId: string): Promise<LawyerInquiryRow[]> {
     const { data, error } = await this.client
       .from(TABLE)
-      .update({ status: 'accepted' })
-      .eq('id', inquiryId)
-      .select()
-      .single();
+      .select('*')
+      .eq('target_firm_id', firmId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  /** Documents attached to ONE inquiry, oldest first. */
+  async listDocumentsForInquiry(inquiryId: string): Promise<InquiryDocumentRow[]> {
+    const { data, error } = await this.client
+      .from(DOCUMENTS_TABLE)
+      .select('*')
+      .eq('inquiry_id', inquiryId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  /**
+   * One attached document, matched on BOTH ids so a document id from another
+   * inquiry (guessed or swapped into the URL) finds nothing.
+   */
+  async findDocumentForInquiry(
+    inquiryId: string,
+    inquiryDocumentId: string
+  ): Promise<InquiryDocumentRow | null> {
+    const { data, error } = await this.client
+      .from(DOCUMENTS_TABLE)
+      .select('*')
+      .eq('id', inquiryDocumentId)
+      .eq('inquiry_id', inquiryId)
+      .maybeSingle();
 
     if (error) {
       throw error;
@@ -272,43 +347,87 @@ export class LawyerInquiryRepository {
   }
 
   /**
-   * Deletes an inquiry outright (§2 step 8, §4.2 resolved: decline has
-   * no stored status or audit trail -- row deletion IS the decline
-   * action, not a side effect of it).
-   *
-   * FLAGGED: returns void, not the deleted row -- there is nothing
-   * meaningful to return once the row is gone. Supabase's delete()
-   * doesn't return affected rows by default without a `.select()` added
-   * first; not added here since nothing consumes it.
+   * Looks up the analysis a sender attached, but only if it belongs to the
+   * document being sent. Returns null when it does not, so a mismatched
+   * analysis id is never recorded against the wrong document.
    */
-  async decline(inquiryId: string): Promise<void> {
-    const { error } = await this.client.from(TABLE).delete().eq('id', inquiryId);
+  async findAnalysisForDocument(
+    analysisId: string,
+    documentId: string
+  ): Promise<{ id: string; status: string } | null> {
+    const { data, error } = await this.client
+      .from('document_analyses')
+      .select('id, status')
+      .eq('id', analysisId)
+      .eq('document_id', documentId)
+      .maybeSingle();
 
     if (error) {
       throw error;
     }
+
+    return data;
+  }
+
+  /** open_lawyer_inquiry_review(): the one pre-acceptance access decision. */
+  async openReview(inquiryId: string, reviewerId: string): Promise<OpenReviewRpcResult> {
+    const { data, error } = await this.client.rpc('open_lawyer_inquiry_review', {
+      p_inquiry_id: inquiryId,
+      p_reviewer_id: reviewerId,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return data as OpenReviewRpcResult;
   }
 
   /**
-   * Hands a firm-targeted, unassigned inquiry over to a specific lawyer
-   * (§4.1). Sets target_profile_id, assigned_by, assigned_at, AND
-   * team_id together -- team_id is NEW this revision, closing the gap
-   * that made convertInquiry()'s team-lead path permanently unreachable
-   * (see migration 20260810000000's own comment, and
-   * lawyer-inquiry.service.ts's convertInquiry() doc comment).
-   *
-   * team_id is caller-supplied via AssignInquiryInput, not derived from
-   * anything -- null is a valid, expected value (a solo-firm or no-team
-   * inquiry).
-   *
-   * FLAGGED: no guard here on the row's CURRENT target_profile_id being
-   * null, or its target_firm_id matching anything -- purely a raw
-   * update by id, same posture as accept() above. The Service layer
-   * (LawyerInquiryService#assignInquiry) is what decides whether
-   * reassigning an already-assigned inquiry is allowed; this method
-   * will happily overwrite an existing assignment if called on one.
+   * accept_lawyer_inquiry(): ONE transaction -- lock, case create/return,
+   * document link, access grant, review end, audit. Idempotent.
    */
-  async assign(inquiryId: string, input: AssignInquiryInput): Promise<LawyerInquiryRow> {
+  async acceptAtomic(input: AcceptInquiryRpcInput): Promise<AcceptInquiryRpcResult> {
+    const { data, error } = await this.client.rpc('accept_lawyer_inquiry', {
+      p_inquiry_id: input.inquiryId,
+      p_actor_id: input.actorId,
+      p_assignee_id: input.assigneeId,
+      p_team_id: input.teamId,
+      p_title: input.title,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return data as AcceptInquiryRpcResult;
+  }
+
+  /** decline_lawyer_inquiry(): soft decline, ends review access, audit. */
+  async declineAtomic(
+    inquiryId: string,
+    actorId: string,
+    note: string | null
+  ): Promise<DeclineInquiryRpcResult> {
+    const { data, error } = await this.client.rpc('decline_lawyer_inquiry', {
+      p_inquiry_id: inquiryId,
+      p_actor_id: actorId,
+      p_note: note,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return data as DeclineInquiryRpcResult;
+  }
+
+  /**
+   * Hands an unassigned, still-pending firm inquiry to a lawyer (§4.1). The
+   * guard is in the WHERE clause, so a concurrent accept/decline or a second
+   * assign matches no row and this returns null (the service raises Conflict).
+   */
+  async assign(inquiryId: string, input: AssignInquiryInput): Promise<LawyerInquiryRow | null> {
     const { data, error } = await this.client
       .from(TABLE)
       .update({
@@ -318,8 +437,10 @@ export class LawyerInquiryRepository {
         team_id: input.teamId,
       })
       .eq('id', inquiryId)
+      .eq('status', 'pending')
+      .is('target_profile_id', null)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw error;
@@ -329,36 +450,37 @@ export class LawyerInquiryRepository {
   }
 
   /**
-   * Marks an inquiry converted, after a real cases row has already been
-   * created elsewhere (§2 step 10, §4.5). Sets status to
-   * 'converted_to_case' and case_id together, matching the scoping
-   * doc's §3.2 note ("Set only on conversion"). Does NOT touch team_id --
-   * that's already been set at assign() time by the point convert() runs.
-   *
-   * FLAGGED: this method does NOT create the case itself -- that's
-   * CaseService#createCase(), called by LawyerInquiryService#convertInquiry()
-   * BEFORE this method runs. This is purely the second half of a
-   * two-step, non-transactional sequence (create the case, then mark
-   * the inquiry converted) -- see the Service layer's own doc comment
-   * for the accepted, not-solved risk if the second step fails after
-   * the first succeeds.
-   *
-   * FLAGGED: no guard on the row's CURRENT status -- same posture as
-   * accept()/assign() above. Calling this on an already-converted row
-   * would silently overwrite case_id with whatever new value is passed.
+   * LEGACY: marks an already-accepted inquiry that never got a case as
+   * converted. New accepts create the case atomically and never need this.
+   * Guarded so it cannot overwrite an existing case_id; null = no match.
    */
-  async convert(inquiryId: string, caseId: string): Promise<LawyerInquiryRow> {
+  async convert(inquiryId: string, caseId: string): Promise<LawyerInquiryRow | null> {
     const { data, error } = await this.client
       .from(TABLE)
       .update({ status: 'converted_to_case', case_id: caseId })
       .eq('id', inquiryId)
+      .eq('status', 'accepted')
+      .is('case_id', null)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw error;
     }
 
     return data;
+  }
+
+  /** Short-lived signed URL for a stored object. Server-side only. */
+  async createSignedUrl(storagePath: string, expiresInSeconds: number): Promise<string | null> {
+    const { data, error } = await this.client.storage
+      .from(DOCUMENTS_BUCKET)
+      .createSignedUrl(storagePath, expiresInSeconds);
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data.signedUrl;
   }
 }

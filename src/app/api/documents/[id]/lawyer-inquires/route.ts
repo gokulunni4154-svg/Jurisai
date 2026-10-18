@@ -131,7 +131,8 @@ export async function POST(
       {
         legalHealthScore: legalHealthScore.result,
         aiLegalInsight: aiLegalInsight?.result ?? null,
-      }
+      },
+      body.analysisId
     );
 
     return NextResponse.json({ data: inquiry }, { status: 201 });

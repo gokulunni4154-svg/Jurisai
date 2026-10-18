@@ -96,7 +96,8 @@ import type { FirmMemberRepository } from '@/modules/user-management/firm-member
 import type { CaseService } from '@/modules/cases/case.service';
 import type { DocumentService } from '@/modules/documents/document.service';
 
-import type { LawyerInquiryRepository } from './lawyer-inquiry.repository';
+import type { InquiryAttachmentInput, LawyerInquiryRepository, LawyerInquiryRow, LawyerInquiryStatus } from './lawyer-inquiry.repository';
+import { rethrowInquiryRpcError } from './lawyer-inquiry.errors';
 
 // FLAGGED: hand-typed DTO shape, same caveat as every row/DTO type
 // written this session -- not from generated Supabase types.
@@ -106,16 +107,30 @@ export interface LawyerInquiryListing {
   targetProfileId: string | null;
   targetFirmId: string;
   teamId: string | null;
-  status: 'pending' | 'accepted' | 'converted_to_case';
-  documentStoragePath: string;
-  analysisResult: unknown;
-  // NEW -- added for listMyInquiries()'s consumer (the "My Inquiries"
-  // page needs a created date to sort/display by). Additive only:
-  // every existing caller of toListing() (accept/decline/assign/
-  // convert's own return values) already has this on the row it maps
-  // from, so this is a strictly wider response shape, not a breaking
-  // change to any existing route's contract.
+  status: LawyerInquiryStatus;
+  // REPLACES documentStoragePath / analysisResult. A listing used to hand
+  // every recipient the raw storage path and the full AI report before any
+  // review gate existed. Those now travel only through the review service
+  // (LawyerInquiryReviewService), behind the expiring review check.
+  documentName: string;
+  analysisAvailable: boolean;
+  caseId: string | null;
+  decision: 'accepted' | 'declined' | null;
+  decidedAt: string | null;
+  reviewExpiresAt: string;
   createdAt: string;
+}
+
+export interface AcceptInquiryInput {
+  /** Case title. Defaults to "Inquiry: <file name>". */
+  title?: string;
+  /** Required for a firm-routed inquiry (the lawyer to assign); forbidden otherwise. */
+  assigneeProfileId?: string | null;
+  teamId?: string | null;
+}
+
+export interface DeclineInquiryInput {
+  note?: string | null;
 }
 
 /**
@@ -199,12 +214,28 @@ export class LawyerInquiryService extends BaseService {
     rawParams: unknown,
     targetFirmId: string,
     targetProfileId: string | null,
-    analysisResult: unknown
+    analysisResult: unknown,
+    analysisId?: string
   ): Promise<LawyerInquiryListing> {
     const user = this.requireAuthentication();
 
     const document = await this.documentService.getDocumentById(rawParams);
     this.requireOwnership(document.owner_id);
+
+    // Record WHICH analysis the report came from, but only if it really belongs
+    // to this document -- a mismatched id is ignored (the frozen snapshot is
+    // still stored), never attached to the wrong document.
+    let attachment: InquiryAttachmentInput = {
+      documentId: document.id,
+      analysisId: null,
+      analysisState: 'complete',
+    };
+    if (analysisId) {
+      const analysis = await this.repository.findAnalysisForDocument(analysisId, document.id);
+      if (analysis) {
+        attachment = { ...attachment, analysisId: analysis.id };
+      }
+    }
 
     const created = await this.repository.create({
       clientProfileId: user.id,
@@ -212,25 +243,12 @@ export class LawyerInquiryService extends BaseService {
       targetFirmId,
       documentStoragePath: document.storage_path,
       analysisResult,
+      attachment,
     });
 
     return toListing(created);
   }
 
-  /**
-   * NEW -- lists every inquiry assigned to the CURRENT authenticated
-   * caller (self-scoped, no id param -- same "no :id, resolves off the
-   * authenticated caller" shape as CaseAccessGrantService#listMyCases(),
-   * confirmed real precedent this session). Closes the "My Inquiries"
-   * gap: accept/decline/convert have been fully implemented and
-   * routable since earlier sessions, but nothing anywhere in this repo
-   * ever listed a lawyer's OWN inquiries for them to act on in the
-   * first place -- see the accompanying implementation report.
-   *
-   * requireAuthentication() supplies the id this filters on -- never a
-   * client-supplied value, matching repository.listForTargetProfile()'s
-   * own trust-posture comment.
-   */
   async listMyInquiries(): Promise<LawyerInquiryListing[]> {
     const user = this.requireAuthentication();
 
@@ -278,61 +296,87 @@ export class LawyerInquiryService extends BaseService {
   }
 
   /**
-   * Accepts a pending inquiry (§2 step 9) -- full document + analysis
-   * unlock for the lawyer from this point on. Only the inquiry's
-   * target_profile_id may accept it.
+   * Accepts an inquiry: ONE database transaction creates (or returns) the
+   * case, links the inquiry's documents, issues the case access grant, ends
+   * pre-acceptance review access and audits it. Idempotent -- a repeat call
+   * returns the existing case, and concurrent calls create exactly one.
    *
-   * FLAGGED: does not check the row's CURRENT status is 'pending'
-   * before calling repository.accept() -- same gap the repository
-   * layer already flagged, just not resolved up here either.
+   * Who may accept:
+   *   - inquiry addressed to a lawyer: that lawyer only (unchanged rule);
+   *   - firm-routed inquiry: a firm owner/admin, who must name the lawyer to
+   *     assign (input.assigneeProfileId).
+   * Case-creation authority is checked through CaseService (the same rule
+   * createCase() applies) and re-checked inside the database function.
    */
-  async acceptInquiry(inquiryId: string): Promise<LawyerInquiryListing> {
-    this.requireAuthentication();
+  async acceptInquiry(
+    inquiryId: string,
+    input: AcceptInquiryInput = {}
+  ): Promise<LawyerInquiryListing> {
+    const user = this.requireAuthentication();
 
     const row = await this.repository.findById(inquiryId);
     if (!row) {
       throw new NotFoundError('Inquiry not found.');
     }
 
-    if (row.target_profile_id === null) {
-      throw new AuthorizationError('This inquiry has not yet been assigned to a lawyer.');
-    }
-    this.requireOwnership(row.target_profile_id);
+    const isReplay =
+      row.decision === 'accepted' &&
+      (row.decided_by === user.id || row.target_profile_id === user.id);
 
-    const updated = await this.repository.accept(inquiryId);
+    if (!isReplay) {
+      await this.requireDecisionAuthority(row);
+    }
+
+    const teamId = input.teamId ?? row.team_id ?? null;
+    if (!isReplay) {
+      await this.caseService.assertCanCreateCase(row.target_firm_id, teamId);
+    }
+
+    const title = await this.resolveCaseTitle(row.id, input.title);
+
+    try {
+      await this.repository.acceptAtomic({
+        inquiryId,
+        actorId: user.id,
+        assigneeId: input.assigneeProfileId ?? null,
+        teamId: input.teamId ?? null,
+        title,
+      });
+    } catch (error) {
+      rethrowInquiryRpcError(error);
+    }
+
+    const updated = await this.repository.findById(inquiryId);
+    if (!updated) {
+      throw new NotFoundError('Inquiry not found.');
+    }
     return toListing(updated);
   }
 
   /**
-   * Declines a pending inquiry (§2 step 8) -- deletes the row outright,
-   * per §4.2's resolved "no stored status, no audit trail" decision.
-   * Same target_profile_id-only authorization as acceptInquiry().
-   *
-   * FIXED -- Final Lawyer Terminal V1 Launch Audit, Blocker #1: this
-   * method previously ran every authorization check below and then
-   * returned without ever calling the repository's decline() -- the
-   * row was never actually deleted, so a "declined" inquiry stayed
-   * `pending` forever (the frontend only *looked* like it worked,
-   * since it optimistically drops the row from its own list). Fix is
-   * the smallest possible: add the one call this method's own doc
-   * comment already claimed it made. No change to the authorization
-   * checks above it, no new status, no new column, no API contract
-   * change -- declineInquiry() still returns void, same as before.
+   * Declines an inquiry (soft decline): status 'declined', reviewer, time and
+   * optional note are kept; review access ends; no case and no grant exist.
+   * Same authority as acceptInquiry(). Idempotent. A declined inquiry cannot
+   * later be accepted. An unknown id is a silent no-op, as before.
    */
-  async declineInquiry(inquiryId: string): Promise<void> {
-    this.requireAuthentication();
+  async declineInquiry(inquiryId: string, input: DeclineInquiryInput = {}): Promise<void> {
+    const user = this.requireAuthentication();
 
     const row = await this.repository.findById(inquiryId);
     if (!row) {
       return;
     }
 
-    if (row.target_profile_id === null) {
-      throw new AuthorizationError('This inquiry has not yet been assigned to a lawyer.');
+    const isReplay = row.decision === 'declined' && row.decided_by === user.id;
+    if (!isReplay) {
+      await this.requireDecisionAuthority(row);
     }
-    this.requireOwnership(row.target_profile_id);
 
-    await this.repository.decline(inquiryId);
+    try {
+      await this.repository.declineAtomic(inquiryId, user.id, input.note ?? null);
+    } catch (error) {
+      rethrowInquiryRpcError(error);
+    }
   }
 
   /**
@@ -387,6 +431,9 @@ export class LawyerInquiryService extends BaseService {
       assignedBy: user.id,
       teamId,
     });
+    if (!updated) {
+      throw new ConflictError('This inquiry can no longer be assigned.');
+    }
 
     return toListing(updated);
   }
@@ -459,6 +506,13 @@ export class LawyerInquiryService extends BaseService {
       throw new ConflictError('Only an accepted inquiry can be converted to a case.');
     }
 
+    // Accepting now creates the case atomically. An accepted row that already
+    // has one is returned as-is, so a stale "Convert" click can never create
+    // a second case.
+    if (row.case_id) {
+      return toListing(row);
+    }
+
     if (row.target_profile_id === null) {
       throw new AuthorizationError('This inquiry has not yet been assigned to a lawyer.');
     }
@@ -480,21 +534,48 @@ export class LawyerInquiryService extends BaseService {
     });
 
     const updated = await this.repository.convert(inquiryId, createdCase.id);
+    if (!updated) {
+      throw new ConflictError('This inquiry was already converted to a case.');
+    }
     return toListing(updated);
+  }
+
+  /** Same authority for accept and decline: see acceptInquiry(). */
+  private async requireDecisionAuthority(row: LawyerInquiryRow): Promise<void> {
+    const user = this.requireAuthentication();
+
+    if (row.target_profile_id !== null) {
+      this.requireOwnership(row.target_profile_id);
+      return;
+    }
+
+    const firmRole = await this.firmMemberRepository.findByFirmAndProfile(
+      row.target_firm_id,
+      user.id
+    );
+    this.requireFirmRole(firmRole, FIRM_MANAGE_ROLES);
+  }
+
+  private async resolveCaseTitle(inquiryId: string, requested: string | undefined): Promise<string> {
+    const trimmed = requested?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+    const [first] = await this.repository.listDocumentsForInquiry(inquiryId);
+    return `Inquiry: ${first?.file_name ?? 'document'}`.slice(0, 255);
   }
 }
 
-function toListing(row: {
-  id: string;
-  client_profile_id: string;
-  target_profile_id: string | null;
-  target_firm_id: string;
-  team_id: string | null;
-  status: 'pending' | 'accepted' | 'converted_to_case';
-  document_storage_path: string;
-  analysis_result: unknown;
-  created_at: string;
-}): LawyerInquiryListing {
+function filenameFromPath(path: string): string {
+  const segment = path.split('/').pop() ?? path;
+  try {
+    return decodeURIComponent(segment) || 'document';
+  } catch {
+    return segment || 'document';
+  }
+}
+
+export function toListing(row: LawyerInquiryRow): LawyerInquiryListing {
   return {
     id: row.id,
     clientProfileId: row.client_profile_id,
@@ -502,8 +583,12 @@ function toListing(row: {
     targetFirmId: row.target_firm_id,
     teamId: row.team_id,
     status: row.status,
-    documentStoragePath: row.document_storage_path,
-    analysisResult: row.analysis_result,
+    documentName: filenameFromPath(row.document_storage_path),
+    analysisAvailable: row.analysis_result !== null && row.analysis_result !== undefined,
+    caseId: row.case_id,
+    decision: row.decision,
+    decidedAt: row.decided_at,
+    reviewExpiresAt: row.review_expires_at,
     createdAt: row.created_at,
   };
 }

@@ -84,6 +84,7 @@ import { FirmMemberRepository } from '@/modules/user-management/firm-member.repo
 import { TeamMemberRepository } from '@/modules/user-management/team-member.repository';
 
 import { LawyerInquiryRepository } from './lawyer-inquiry.repository';
+import { LawyerInquiryReviewService } from './lawyer-inquiry-review.service';
 import { LawyerInquiryService } from './lawyer-inquiry.service';
 
 export async function buildLawyerInquiryService(
@@ -168,5 +169,24 @@ export async function buildLawyerInquiryService(
     firmMemberRepository,
     caseService,
     documentService
+  );
+}
+/**
+ * Builds the pre-acceptance review service. Uses the admin client for the
+ * review tables and signed URLs (they have no reviewer RLS by design) -- the
+ * service authorizes every call before touching them.
+ */
+export async function buildLawyerInquiryReviewService(
+  currentUser: AuthUser | null
+): Promise<LawyerInquiryReviewService> {
+  const adminClient = createAdminClient();
+  const rlsClient = await createClient();
+
+  return new LawyerInquiryReviewService(
+    currentUser,
+    new LawyerInquiryRepository(adminClient),
+    new FirmMemberRepository(rlsClient),
+    new CaseAccessGrantRepository(adminClient),
+    new AuditLogRepository(adminClient)
   );
 }

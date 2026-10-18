@@ -32,6 +32,7 @@ describe('getTerminalNav — each terminal stays in its own namespace', () => {
       '/firm/firm-123/dashboard',
       '/firm/firm-123/clients',
       '/firm/firm-123/teams',
+      '/firm/firm-123/inquiries',
       '/firm/firm-123/tasks',
       '/firm/firm-123/reports',
       '/firm/firm-123/observability',
