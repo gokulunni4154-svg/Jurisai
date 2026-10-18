@@ -71,7 +71,8 @@ export type SidebarActive =
   | 'settings'
   | 'firm-tasks'
   | 'hearings'
-  | 'dashboard';
+  | 'dashboard'
+  | 'ai-assistant';
 
 export interface NavItem {
   /** Matches AppSidebar's `active` prop when this item is the current page. */
@@ -96,13 +97,13 @@ export interface AccountMenuItem {
   icon: LucideIcon;
 }
 
-const AI_ASSISTANT: NavItem = {
-  key: 'ai-assistant',
-  label: 'AI Assistant',
-  href: null,
-  icon: Sparkles,
-  comingSoon: true,
-};
+/**
+ * The assistant lives inside each terminal's own route namespace. The firm
+ * terminal requires a firmId (same degradation as the other firm items).
+ */
+function aiAssistant(href: string | null): NavItem {
+  return { key: 'ai-assistant', label: 'AI Assistant', href, icon: Sparkles, comingSoon: href === null };
+}
 
 /**
  * Navigation items for a terminal. Every href returned here stays inside
@@ -132,7 +133,7 @@ export function getTerminalNav(terminal: Terminal, opts: { firmId?: string | nul
           href: '/lawyer/document-sets',
           icon: FolderKanban,
         },
-        AI_ASSISTANT,
+        aiAssistant('/lawyer/ai-assistant'),
       ];
 
     case 'firm': {
@@ -167,7 +168,7 @@ export function getTerminalNav(terminal: Terminal, opts: { firmId?: string | nul
           comingSoon: disabled,
         },
         { key: 'settings', label: 'Settings', href: firmHref('settings'), icon: Settings, comingSoon: disabled },
-        AI_ASSISTANT,
+        aiAssistant(firmHref('ai-assistant')),
       ];
     }
 
@@ -187,7 +188,7 @@ export function getTerminalNav(terminal: Terminal, opts: { firmId?: string | nul
           href: '/general-user/inquiries/mine',
           icon: MessageSquare,
         },
-        AI_ASSISTANT,
+        aiAssistant('/general-user/ai-assistant'),
       ];
 
     case 'client':
