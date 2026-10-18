@@ -161,13 +161,11 @@ describe('AppSidebar — explicit terminal renders instantly and never changes',
     expect(screen.getByRole('button', { name: 'Matters' })).not.toHaveAttribute('aria-current');
   });
 
-  it('AI Assistant is disabled and never navigates', () => {
+  it('AI Assistant navigates inside the general terminal', () => {
     deferredProfile();
     renderSidebar({ active: 'dashboard', terminal: 'general' });
-    const ai = screen.getByText('AI Assistant').closest('[aria-disabled="true"]');
-    expect(ai).not.toBeNull();
-    fireEvent.click(ai as Element);
-    expect(push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'AI Assistant' }));
+    expect(push).toHaveBeenCalledWith('/general-user/ai-assistant');
   });
 });
 

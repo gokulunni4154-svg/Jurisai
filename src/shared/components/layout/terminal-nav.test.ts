@@ -22,6 +22,7 @@ describe('getTerminalNav — each terminal stays in its own namespace', () => {
       '/lawyer/hearings/upcoming',
       '/lawyer/tasks',
       '/lawyer/document-sets',
+      '/lawyer/ai-assistant',
     ]);
     expect(links.some((h) => h.startsWith('/firm') || h.startsWith('/general-user'))).toBe(false);
   });
@@ -36,13 +37,14 @@ describe('getTerminalNav — each terminal stays in its own namespace', () => {
       '/firm/firm-123/reports',
       '/firm/firm-123/observability',
       '/firm/firm-123/settings',
+      '/firm/firm-123/ai-assistant',
     ]);
   });
 
   it('firm: without a firmId, items are disabled instead of linking to /firm/null/*', () => {
     const items = getTerminalNav('firm', { firmId: null });
     expect(items.every((i) => i.href === null)).toBe(true);
-    expect(items.filter((i) => i.key !== 'ai-assistant').every((i) => i.comingSoon)).toBe(true);
+    expect(items.every((i) => i.comingSoon)).toBe(true);
   });
 
   it('general: only /general-user/* links, never lawyer or firm', () => {
@@ -51,6 +53,7 @@ describe('getTerminalNav — each terminal stays in its own namespace', () => {
       '/general-user/documents',
       '/general-user/lawyers',
       '/general-user/inquiries/mine',
+      '/general-user/ai-assistant',
     ]);
   });
 
@@ -58,11 +61,16 @@ describe('getTerminalNav — each terminal stays in its own namespace', () => {
     expect(hrefs('client', 'firm-123')).toEqual(['/client']);
   });
 
-  it('AI Assistant stays a disabled "coming soon" item (no page exists)', () => {
-    for (const t of ['lawyer', 'firm', 'general'] as const) {
-      const ai = getTerminalNav(t, { firmId: 'f' }).find((i) => i.key === 'ai-assistant');
-      expect(ai).toMatchObject({ href: null, comingSoon: true });
-    }
+  it('AI Assistant links to its own terminal namespace', () => {
+    const href = (t: Terminal) =>
+      getTerminalNav(t, { firmId: 'f' }).find((i) => i.key === 'ai-assistant')?.href;
+    expect(href('lawyer')).toBe('/lawyer/ai-assistant');
+    expect(href('firm')).toBe('/firm/f/ai-assistant');
+    expect(href('general')).toBe('/general-user/ai-assistant');
+  });
+
+  it('client terminal has no AI Assistant', () => {
+    expect(getTerminalNav('client').some((i) => i.key === 'ai-assistant')).toBe(false);
   });
 
   it('every item key is unique within a terminal', () => {
