@@ -609,8 +609,8 @@ interface LawyerInquiryListing {
   targetFirmId: string;
   teamId: string | null;
   status: 'pending' | 'accepted' | 'converted_to_case';
-  documentStoragePath: string;
-  analysisResult: unknown;
+  documentName: string;
+  analysisAvailable: boolean;
 }
 
 export default function DocumentAnalysisPage() {

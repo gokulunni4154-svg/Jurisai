@@ -257,6 +257,17 @@ export class CaseService extends BaseService {
   }
 
   /**
+   * Public wrapper over requireCaseCreateAccess() so other services (the
+   * inquiry accept flow, which creates the case inside one SQL transaction
+   * instead of through createCase()) apply the SAME team-lead / firm-role
+   * rule rather than re-deriving it. Throws if the caller may not create a
+   * case in this firm/team; returns nothing.
+   */
+  async assertCanCreateCase(firmId: string, teamId: string | null): Promise<void> {
+    await this.requireCaseCreateAccess(firmId, teamId);
+  }
+
+  /**
    * Shared create-access check: team lead of teamId (if given); else, if
    * teamId is null (a solo case), any member of firmId -- Decision #60;
    * else (teamId given but caller isn't its lead), firm admin/owner of

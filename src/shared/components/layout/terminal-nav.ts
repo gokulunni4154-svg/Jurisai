@@ -150,6 +150,7 @@ export function getTerminalNav(terminal: Terminal, opts: { firmId?: string | nul
         },
         { key: 'clients', label: 'Clients', href: firmHref('clients'), icon: Users, comingSoon: disabled },
         { key: 'teams', label: 'Team', href: firmHref('teams'), icon: UserSquare2, comingSoon: disabled },
+        { key: 'inquiries', label: 'Inquiries', href: firmHref('inquiries'), icon: Inbox, comingSoon: disabled },
         {
           key: 'firm-tasks',
           label: 'Firm Tasks',
