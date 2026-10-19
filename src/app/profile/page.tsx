@@ -75,7 +75,7 @@ import {
   Bell,
   CheckCircle2,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
 
 interface MyProfile {
@@ -282,15 +282,13 @@ export default function ProfilePage() {
   const roleLabel = profile?.role ? (ROLE_LABELS[profile.role] ?? profile.role) : '—';
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="profile" />
-
+    <AppShell active="profile">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-background px-8 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <UserCircle2 className="h-5 w-5 text-primary" strokeWidth={1.75} />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+              <UserCircle2 className="h-5 w-5 text-accent-foreground" strokeWidth={1.75} />
             </div>
             <div>
               <h1 className="text-[19px] font-semibold leading-tight text-foreground">
@@ -331,7 +329,7 @@ export default function ProfilePage() {
               <p className="text-[13px]">Loading your profile…</p>
             </div>
           ) : loadError ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
               <p className="text-[13px]">{loadError}</p>
               <button
@@ -345,7 +343,7 @@ export default function ProfilePage() {
             <div className="mx-auto flex max-w-3xl flex-col gap-6">
               {/* Identity summary */}
               <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-6 py-5">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-[18px] font-semibold text-primary">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent text-[18px] font-semibold text-accent-foreground">
                   {profile.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -445,13 +443,13 @@ export default function ProfilePage() {
                 </div>
 
                 {saveError && (
-                  <div className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                  <div className="flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-[12.5px] text-destructive-subtle-foreground">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                     {saveError}
                   </div>
                 )}
                 {saveSuccess && !isSaving && (
-                  <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[12.5px] text-emerald-700">
+                  <div className="flex items-center gap-2 rounded-md border border-success bg-success-subtle px-3 py-2 text-[12.5px] text-success-subtle-foreground">
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                     Profile saved.
                   </div>
@@ -488,7 +486,7 @@ export default function ProfilePage() {
                     {profile.email_verified ? 'Email verified' : 'Email not verified'}
                   </div>
                 </div>
-                <p className="text-[12px] text-muted-foreground/80">
+                <p className="text-[12px] text-muted-foreground">
                   Email and account type can&apos;t be changed here.
                 </p>
               </div>
@@ -496,6 +494,6 @@ export default function ProfilePage() {
           ) : null}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

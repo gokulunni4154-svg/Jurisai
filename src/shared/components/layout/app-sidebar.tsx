@@ -223,9 +223,12 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Scale, ChevronDown, LogOut, Loader2 } from 'lucide-react';
+
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shared/components/ui/tooltip';
 
 import {
   getAccountMenu,
@@ -260,15 +263,78 @@ export type AppSidebarProps = { active: SidebarActive } & (
   | { terminal?: undefined; firmId?: undefined }
   | { terminal: 'lawyer' | 'general' | 'client'; firmId?: undefined }
   | { terminal: 'firm'; firmId: string }
-);
+) & {
+    /**
+     * Desktop collapse state, controlled by <AppShell>. `undefined` keeps
+     * the legacy fixed-width (w-64) sidebar used by pages that have not
+     * migrated to <AppShell> yet. Below the `md` breakpoint the sidebar
+     * always renders expanded (it becomes the horizontal nav strip), so
+     * every collapsed-only class below is `md:`-prefixed.
+     */
+    collapsed?: boolean;
+  };
+
+/**
+ * Shows a right-hand tooltip with `label` only while the sidebar is collapsed
+ * (icon-only). Expanded items already show their text. The wrapped element must
+ * accept a ref + props (Link / button do). Carries its own provider so the
+ * sidebar also works when rendered outside AppShell.
+ */
+function CollapsedTooltip({
+  enabled,
+  label,
+  children,
+}: {
+  enabled: boolean;
+  label: string;
+  children: ReactElement;
+}) {
+  if (!enabled) return children;
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent side="right" className="hidden md:block">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 export function AppSidebar(props: AppSidebarProps) {
   const { active } = props;
+  const collapsed = props.collapsed === true;
   const router = useRouter();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const accountButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Account menu: close on Escape (returning focus to its trigger) and on
+  // an outside pointer press.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        accountButtonRef.current?.focus();
+      }
+    };
+    const onPointerDown = (e: MouseEvent) => {
+      if (footerRef.current && !footerRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -314,17 +380,21 @@ export function AppSidebar(props: AppSidebarProps) {
   };
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground">
+    <aside
+      className={`flex h-full shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200 motion-reduce:transition-none [&_:focus-visible]:ring-sidebar-ring [&_:focus-visible]:ring-offset-sidebar ${
+        props.collapsed === undefined ? 'w-64' : collapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
+      }`}
+    >
       {/* Brand */}
-      <div className="flex items-center gap-2.5 px-5 py-5">
+      <div className={`flex items-center gap-2.5 px-5 py-5 ${collapsed ? 'md:justify-center md:px-0' : ''}`}>
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-accent">
           <Scale className="h-[18px] w-[18px] text-sidebar-accent-foreground" strokeWidth={1.75} />
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold leading-tight text-sidebar-foreground">
+        <div className={`min-w-0 ${collapsed ? 'md:hidden' : ''}`}>
+          <p className="truncate text-body font-semibold leading-tight text-sidebar-foreground">
             JurisAI
           </p>
-          <p className="truncate text-[11px] leading-tight text-sidebar-muted">
+          <p className="truncate text-caption leading-tight text-sidebar-muted">
             AI for Legal Professionals
           </p>
         </div>
@@ -332,7 +402,7 @@ export function AppSidebar(props: AppSidebarProps) {
 
       {/* Nav */}
       <nav
-        className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2"
+        className={`flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-2 ${collapsed ? 'md:px-2' : ''}`}
         aria-busy={navPending ? 'true' : undefined}
       >
         {navPending && (
@@ -352,14 +422,14 @@ export function AppSidebar(props: AppSidebarProps) {
                 key={item.key}
                 aria-disabled="true"
                 title="Coming soon"
-                className="flex cursor-not-allowed items-center justify-between rounded-md px-3 py-2 text-[13.5px] text-sidebar-muted/60"
+                className={`flex cursor-not-allowed items-center justify-between rounded-md px-3 py-2 text-ui text-sidebar-muted/60 ${collapsed ? 'md:justify-center md:px-0' : ''}`}
               >
                 <span className="flex items-center gap-3">
                   <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
-                  {item.label}
+                  <span className={collapsed ? 'md:sr-only' : undefined}>{item.label}</span>
                 </span>
                 {item.comingSoon && (
-                  <span className="rounded-full border border-sidebar-border px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wide text-sidebar-muted/70">
+                  <span className={`rounded-full border border-sidebar-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sidebar-muted/70 ${collapsed ? 'md:hidden' : ''}`}>
                     Soon
                   </span>
                 )}
@@ -368,50 +438,63 @@ export function AppSidebar(props: AppSidebarProps) {
           }
 
           return (
-            <button
-              key={item.key}
-              onClick={() => router.push(item.href!)}
-              aria-current={isActive ? 'page' : undefined}
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-left text-[13.5px] transition-colors ${
-                isActive
-                  ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground/85 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
-              {item.label}
-            </button>
+            <CollapsedTooltip key={item.key} enabled={collapsed} label={item.label}>
+              <Link
+                href={item.href}
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-left text-ui transition-colors ${collapsed ? 'md:justify-center md:px-0' : ''} ${
+                  isActive
+                    ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground/85 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                }`}
+              >
+                <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
+                <span className={collapsed ? 'md:sr-only' : undefined}>{item.label}</span>
+              </Link>
+            </CollapsedTooltip>
           );
         })}
       </nav>
 
       {/* Footer / account */}
-      <div className="relative border-t border-sidebar-border px-3 py-3">
-        <button
-          onClick={() => setMenuOpen((v) => !v)}
-          className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-sidebar-accent/50"
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar-accent text-[12px] font-semibold text-sidebar-accent-foreground">
-            {profileLoading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : profile?.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
-            ) : (
-              initials(profile?.full_name ?? null)
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-sidebar-foreground">
-              {profileLoading ? 'Loading…' : profile?.full_name ?? 'Your account'}
-            </p>
-            <p className="truncate text-[11px] text-sidebar-muted">View account</p>
-          </div>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-sidebar-muted" />
-        </button>
+      <div ref={footerRef} className={`relative border-t border-sidebar-border px-3 py-3 ${collapsed ? 'md:px-2' : ''}`}>
+        <CollapsedTooltip enabled={collapsed} label="Account">
+          <button
+            ref={accountButtonRef}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-controls="account-menu"
+            className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-sidebar-accent/50 ${collapsed ? 'md:justify-center md:px-0' : ''}`}
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar-accent text-caption font-semibold text-sidebar-accent-foreground">
+              {profileLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : profile?.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                initials(profile?.full_name ?? null)
+              )}
+            </div>
+            <div className={`min-w-0 flex-1 ${collapsed ? 'md:hidden' : ''}`}>
+              <p className="truncate text-meta font-medium text-sidebar-foreground">
+                {profileLoading ? 'Loading…' : profile?.full_name ?? 'Your account'}
+              </p>
+              <p className="truncate text-caption text-sidebar-muted">View account</p>
+            </div>
+            <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-sidebar-muted ${collapsed ? 'md:hidden' : ''}`} />
+          </button>
+        </CollapsedTooltip>
 
         {menuOpen && (
-          <div className="fixed bottom-20 left-4 right-4 z-50 max-h-[70dvh] overflow-y-auto rounded-md border border-sidebar-border bg-sidebar shadow-lg md:absolute md:bottom-[calc(100%+4px)] md:left-3 md:right-3 md:z-auto md:max-h-[min(70dvh,32rem)]">
+          <div
+            id="account-menu"
+            role="group"
+            aria-label="Account"
+            className={`fixed bottom-20 left-4 right-4 z-50 max-h-[70dvh] overflow-y-auto rounded-md border border-sidebar-border bg-sidebar shadow-popover md:absolute md:bottom-[calc(100%+4px)] md:left-3 md:max-h-[min(70dvh,32rem)] ${
+              collapsed ? 'md:right-auto md:z-50 md:w-60' : 'md:right-3 md:z-auto'
+            }`}
+          >
             {accountItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -422,7 +505,7 @@ export function AppSidebar(props: AppSidebarProps) {
                     router.push(item.href);
                   }}
                   aria-current={active === item.key ? 'page' : undefined}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-meta text-sidebar-foreground/90 hover:bg-sidebar-accent/50"
                 >
                   <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
                   {item.label}
@@ -432,7 +515,7 @@ export function AppSidebar(props: AppSidebarProps) {
             <button
               onClick={handleSignOut}
               disabled={signingOut}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-[13px] text-sidebar-foreground/90 hover:bg-sidebar-accent/50 disabled:opacity-50"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-meta text-sidebar-foreground/90 hover:bg-sidebar-accent/50 disabled:opacity-50"
             >
               {signingOut ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

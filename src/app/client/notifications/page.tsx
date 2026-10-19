@@ -176,7 +176,7 @@ export default function ClientNotificationsPage() {
             </h1>
           </div>
           {unreadCount > 0 && (
-            <span className="rounded-full bg-primary/10 px-3 py-1 text-[12px] font-medium text-primary">
+            <span className="rounded-full bg-accent px-3 py-1 text-[12px] font-medium text-accent-foreground">
               {unreadCount} unread
             </span>
           )}
@@ -188,7 +188,7 @@ export default function ClientNotificationsPage() {
             <p className="text-[13px]">Loading your notifications…</p>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
             <p className="text-[13px]">{error}</p>
             <button
@@ -208,10 +208,10 @@ export default function ClientNotificationsPage() {
             {notifications.map((n) => (
               <div
                 key={n.id}
-                className={`flex items-start gap-3 px-5 py-4 ${n.read_at === null ? 'bg-primary/5' : ''}`}
+                className={`flex items-start gap-3 px-5 py-4 ${n.read_at === null ? 'bg-accent' : ''}`}
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                  <Gavel className="h-4 w-4 text-primary" strokeWidth={1.5} />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent">
+                  <Gavel className="h-4 w-4 text-accent-foreground" strokeWidth={1.5} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
@@ -227,7 +227,7 @@ export default function ClientNotificationsPage() {
                     {n.message}
                   </p>
                   <div className="mt-2 flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground/70">
+                    <span className="text-[11px] text-muted-foreground">
                       {formatRelativeTime(n.created_at)}
                     </span>
                     {n.read_at === null && (

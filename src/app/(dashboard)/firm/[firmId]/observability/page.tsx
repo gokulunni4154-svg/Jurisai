@@ -13,7 +13,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, AlertCircle, Activity } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Badge, type BadgeProps } from '@/shared/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table';
 
 // ---- Shapes, mirrored from ObservabilityService/ObservabilityRun ----
 // Same convention as src/app/documents/[id]/page.tsx's own "Shapes,
@@ -91,29 +100,17 @@ function formatTimestamp(isoString: string): string {
  */
 function StatusPill({ status }: { status: string | null }) {
   if (status === null) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-        Conversation
-      </span>
-    );
+    return <Badge variant="neutral">Conversation</Badge>;
   }
 
-  const styles: Record<string, string> = {
-    completed: 'bg-emerald-500/10 text-emerald-600',
-    failed: 'bg-destructive/10 text-destructive',
-    processing: 'bg-amber-500/10 text-amber-600',
-    pending: 'bg-muted text-muted-foreground',
+  const variants: Record<string, BadgeProps['variant']> = {
+    completed: 'success',
+    failed: 'destructive',
+    processing: 'warning',
+    pending: 'neutral',
   };
 
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-        styles[status] ?? 'bg-muted text-muted-foreground'
-      }`}
-    >
-      {status}
-    </span>
-  );
+  return <Badge variant={variants[status] ?? 'neutral'}>{status}</Badge>;
 }
 
 /**
@@ -151,15 +148,14 @@ export default function ObservabilityFirmPage({ params }: { params: { firmId: st
   }, [loadRuns]);
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="observability" terminal="firm" firmId={params.firmId} />
+    <AppShell active="observability" terminal="firm" firmId={params.firmId}>
       <div className="flex flex-1 flex-col overflow-hidden">
       <header className="border-b px-8 py-5">
         <div className="flex items-center gap-2">
           <Activity className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-[15px] font-semibold">Run History</h1>
+          <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title">Run History</h1>
         </div>
-        <p className="mt-1 text-[13px] text-muted-foreground">
+        <p className="mt-1 text-meta text-muted-foreground">
           Status, provider, and timing for every AI run across your firm&apos;s documents.
         </p>
       </header>
@@ -168,63 +164,63 @@ export default function ObservabilityFirmPage({ params }: { params: { firmId: st
         {isLoading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <p className="text-[13px]">Loading run history…</p>
+            <p className="text-meta">Loading run history…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
-            <p className="text-[13px]">{loadError}</p>
+            <p className="text-meta">{loadError}</p>
             <button
               onClick={loadRuns}
-              className="text-[13px] font-medium underline underline-offset-2"
+              className="text-meta font-medium underline underline-offset-2"
             >
               Retry
             </button>
           </div>
         ) : runs.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-24 text-muted-foreground">
-            <p className="text-[13px]">No runs yet for your firm&apos;s documents.</p>
+            <p className="text-meta">No runs yet for your firm&apos;s documents.</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border">
-            <table className="w-full text-left text-[13px]">
-              <thead className="bg-muted/50 text-[12px] font-medium text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5">Module</th>
-                  <th className="px-4 py-2.5">Document</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5">Provider</th>
-                  <th className="px-4 py-2.5">Error</th>
-                  <th className="px-4 py-2.5">Started</th>
-                  <th className="px-4 py-2.5">Completed</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
+            <Table className="text-meta">
+              <TableHeader className="bg-muted/50">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="px-4">Module</TableHead>
+                  <TableHead className="px-4">Document</TableHead>
+                  <TableHead className="px-4">Status</TableHead>
+                  <TableHead className="px-4">Provider</TableHead>
+                  <TableHead className="px-4">Error</TableHead>
+                  <TableHead className="px-4">Started</TableHead>
+                  <TableHead className="px-4">Completed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {runs.map((run) => (
-                  <tr key={`${run.module}-${run.id}`}>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{MODULE_LABELS[run.module]}</td>
-                    <td className="px-4 py-2.5">{run.documentTitle ?? '—'}</td>
-                    <td className="px-4 py-2.5">
+                  <TableRow key={`${run.module}-${run.id}`}>
+                    <TableCell className="px-4 whitespace-nowrap">{MODULE_LABELS[run.module]}</TableCell>
+                    <TableCell className="px-4">{run.documentTitle ?? '—'}</TableCell>
+                    <TableCell className="px-4">
                       <StatusPill status={run.status} />
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{run.providerUsed ?? '—'}</td>
-                    <td className="px-4 py-2.5 max-w-xs truncate text-destructive">
+                    </TableCell>
+                    <TableCell className="px-4 whitespace-nowrap">{run.providerUsed ?? '—'}</TableCell>
+                    <TableCell className="px-4 max-w-xs truncate text-destructive">
                       {run.errorMessage ?? '—'}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                       {formatTimestamp(run.createdAt)}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                       {run.completedAt ? formatTimestamp(run.completedAt) : '—'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

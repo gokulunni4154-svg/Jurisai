@@ -23,7 +23,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       out.push(
         <code
           key={key}
-          className="rounded bg-muted px-1 py-0.5 font-mono text-[12px]"
+          className="rounded bg-muted px-1 py-0.5 font-mono text-[0.875em]"
         >
           {token.slice(1, -1)}
         </code>,
@@ -86,13 +86,13 @@ function parseBlocks(source: string): Block[] {
 export function SafeMarkdown({ text }: { text: string }) {
   const blocks = parseBlocks(text);
   return (
-    <div className="space-y-2 text-[13.5px] leading-relaxed">
+    <div className="space-y-3 text-body">
       {blocks.map((b, bi) => {
         const k = `b${bi}`;
         switch (b.type) {
           case "h":
             return (
-              <p key={k} className="font-semibold">
+              <p key={k} className="pt-1 text-subsection">
                 {renderInline(b.text, k)}
               </p>
             );
@@ -103,7 +103,7 @@ export function SafeMarkdown({ text }: { text: string }) {
               <Tag
                 key={k}
                 className={
-                  b.type === "ul" ? "list-disc pl-5" : "list-decimal pl-5"
+                  b.type === "ul" ? "list-disc space-y-1 pl-5" : "list-decimal space-y-1 pl-5"
                 }
               >
                 {b.items.map((it, ii) => (
@@ -116,7 +116,7 @@ export function SafeMarkdown({ text }: { text: string }) {
             return (
               <pre
                 key={k}
-                className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-[12px]"
+                className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-meta"
               >
                 {b.text}
               </pre>

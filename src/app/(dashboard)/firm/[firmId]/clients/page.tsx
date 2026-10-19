@@ -57,7 +57,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
 
 interface FirmRow {
   id: string;
@@ -191,129 +193,124 @@ export default function FirmClientsPage({ params }: { params: { firmId: string }
   const headerTitle = firm ? firm.name : `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="clients" terminal="firm" firmId={firmId} />
+    <AppShell active="clients" terminal="firm" firmId={firmId}>
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
           {headerTitle}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">Clients</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">Clients</h1>
+        <p className="mt-1 text-ui text-muted-foreground">
           Firm-wide client roster -- visible only to firm owners and admins.
         </p>
       </div>
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : forbidden ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           Clients are only visible to this firm&apos;s owner or admins.
         </div>
       ) : error ? (
-        <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       ) : (
         <div className="mt-6 space-y-6">
           {/* Search + New client */}
           <div className="flex items-center gap-3">
-            <input
+            <Input aria-label="Search clients by name or email"
+              className="flex-1"
               type="text"
               placeholder="Search by name or email"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
             />
-            <button
+            <Button
+              className="shrink-0"
               type="button"
               onClick={() => setShowNewForm((v) => !v)}
-              className="shrink-0 rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white"
             >
               {showNewForm ? 'Cancel' : '+ New client'}
-            </button>
+            </Button>
           </div>
 
           {/* New client form */}
           {showNewForm && (
             <form
               onSubmit={handleCreate}
-              className="space-y-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3"
+              className="space-y-3 rounded-md border border-border bg-muted px-4 py-3"
             >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <input
+                <Input aria-label="Full name"
                   type="text"
                   placeholder="Full name"
                   value={newFullName}
                   onChange={(e) => setNewFullName(e.target.value)}
-                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
                 />
-                <input
+                <Input aria-label="Email"
                   type="email"
                   placeholder="Email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
                 />
-                <input
+                <Input aria-label="Phone (optional)"
                   type="text"
                   placeholder="Phone (optional)"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
-                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
                 />
               </div>
               <div className="flex items-center justify-end gap-3">
-                {createError && <p className="text-xs text-red-700">{createError}</p>}
-                <button
+                {createError && <p className="text-meta text-destructive">{createError}</p>}
+                <Button
                   type="submit"
                   disabled={
                     creating || newFullName.trim().length === 0 || newEmail.trim().length === 0
                   }
-                  className="rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
                   {creating ? 'Creating…' : 'Create client'}
-                </button>
+                </Button>
               </div>
             </form>
           )}
 
           {/* Client list */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-subsection font-semibold text-foreground">
               All clients{' '}
-              <span className="font-normal text-slate-400">({filteredClients.length})</span>
+              <span className="font-normal text-muted-foreground">({filteredClients.length})</span>
             </h2>
 
             {clients.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">
+              <p className="mt-3 text-ui text-muted-foreground">
                 No clients yet -- use &ldquo;+ New client&rdquo; to add the first one.
               </p>
             ) : filteredClients.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No clients match your search.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No clients match your search.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {filteredClients.map((c) => (
                   <li key={c.id}>
                     <Link
                       href={`/firm/${firmId}/clients/${c.id}`}
-                      className="block rounded-md border border-slate-200 bg-white px-4 py-3 hover:border-slate-300"
+                      className="block rounded-md border border-border bg-card px-4 py-3 hover:border-primary"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-900">
+                          <p className="truncate text-ui font-medium text-foreground">
                             {c.full_name}
                           </p>
-                          <p className="mt-1 truncate text-xs text-slate-500">
+                          <p className="mt-1 truncate text-meta text-muted-foreground">
                             {c.email}
                             {c.phone ? ` · ${c.phone}` : ''}
                           </p>
                         </div>
-                        <p className="shrink-0 text-xs text-slate-400">
+                        <p className="shrink-0 text-meta text-muted-foreground">
                           Added {formatTimestamp(c.created_at)}
                         </p>
                       </div>
@@ -327,6 +324,6 @@ export default function FirmClientsPage({ params }: { params: { firmId: string }
       )}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

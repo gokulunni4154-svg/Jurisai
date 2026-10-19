@@ -68,7 +68,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Badge, type BadgeProps } from '@/shared/components/ui/badge';
 
 interface FirmCase {
   id: string;
@@ -139,6 +140,38 @@ function shortId(id: string): string {
   return id.slice(0, 8);
 }
 
+function caseStatusVariant(status: string): BadgeProps['variant'] {
+  switch (status) {
+    case 'open':
+      return 'info';
+    case 'closed':
+      return 'neutral';
+    default:
+      return 'outline';
+  }
+}
+
+function taskStatusVariant(status: string): BadgeProps['variant'] {
+  switch (status) {
+    case 'in_progress':
+      return 'warning';
+    case 'done':
+      return 'success';
+    default:
+      return 'neutral';
+  }
+}
+
+/** Today as YYYY-MM-DD in the viewer's local time zone (for due-date comparison). */
+function localToday(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
+/** A task is overdue when it has a due date before today and is not done. */
+function isOverdue(task: FirmTask, today: string): boolean {
+  return task.due_date !== null && task.status !== 'done' && task.due_date.slice(0, 10) < today;
+}
+
 export default function FirmDashboardPage({ params }: { params: { firmId: string } }) {
   const firmId = params.firmId;
 
@@ -176,56 +209,58 @@ export default function FirmDashboardPage({ params }: { params: { firmId: string
   }, [loadDashboard]);
 
   const headerTitle = `Firm ${shortId(firmId)}`;
+  const today = localToday();
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="dashboard" terminal="firm" firmId={firmId} />
+    <AppShell active="dashboard" terminal="firm" firmId={firmId}>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl px-6 py-10">
+        <div className="mx-auto max-w-6xl px-6 py-10">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
           {headerTitle}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">Firm dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">Firm dashboard</h1>
+        <p className="mt-1 text-ui text-muted-foreground">
           Firm-wide cases, tasks, and upcoming hearings -- visible only to firm owners and admins.
         </p>
       </div>
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : forbidden ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           The firm dashboard is only visible to this firm&apos;s owner or admins.
         </div>
       ) : error ? (
-        <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       ) : data ? (
         <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
           {/* Cases */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Cases <span className="font-normal text-slate-400">({data.firmCases.length})</span>
+            <h2 className="text-subsection font-semibold text-foreground">
+              Cases <span className="font-normal text-muted-foreground">({data.firmCases.length})</span>
             </h2>
 
             {data.firmCases.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No cases yet.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No cases yet.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {data.firmCases.map((c) => (
                   <li
                     key={c.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-border bg-card px-4 py-3"
                   >
-                    <p className="text-sm font-medium text-slate-900">{c.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {c.status} · {formatDate(c.created_at)}
-                    </p>
+                    <p className="text-ui font-medium text-foreground">{c.title}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-meta text-muted-foreground">
+                      <Badge variant={caseStatusVariant(c.status)}>{c.status}</Badge>
+                      <span>Opened {formatDate(c.created_at)}</span>
+                      {c.team_id === null && <Badge variant="outline">No team</Badge>}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -234,25 +269,27 @@ export default function FirmDashboardPage({ params }: { params: { firmId: string
 
           {/* Tasks */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Tasks <span className="font-normal text-slate-400">({data.firmTasks.length})</span>
+            <h2 className="text-subsection font-semibold text-foreground">
+              Tasks <span className="font-normal text-muted-foreground">({data.firmTasks.length})</span>
             </h2>
 
             {data.firmTasks.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No tasks yet.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No tasks yet.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {data.firmTasks.map((t) => (
                   <li
                     key={t.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-border bg-card px-4 py-3"
                   >
-                    <p className="text-sm font-medium text-slate-900">{t.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {t.status}
-                      {t.due_date ? ` · due ${formatDate(t.due_date)}` : ''}
-                      {t.case_id ? '' : ' · standalone'}
-                    </p>
+                    <p className="text-ui font-medium text-foreground">{t.title}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-meta text-muted-foreground">
+                      <Badge variant={taskStatusVariant(t.status)}>{t.status}</Badge>
+                      {t.due_date && <span>Due {formatDate(t.due_date)}</span>}
+                      {isOverdue(t, today) && <Badge variant="destructive">Overdue</Badge>}
+                      {t.assignee_profile_id === null && <Badge variant="outline">Unassigned</Badge>}
+                      {t.case_id === null && <Badge variant="outline">Standalone</Badge>}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -261,22 +298,22 @@ export default function FirmDashboardPage({ params }: { params: { firmId: string
 
           {/* Upcoming hearings */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-subsection font-semibold text-foreground">
               Upcoming hearings{' '}
-              <span className="font-normal text-slate-400">({data.upcomingHearings.length})</span>
+              <span className="font-normal text-muted-foreground">({data.upcomingHearings.length})</span>
             </h2>
 
             {data.upcomingHearings.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No upcoming hearings.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No upcoming hearings.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {data.upcomingHearings.map((h) => (
                   <li
                     key={h.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-border bg-card px-4 py-3"
                   >
-                    <p className="text-sm font-medium text-slate-900">{h.hearing_type}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="text-ui font-medium text-foreground">{h.hearing_type}</p>
+                    <p className="mt-1 text-meta text-muted-foreground">
                       {formatTimestamp(h.hearing_date)}
                       {h.court_name ? ` · ${h.court_name}` : ''}
                     </p>
@@ -289,6 +326,6 @@ export default function FirmDashboardPage({ params }: { params: { firmId: string
       ) : null}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

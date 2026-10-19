@@ -1,12 +1,10 @@
 import { headers } from 'next/headers';
 import type { Metadata, Viewport } from 'next';
+import { GeistSans } from 'geist/font/sans';
 
 import { ThemeProvider } from '@/shared/components/theme-provider';
 
 import './globals.css';
-
-const inter = { variable: '--font-sans' };
-const newsreader = { variable: '--font-serif' };
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -32,8 +30,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b1220' },
+    { media: '(prefers-color-scheme: light)', color: '#F7F8FA' },
+    { media: '(prefers-color-scheme: dark)', color: '#111827' },
   ],
 };
 
@@ -57,7 +55,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${newsreader.variable}`}
+      className={GeistSans.variable}
       suppressHydrationWarning
     >
       <body className="min-h-screen font-sans antialiased">

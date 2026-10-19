@@ -43,6 +43,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Bell, Loader2, X } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
 
 interface NotificationRow {
   id: string;
@@ -129,6 +130,16 @@ export function NotificationsPanel({ isOpen, onClose, onUnreadCountChange }: Not
     }
   }, [isOpen, fetchNotifications]);
 
+  // Escape closes the panel.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
+
   // FLAGGED — see file-level comment: request/response shape assumed
   // from PATCH /api/documents/[id]'s confirmed convention, NOT from this
   // specific route's real source.
@@ -162,14 +173,14 @@ export function NotificationsPanel({ isOpen, onClose, onUnreadCountChange }: Not
 
   return (
     <div
-      className="absolute bottom-0 left-16 z-50 flex h-screen w-80 flex-col border-r border-border bg-card shadow-lg"
+      className="absolute inset-y-0 left-0 z-50 flex w-80 max-w-full flex-col border-r border-border bg-card shadow-lg"
       role="dialog"
       aria-label="Notifications"
     >
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-2">
           <Bell className="h-4 w-4 text-primary" strokeWidth={1.75} />
-          <h2 className="font-serif text-[16px] text-foreground">Notifications</h2>
+          <h2 className="text-subsection text-foreground">Notifications</h2>
         </div>
         <div className="flex items-center gap-1">
           {/*
@@ -180,45 +191,45 @@ export function NotificationsPanel({ isOpen, onClose, onUnreadCountChange }: Not
             history. Placed here, next to Close, since this dropdown is
             the natural entry point into a view it can't itself provide.
           */}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               onClose();
               router.push('/lawyer/notifications');
             }}
-            className="rounded-md px-2 py-1 text-[12px] font-medium text-primary hover:bg-muted/50"
+            className="text-primary hover:text-primary"
           >
             View all
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
             aria-label="Close notifications"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+          <div role="status" className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <p className="text-[13px]">Loading…</p>
+            <p className="text-meta">Loading…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-5 py-16 text-destructive">
+          <div role="alert" className="flex flex-col items-center justify-center gap-3 px-5 py-16 text-destructive">
             <AlertCircle className="h-5 w-5" />
-            <p className="text-center text-[13px]">{loadError}</p>
-            <button
-              onClick={fetchNotifications}
-              className="text-[13px] font-medium underline underline-offset-2"
-            >
+            <p className="text-center text-meta">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={fetchNotifications}>
               Retry
-            </button>
+            </Button>
           </div>
         ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-5 py-16 text-muted-foreground">
-            <p className="text-[13px]">No notifications yet.</p>
+            <p className="text-meta">No notifications yet.</p>
           </div>
         ) : (
           <div className="flex flex-col divide-y divide-border">
@@ -226,18 +237,21 @@ export function NotificationsPanel({ isOpen, onClose, onUnreadCountChange }: Not
               <button
                 key={n.id}
                 onClick={() => n.read_at === null && handleMarkRead(n.id)}
-                className={`flex flex-col items-start gap-1 px-5 py-3 text-left transition-colors hover:bg-muted/50 ${
-                  n.read_at === null ? 'bg-primary/5' : ''
+                className={`flex flex-col items-start gap-1 px-5 py-3 text-left transition-colors hover:bg-muted ${
+                  n.read_at === null ? 'bg-accent' : ''
                 }`}
               >
                 <div className="flex w-full items-center justify-between gap-2">
-                  <p className="text-[13px] font-medium text-foreground">{n.title}</p>
+                  <p className="text-meta font-medium text-foreground">
+                    {n.read_at === null && <span className="sr-only">Unread: </span>}
+                    {n.title}
+                  </p>
                   {n.read_at === null && (
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-label="Unread" />
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                   )}
                 </div>
-                <p className="text-[12px] leading-relaxed text-muted-foreground">{n.message}</p>
-                <div className="flex w-full items-center justify-between text-[11px] text-muted-foreground/70">
+                <p className="text-caption leading-relaxed text-muted-foreground">{n.message}</p>
+                <div className="flex w-full items-center justify-between text-caption text-muted-foreground">
                   <span>{formatRelativeTime(n.created_at)}</span>
                   {markingReadIds.has(n.id) && <Loader2 className="h-3 w-3 animate-spin" />}
                 </div>

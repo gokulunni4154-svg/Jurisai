@@ -68,7 +68,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, BadgeCheck, FileSearch, Loader2, Scale, Search } from 'lucide-react';
 
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Button } from '@/shared/components/ui/button';
 
 // Mirrors LawyerDirectoryService's VerifiedLawyerListing DTO exactly
 // (real, confirmed source this session) — camelCase, no extra fields.
@@ -122,13 +123,11 @@ export default function FindALawyerPage() {
   }, []);
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="lawyers" terminal="general" />
-
+    <AppShell active="lawyers" terminal="general">
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="border-b border-border bg-background px-8 py-6">
-          <h1 className="text-[22px] font-semibold leading-tight text-foreground">Find a Lawyer</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
+          <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">Find a Lawyer</h1>
+          <p className="mt-1 max-w-2xl text-ui text-muted-foreground">
             Browse verified legal professionals on JurisAI. You don&apos;t need a document analysis
             to look around — when you&apos;re ready to reach out, contact a lawyer directly from any
             of your documents.
@@ -139,12 +138,12 @@ export default function FindALawyerPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading the lawyer directory…</p>
+              <p className="text-ui">Loading the lawyer directory…</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertTriangle className="h-5 w-5" />
-              <p className="text-[13px]">{error}</p>
+              <p className="text-ui">{error}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_320px]">
@@ -152,10 +151,10 @@ export default function FindALawyerPage() {
                 {!lawyers || lawyers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background py-24 text-center">
                     <Search className="h-5 w-5 text-muted-foreground" />
-                    <p className="text-[13.5px] font-medium text-foreground">
+                    <p className="text-ui font-medium text-foreground">
                       No verified lawyers yet
                     </p>
-                    <p className="max-w-sm text-[12.5px] text-muted-foreground">
+                    <p className="max-w-sm text-meta text-muted-foreground">
                       Nobody has completed professional verification on JurisAI yet. Check back
                       soon — this list only ever shows lawyers JurisAI has actually verified.
                     </p>
@@ -170,32 +169,34 @@ export default function FindALawyerPage() {
                           className="flex flex-col gap-3 rounded-lg border border-border bg-background p-4"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[13px] font-semibold text-primary">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-ui font-semibold text-accent-foreground">
                               {initials(lawyer.fullName)}
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate text-[13.5px] font-semibold text-foreground">
+                              <p className="truncate text-ui font-semibold text-foreground">
                                 {lawyer.fullName}
                               </p>
-                              <p className="truncate text-[11.5px] text-muted-foreground">
+                              <p className="truncate text-caption text-muted-foreground">
                                 Reg. No. {lawyer.registrationNumber}
                               </p>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 text-[11.5px] text-success">
+                          <div className="flex items-center gap-1.5 text-caption text-success">
                             <BadgeCheck className="h-3.5 w-3.5" />
                             <span>
                               Verified lawyer{verifiedLabel ? ` · since ${verifiedLabel}` : ''}
                             </span>
                           </div>
 
-                          <button
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => router.push('/general-user/documents')}
-                            className="mt-auto rounded-md border border-border px-3 py-2 text-left text-[12px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                            className="mt-auto justify-start"
                           >
                             Contact via one of your documents →
-                          </button>
+                          </Button>
                         </div>
                       );
                     })}
@@ -209,26 +210,27 @@ export default function FindALawyerPage() {
                 <div className="rounded-lg border border-border bg-background p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <Scale className="h-4 w-4 text-primary" />
-                    <p className="text-[13px] font-semibold text-foreground">How contact works</p>
+                    <p className="text-ui font-semibold text-foreground">How contact works</p>
                   </div>
-                  <p className="mb-3 text-[12.5px] text-muted-foreground">
+                  <p className="mb-3 text-meta text-muted-foreground">
                     JurisAI connects you with a lawyer through a specific document. Open a document
                     with a completed Legal Health Score, then use Contact a Lawyer to reach a
                     verified firm about it.
                   </p>
-                  <button
+                  <Button
+                    size="sm"
                     onClick={() => router.push('/general-user/documents')}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-[12.5px] font-medium text-primary-foreground"
+                    className="w-full"
                   >
                     <FileSearch className="h-3.5 w-3.5" />
                     Go to your documents
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
           )}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

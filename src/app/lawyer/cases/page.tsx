@@ -93,11 +93,21 @@ import {
   AlertCircle,
   Inbox,
   Gavel,
-  X,
   ChevronDown,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { Button } from '@/shared/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog';
+import { Input } from '@/shared/components/ui/input';
+import { FieldError, Label } from '@/shared/components/ui/label';
 
 interface MatterRow {
   id: string;
@@ -138,13 +148,13 @@ function statusBadgeClass(status: string): string {
   switch (status) {
     case 'open':
     case 'pending':
-      return 'bg-primary/10 text-primary';
+      return 'bg-accent text-accent-foreground';
     case 'won':
     case 'settled':
-      return 'bg-emerald-500/10 text-emerald-700';
+      return 'bg-success-subtle text-success-subtle-foreground';
     case 'lost':
     case 'withdrawn':
-      return 'bg-destructive/10 text-destructive';
+      return 'bg-destructive-subtle text-destructive-subtle-foreground';
     default:
       return 'bg-muted text-muted-foreground';
   }
@@ -234,64 +244,55 @@ function NewMatterModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 px-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-serif text-[19px] text-foreground">New matter</h2>
-          <button
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        // The previous modal never closed on backdrop click; keep that so a
+        // stray click cannot discard a half-typed title.
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>New matter</DialogTitle>
+          <DialogDescription className="sr-only">Create a new matter by giving it a title.</DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="matter-title" className="mb-1.5 block text-[13px] font-medium text-foreground">
-              Matter title
-            </label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="matter-title">Matter title</Label>
+            <Input
               id="matter-title"
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Sharma vs. Patel — Property Dispute"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-invalid={error ? true : undefined}
             />
           </div>
 
           {error && (
-            <div
-              role="alert"
-              className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12px] text-destructive"
-            >
+            <FieldError role="alert" className="flex items-center gap-2">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               {error}
-            </div>
+            </FieldError>
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-            >
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {isSubmitting ? 'Creating…' : 'Create matter'}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -307,6 +308,19 @@ export default function MattersPage() {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+
+  // Status filter menu: Escape closes it and returns focus to its trigger.
+  useEffect(() => {
+    if (!isStatusMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsStatusMenuOpen(false);
+        document.querySelector<HTMLElement>('[data-status-menu-trigger]')?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isStatusMenuOpen]);
   const [isNewMatterOpen, setIsNewMatterOpen] = useState(false);
 
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
@@ -389,9 +403,7 @@ export default function MattersPage() {
   };
 
   return (
-    <div className="relative flex h-screen w-full bg-background font-sans text-foreground">
-      <AppSidebar active="matters" terminal="lawyer" />
-
+    <AppShell active="matters" terminal="lawyer">
       <NotificationsPanel
         isOpen={isNotificationsPanelOpen}
         onClose={() => setIsNotificationsPanelOpen(false)}
@@ -406,31 +418,38 @@ export default function MattersPage() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex flex-col gap-4 border-b border-border px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="mb-1 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">
               JurisAI
             </p>
-            <h1 className="font-serif text-[26px] leading-none text-foreground">Matters</h1>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-page-title text-foreground">Matters</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={2} />
-              <input
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search title, case no., client"
-                className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none sm:w-56"
+                aria-label="Search title, case no., client"
+                className="w-full pl-9 sm:w-64"
               />
             </div>
 
             <div className="relative">
-              <button
+              <Button variant="outline" className="font-normal"
                 onClick={() => setIsStatusMenuOpen((prev) => !prev)}
-                className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground"
                 aria-expanded={isStatusMenuOpen}
+                aria-haspopup="true"
+                data-status-menu-trigger
               >
                 {statusFilter ? statusLabel(statusFilter) : 'All statuses'}
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
-              </button>
+              </Button>
               {isStatusMenuOpen && (
                 <>
                   <button
@@ -445,7 +464,7 @@ export default function MattersPage() {
                         setStatusFilter(null);
                         setIsStatusMenuOpen(false);
                       }}
-                      className={`block w-full px-3 py-1.5 text-left text-[13px] hover:bg-muted ${
+                      className={`block w-full px-3 py-1.5 text-left text-ui hover:bg-muted ${
                         statusFilter === null ? 'font-medium text-foreground' : 'text-muted-foreground'
                       }`}
                     >
@@ -458,7 +477,7 @@ export default function MattersPage() {
                           setStatusFilter(s);
                           setIsStatusMenuOpen(false);
                         }}
-                        className={`block w-full px-3 py-1.5 text-left text-[13px] hover:bg-muted ${
+                        className={`block w-full px-3 py-1.5 text-left text-ui hover:bg-muted ${
                           statusFilter === s ? 'font-medium text-foreground' : 'text-muted-foreground'
                         }`}
                       >
@@ -470,16 +489,14 @@ export default function MattersPage() {
               )}
             </div>
 
-            <button
+            <Button
               onClick={() => setIsNewMatterOpen(true)}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
               New matter
-            </button>
-            <button
+            </Button>
+            <Button variant="outline" size="icon" className="relative"
               onClick={() => setIsNotificationsPanelOpen((prev) => !prev)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
               aria-label="Notifications"
               aria-expanded={isNotificationsPanelOpen}
             >
@@ -489,7 +506,7 @@ export default function MattersPage() {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -497,32 +514,31 @@ export default function MattersPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your matters…</p>
+              <p className="text-ui">Loading your matters…</p>
             </div>
           ) : forbidden ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-24 text-muted-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">You don&apos;t have access to this page.</p>
+              <p className="text-ui">You don&apos;t have access to this page.</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{error}</p>
+              <p className="text-ui">{error}</p>
             </div>
           ) : filteredMatters.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-24 text-muted-foreground">
               <Inbox className="h-6 w-6" />
-              <p className="text-[13px]">
+              <p className="text-ui">
                 {q || statusFilter ? 'No matters match your search.' : 'No matters yet.'}
               </p>
               {!q && !statusFilter && (
-                <button
+                <Button
                   onClick={() => setIsNewMatterOpen(true)}
-                  className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" strokeWidth={2} />
                   Create your first matter
-                </button>
+                </Button>
               )}
             </div>
           ) : (
@@ -535,25 +551,25 @@ export default function MattersPage() {
                     onClick={() => router.push(`/lawyer/cases/${m.id}`)}
                     className="flex flex-col gap-3 px-5 py-4 text-left transition-colors hover:bg-muted sm:flex-row sm:items-center sm:gap-4"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                      <FileText className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                      <FileText className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[14px] font-medium text-foreground">{m.title}</p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+                      <p className="truncate text-ui font-medium text-foreground">{m.title}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-muted-foreground">
                         {m.case_number && <span>{m.case_number}</span>}
                         <span>{m.client_full_name ?? 'No client on file'}</span>
                         <span>Updated {formatDate(m.updated_at)}</span>
                       </p>
                     </div>
                     {nextHearing && (
-                      <div className="flex shrink-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+                      <div className="flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">
                         <Gavel className="h-3.5 w-3.5" strokeWidth={1.5} />
                         {nextHearing.hearing_type} · {formatDate(nextHearing.hearing_date)}
                       </div>
                     )}
                     <span
-                      className={`shrink-0 self-start rounded-full px-2.5 py-1 text-[11px] font-medium sm:self-auto ${statusBadgeClass(
+                      className={`shrink-0 self-start rounded-full px-2.5 py-1 text-caption font-medium sm:self-auto ${statusBadgeClass(
                         m.status,
                       )}`}
                     >
@@ -566,6 +582,6 @@ export default function MattersPage() {
           )}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

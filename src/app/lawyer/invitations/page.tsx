@@ -85,8 +85,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, Bell, Briefcase, Loader2, Mail, UserSquare2 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { Button } from '@/shared/components/ui/button';
 
 // Mirrors firm-invitation.service.ts's PendingFirmInvitation /
 // team-invitation.service.ts's PendingTeamInvitation DTOs field-for-
@@ -221,30 +222,27 @@ export default function InvitationsPage() {
   const totalCount = firmInvitations.length + teamInvitations.length;
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="invitations" terminal="lawyer" />
-
+    <AppShell active="invitations" terminal="lawyer">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-background px-8 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
               <Mail className="h-5 w-5 text-primary" strokeWidth={1.75} />
             </div>
             <div>
-              <h1 className="text-[19px] font-semibold leading-tight text-foreground">
+              <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">
                 My Invitations
               </h1>
-              <p className="text-[12.5px] text-muted-foreground">
+              <p className="text-meta text-muted-foreground">
                 Pending firm and team invitations addressed to you.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            <Button variant="outline" size="icon" className="relative"
               onClick={() => setIsNotificationsPanelOpen((v) => !v)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />
@@ -253,7 +251,7 @@ export default function InvitationsPage() {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -267,15 +265,15 @@ export default function InvitationsPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your invitations…</p>
+              <p className="text-ui">Loading your invitations…</p>
             </div>
           ) : loadError ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{loadError}</p>
+              <p className="text-ui">{loadError}</p>
               <button
                 onClick={loadInvitations}
-                className="text-[13px] font-medium underline underline-offset-2"
+                className="text-ui font-medium underline underline-offset-2"
               >
                 Retry
               </button>
@@ -283,7 +281,7 @@ export default function InvitationsPage() {
           ) : (
             <div className="mx-auto flex max-w-3xl flex-col gap-8">
               {actionError && (
-                <div className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                <div className="flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-meta text-destructive-subtle-foreground">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                   {actionError}
                 </div>
@@ -292,7 +290,7 @@ export default function InvitationsPage() {
               {totalCount === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card px-6 py-16 text-muted-foreground">
                   <Mail className="h-6 w-6" strokeWidth={1.5} />
-                  <p className="text-[13px]">You don&apos;t have any pending invitations.</p>
+                  <p className="text-ui">You don&apos;t have any pending invitations.</p>
                 </div>
               ) : (
                 <>
@@ -300,16 +298,16 @@ export default function InvitationsPage() {
                   <section className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
                       <Briefcase className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
-                      <h2 className="text-[13.5px] font-medium text-foreground">
+                      <h2 className="text-ui font-medium text-foreground">
                         Firm invitations
                       </h2>
-                      <span className="rounded-full bg-muted px-1.5 text-[11px] text-muted-foreground">
+                      <span className="rounded-full bg-muted px-1.5 text-caption text-muted-foreground">
                         {firmInvitations.length}
                       </span>
                     </div>
 
                     {firmInvitations.length === 0 ? (
-                      <p className="rounded-lg border border-border bg-card px-4 py-3 text-[12.5px] text-muted-foreground">
+                      <p className="rounded-lg border border-border bg-card px-4 py-3 text-meta text-muted-foreground">
                         No pending firm invitations.
                       </p>
                     ) : (
@@ -322,10 +320,10 @@ export default function InvitationsPage() {
                               className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card px-6 py-5"
                             >
                               <div className="min-w-0">
-                                <p className="truncate text-[13.5px] font-medium text-foreground">
+                                <p className="truncate text-ui font-medium text-foreground">
                                   {invitation.firmName}
                                 </p>
-                                <p className="text-[12px] text-muted-foreground">
+                                <p className="text-meta text-muted-foreground">
                                   Invited as {ROLE_LABELS[invitation.role]}
                                   {invitation.invitedByName ? ` by ${invitation.invitedByName}` : ''}{' '}
                                   · {formatTimestamp(invitation.created_at)}
@@ -334,7 +332,7 @@ export default function InvitationsPage() {
                               <button
                                 onClick={() => handleAcceptFirm(invitation.id)}
                                 disabled={isBusy}
-                                className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                                 Accept
@@ -350,16 +348,16 @@ export default function InvitationsPage() {
                   <section className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
                       <UserSquare2 className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
-                      <h2 className="text-[13.5px] font-medium text-foreground">
+                      <h2 className="text-ui font-medium text-foreground">
                         Team invitations
                       </h2>
-                      <span className="rounded-full bg-muted px-1.5 text-[11px] text-muted-foreground">
+                      <span className="rounded-full bg-muted px-1.5 text-caption text-muted-foreground">
                         {teamInvitations.length}
                       </span>
                     </div>
 
                     {teamInvitations.length === 0 ? (
-                      <p className="rounded-lg border border-border bg-card px-4 py-3 text-[12.5px] text-muted-foreground">
+                      <p className="rounded-lg border border-border bg-card px-4 py-3 text-meta text-muted-foreground">
                         No pending team invitations.
                       </p>
                     ) : (
@@ -372,10 +370,10 @@ export default function InvitationsPage() {
                               className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card px-6 py-5"
                             >
                               <div className="min-w-0">
-                                <p className="truncate text-[13.5px] font-medium text-foreground">
+                                <p className="truncate text-ui font-medium text-foreground">
                                   {invitation.teamName}
                                 </p>
-                                <p className="text-[12px] text-muted-foreground">
+                                <p className="text-meta text-muted-foreground">
                                   {invitation.firmName}
                                   {invitation.invitedByName
                                     ? ` · Invited by ${invitation.invitedByName}`
@@ -386,7 +384,7 @@ export default function InvitationsPage() {
                               <button
                                 onClick={() => handleAcceptTeam(invitation.id)}
                                 disabled={isBusy}
-                                className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                                 Accept
@@ -403,6 +401,6 @@ export default function InvitationsPage() {
           )}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

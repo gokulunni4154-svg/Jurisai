@@ -33,6 +33,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
+import { Label } from '@/shared/components/ui/label';
 
 interface ClientRow {
   id: string;
@@ -146,84 +149,86 @@ export default function FirmClientDetailPage({
       <div>
         <Link
           href={`/firm/${firmId}/clients`}
-          className="text-xs font-medium uppercase tracking-wide text-slate-500 hover:text-slate-700"
+          className="text-caption font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
         >
           ← All clients
         </Link>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">
+        <h1 className="mt-1 text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">
           {client ? client.full_name : 'Client'}
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-ui text-muted-foreground">
           Visible and editable only by this firm&apos;s owner or admins.
         </p>
       </div>
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : forbidden ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           This client record is only visible to this firm&apos;s owner or admins.
         </div>
       ) : notFound ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           This client record could not be found.
         </div>
       ) : error ? (
-        <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       ) : client ? (
         <div className="mt-6 space-y-6">
           <form
             onSubmit={handleSave}
-            className="space-y-4 rounded-md border border-slate-200 bg-white px-4 py-4"
+            className="space-y-4 rounded-md border border-border bg-card px-4 py-4"
           >
             <div>
-              <label className="text-xs font-medium text-slate-500">Full name</label>
-              <input
+              <Label htmlFor="client-full-name" className="text-meta text-muted-foreground">Full name</Label>
+              <Input
+                id="client-full-name"
+                className="mt-1"
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500">Email</label>
-              <input
+              <Label htmlFor="client-email" className="text-meta text-muted-foreground">Email</Label>
+              <Input
+                id="client-email"
+                className="mt-1"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500">Phone</label>
-              <input
+              <Label htmlFor="client-phone" className="text-meta text-muted-foreground">Phone</Label>
+              <Input
+                id="client-phone"
+                className="mt-1"
                 type="text"
                 placeholder="Not provided"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
               />
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
-              {saveError && <p className="text-xs text-red-700">{saveError}</p>}
-              {saved && !saveError && <p className="text-xs text-slate-500">Saved.</p>}
-              <button
+            <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+              {saveError && <p className="text-meta text-destructive">{saveError}</p>}
+              {saved && !saveError && <p className="text-meta text-muted-foreground">Saved.</p>}
+              <Button
                 type="submit"
                 disabled={saving || fullName.trim().length === 0 || email.trim().length === 0}
-                className="rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Save changes'}
-              </button>
+              </Button>
             </div>
           </form>
 
-          <section className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+          <section className="rounded-md border border-border bg-muted px-4 py-3 text-meta text-muted-foreground">
             <p>Portal access: {client.profile_id ? 'Linked' : 'Not yet linked'}</p>
             <p className="mt-1">Added {formatTimestamp(client.created_at)}</p>
             <p className="mt-1">Last updated {formatTimestamp(client.updated_at)}</p>

@@ -5,6 +5,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, AlertCircle, Users } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table';
 
 // Same mirrored-shapes convention as src/app/observability/admin/page.tsx
 // (this page's own confirmed template) — the client-side type below
@@ -107,11 +115,11 @@ function RolePill({ role }: { role: UserRole | null }) {
   }
 
   const styles: Record<UserRole, string> = {
-    admin: 'bg-violet-500/10 text-violet-600',
-    support: 'bg-sky-500/10 text-sky-600',
-    law_firm: 'bg-emerald-500/10 text-emerald-600',
-    lawyer: 'bg-emerald-500/10 text-emerald-600',
-    business: 'bg-amber-500/10 text-amber-600',
+    admin: 'bg-accent text-accent-foreground',
+    support: 'bg-info-subtle text-info-subtle-foreground',
+    law_firm: 'bg-success-subtle text-success-subtle-foreground',
+    lawyer: 'bg-success-subtle text-success-subtle-foreground',
+    business: 'bg-warning-subtle text-warning-subtle-foreground',
     individual: 'bg-muted text-muted-foreground',
   };
 
@@ -228,7 +236,7 @@ export default function UserManagementAdminPage() {
           Every account on the platform, with role, verification, and sign-in activity.
         </p>
         <div className="mt-4">
-          <input
+          <input aria-label="Search by name or phone"
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
@@ -240,7 +248,7 @@ export default function UserManagementAdminPage() {
 
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {actionError && (
-          <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-[13px] text-destructive-subtle-foreground">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{actionError}</span>
           </div>
@@ -251,7 +259,7 @@ export default function UserManagementAdminPage() {
             <p className="text-[13px]">Loading users…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
             <p className="text-[13px]">{loadError}</p>
             <button
@@ -268,65 +276,65 @@ export default function UserManagementAdminPage() {
         ) : (
           <>
             <div className="overflow-hidden rounded-lg border">
-              <table className="w-full text-left text-[13px]">
-                <thead className="bg-muted/50 text-[12px] font-medium text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2.5">Name</th>
-                    <th className="px-4 py-2.5">Email</th>
-                    <th className="px-4 py-2.5">Role</th>
-                    <th className="px-4 py-2.5">Phone</th>
-                    <th className="px-4 py-2.5">Firm</th>
-                    <th className="px-4 py-2.5">Verified</th>
-                    <th className="px-4 py-2.5">Last Sign-in</th>
-                    <th className="px-4 py-2.5">Joined</th>
-                    <th className="px-4 py-2.5">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+              <Table className="text-meta">
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="px-4">Name</TableHead>
+                    <TableHead className="px-4">Email</TableHead>
+                    <TableHead className="px-4">Role</TableHead>
+                    <TableHead className="px-4">Phone</TableHead>
+                    <TableHead className="px-4">Firm</TableHead>
+                    <TableHead className="px-4">Verified</TableHead>
+                    <TableHead className="px-4">Last Sign-in</TableHead>
+                    <TableHead className="px-4">Joined</TableHead>
+                    <TableHead className="px-4">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {rows.map((row) => (
-                    <tr key={row.id}>
-                      <td className="px-4 py-2.5">{row.fullName ?? '—'}</td>
-                      <td className="px-4 py-2.5">{row.email ?? '—'}</td>
-                      <td className="px-4 py-2.5">
+                    <TableRow key={row.id}>
+                      <TableCell className="px-4">{row.fullName ?? '—'}</TableCell>
+                      <TableCell className="px-4">{row.email ?? '—'}</TableCell>
+                      <TableCell className="px-4">
                         <RolePill role={row.role} />
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">{row.phone ?? '—'}</td>
-                      <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap">{row.phone ?? '—'}</TableCell>
+                      <TableCell className="px-4 font-mono text-[11px] text-muted-foreground">
                         {row.firmId ?? '—'}
-                      </td>
-                      <td className="px-4 py-2.5">
+                      </TableCell>
+                      <TableCell className="px-4">
                         {row.emailVerified === null ? '—' : row.emailVerified ? 'Yes' : 'No'}
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                         {formatTimestamp(row.lastSignInAt)}
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                         {formatTimestamp(row.createdAt)}
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">
+                      </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap">
                         {actioningIds.has(row.id) ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                         ) : (
                           <div className="flex gap-3">
                             <button
                               onClick={() => handleAction(row.id, 'suspend')}
-                              className="text-[12px] font-medium text-red-600 hover:text-red-800"
+                              className="text-[12px] font-medium text-destructive hover:underline"
                             >
                               Suspend
                             </button>
                             <button
                               onClick={() => handleAction(row.id, 'reactivate')}
-                              className="text-[12px] font-medium text-emerald-600 hover:text-emerald-800"
+                              className="text-[12px] font-medium text-success hover:underline"
                             >
                               Reactivate
                             </button>
                           </div>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
             <div className="mt-4 flex items-center justify-between text-[13px] text-muted-foreground">

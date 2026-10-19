@@ -117,7 +117,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Badge, type BadgeProps } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Select } from '@/shared/components/ui/input';
 
 type FirmRole = 'owner' | 'admin' | 'employee' | 'lawyer';
 
@@ -173,17 +176,14 @@ interface FirmInvitationRow {
 
 const ALLOWED_INVITE_ROLES: readonly FirmRole[] = ['owner', 'admin', 'employee', 'lawyer'];
 
-function invitationStatusClasses(status: string): string {
+function invitationStatusVariant(status: string): BadgeProps['variant'] {
   switch (status) {
     case 'pending':
-      return 'border-amber-200 bg-amber-50 text-amber-700';
+      return 'warning';
     case 'accepted':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-    case 'revoked':
-    case 'expired':
-      return 'border-slate-200 bg-slate-100 text-slate-500';
+      return 'success';
     default:
-      return 'border-slate-200 bg-slate-100 text-slate-500';
+      return 'neutral';
   }
 }
 
@@ -471,111 +471,110 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
   const headerTitle = firm ? firm.name : `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="settings" terminal="firm" firmId={firmId} />
+    <AppShell active="settings" terminal="firm" firmId={firmId}>
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
           {headerTitle}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">Firm settings</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">Firm settings</h1>
+        <p className="mt-1 text-ui text-muted-foreground">
           Manage firm details and membership -- visible only to firm owners and admins.
         </p>
       </div>
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : forbidden ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           Firm settings are only visible to this firm&apos;s owner or admins.
         </div>
       ) : error ? (
-        <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       ) : firm ? (
         <div className="mt-6 space-y-10">
           {/* Rename */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">Firm name</h2>
+            <h2 className="text-subsection font-semibold text-foreground">Firm name</h2>
             <form onSubmit={handleRename} className="mt-3 flex items-start gap-3">
               <div className="flex-1">
-                <input
+                <Input aria-label="Firm name"
                   type="text"
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
                   maxLength={255}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
                 />
-                {nameError && <p className="mt-2 text-xs text-red-700">{nameError}</p>}
+                {nameError && <p className="mt-2 text-meta text-destructive">{nameError}</p>}
               </div>
-              <button
+              <Button
                 type="submit"
                 disabled={savingName || nameInput.trim().length === 0}
-                className="rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {savingName ? 'Saving…' : 'Save'}
-              </button>
+              </Button>
             </form>
           </section>
 
           {/* Members */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Members <span className="font-normal text-slate-400">({members.length})</span>
+            <h2 className="text-subsection font-semibold text-foreground">
+              Members <span className="font-normal text-muted-foreground">({members.length})</span>
             </h2>
 
             {members.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No members yet.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No members yet.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {members.map((m) => (
                   <li
                     key={m.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-border bg-card px-4 py-3"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-medium text-slate-900">
+                        <p className="text-ui font-medium text-foreground">
                           {m.profile?.full_name ?? shortId(m.profile_id)}
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-meta text-muted-foreground">
                           Joined {formatTimestamp(m.created_at)}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <select
+                        <Select aria-label="Member role"
+                          className="h-8 w-auto text-meta"
                           value={m.role}
                           disabled={rowBusy[m.id]}
                           onChange={(e) => handleRoleChange(m, e.target.value as FirmRole)}
-                          className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-50"
                         >
                           {FIRM_ROLE_VALUES.map((role) => (
                             <option key={role} value={role}>
                               {role}
                             </option>
                           ))}
-                        </select>
+                        </Select>
 
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-destructive text-destructive hover:text-destructive"
                           type="button"
                           disabled={rowBusy[m.id]}
                           onClick={() => handleRemove(m)}
-                          className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-50"
                         >
                           Remove
-                        </button>
+                        </Button>
                       </div>
                     </div>
 
                     {rowError[m.id] && (
-                      <p className="mt-2 text-xs text-red-700">{rowError[m.id]}</p>
+                      <p className="mt-2 text-meta text-destructive">{rowError[m.id]}</p>
                     )}
                   </li>
                 ))}
@@ -585,59 +584,58 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
             {/* Add member */}
             <form
               onSubmit={handleAddMember}
-              className="mt-4 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3"
+              className="mt-4 flex items-start gap-2 rounded-md border border-border bg-muted px-4 py-3"
             >
-              <input
+              <Input aria-label="Profile ID"
+                className="flex-1"
                 type="text"
                 placeholder="Profile ID"
                 value={newProfileId}
                 onChange={(e) => setNewProfileId(e.target.value)}
-                className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
               />
-              <select
+              <Select aria-label="Role for new member"
+                className="w-auto"
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value as FirmRole)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900"
               >
                 {FIRM_ROLE_VALUES.map((role) => (
                   <option key={role} value={role}>
                     {role}
                   </option>
                 ))}
-              </select>
-              <button
+              </Select>
+              <Button
                 type="submit"
                 disabled={addingMember || newProfileId.trim().length === 0}
-                className="rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {addingMember ? 'Adding…' : 'Add'}
-              </button>
+              </Button>
             </form>
-            {addMemberError && <p className="mt-2 text-xs text-red-700">{addMemberError}</p>}
+            {addMemberError && <p className="mt-2 text-meta text-destructive">{addMemberError}</p>}
           </section>
 
           {/* Invitations */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-subsection font-semibold text-foreground">
               Invitations{' '}
-              <span className="font-normal text-slate-400">({invitations.length})</span>
+              <span className="font-normal text-muted-foreground">({invitations.length})</span>
             </h2>
 
             {invitations.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No invitations sent yet.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No invitations sent yet.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {invitations.map((inv) => (
                   <li
                     key={inv.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-border bg-card px-4 py-3"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-slate-900">
+                        <p className="truncate text-ui font-medium text-foreground">
                           {inv.email}
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-meta text-muted-foreground">
                           {inv.role} · sent {formatTimestamp(inv.created_at)}
                           {inv.status === 'pending'
                             ? ` · expires ${formatTimestamp(inv.expires_at)}`
@@ -646,27 +644,25 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
                       </div>
 
                       <div className="flex shrink-0 items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${invitationStatusClasses(inv.status)}`}
-                        >
-                          {inv.status}
-                        </span>
+                        <Badge variant={invitationStatusVariant(inv.status)} className="capitalize">{inv.status}</Badge>
 
                         {inv.status === 'pending' && (
-                          <button
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-destructive text-destructive hover:text-destructive"
                             type="button"
                             disabled={invRowBusy[inv.id]}
                             onClick={() => handleRevokeInvitation(inv)}
-                            className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-50"
                           >
                             Revoke
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </div>
 
                     {invRowError[inv.id] && (
-                      <p className="mt-2 text-xs text-red-700">{invRowError[inv.id]}</p>
+                      <p className="mt-2 text-meta text-destructive">{invRowError[inv.id]}</p>
                     )}
                   </li>
                 ))}
@@ -676,39 +672,38 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
             {/* New invitation */}
             <form
               onSubmit={handleInvite}
-              className="mt-4 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3"
+              className="mt-4 flex items-start gap-2 rounded-md border border-border bg-muted px-4 py-3"
             >
-              <input
+              <Input aria-label="Email address"
+                className="flex-1"
                 type="email"
                 placeholder="Email address"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
               />
-              <select
+              <Select aria-label="Role for invited user"
+                className="w-auto"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as FirmRole)}
-                className="rounded-md border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900"
               >
                 {ALLOWED_INVITE_ROLES.map((role) => (
                   <option key={role} value={role}>
                     {role}
                   </option>
                 ))}
-              </select>
-              <button
+              </Select>
+              <Button
                 type="submit"
                 disabled={inviting || inviteEmail.trim().length === 0}
-                className="rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {inviting ? 'Sending…' : 'Send invite'}
-              </button>
+              </Button>
             </form>
-            {inviteError && <p className="mt-2 text-xs text-red-700">{inviteError}</p>}
+            {inviteError && <p className="mt-2 text-meta text-destructive">{inviteError}</p>}
             {inviteUrl && (
-              <p className="mt-2 break-all text-xs text-slate-500">
+              <p className="mt-2 break-all text-meta text-muted-foreground">
                 Invitation sent. Since this email has no existing account, share this link
-                directly: <span className="text-slate-700">{inviteUrl}</span>
+                directly: <span className="text-foreground">{inviteUrl}</span>
               </p>
             )}
           </section>
@@ -716,6 +711,6 @@ export default function FirmSettingsPage({ params }: { params: { firmId: string 
       ) : null}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

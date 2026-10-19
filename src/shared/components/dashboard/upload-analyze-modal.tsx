@@ -43,6 +43,8 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, File as FileIcon, Loader2, Upload, X } from 'lucide-react';
 
 import { uploadDocument, validateFile, UploadValidationError } from '@/core/storage/document-upload';
+import { Button } from '@/shared/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog';
 
 type FlowStep =
   | 'select'
@@ -193,24 +195,34 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
   const isBusy = step === 'uploading' || step === 'analyzing';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-[15px] font-semibold text-foreground">Upload a legal document</p>
-          {!isBusy && (
-            <button
-              onClick={onClose}
-              className="rounded-md p-1 text-muted-foreground hover:bg-muted"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Closing is blocked while a request is in flight, exactly as before
+        // (the old modal hid its close button while busy).
+        if (!open && !isBusy) onClose();
+      }}
+    >
+      <DialogContent
+        hideClose={isBusy}
+        onEscapeKeyDown={(e) => {
+          if (isBusy) e.preventDefault();
+        }}
+        // The previous modal never closed on backdrop click; keep that so a
+        // stray click cannot discard a selected file or interrupt a flow.
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>Upload a legal document</DialogTitle>
+          <DialogDescription className="sr-only">
+            Upload a document for AI legal analysis.
+          </DialogDescription>
+        </DialogHeader>
 
         {step === 'select' && (
           <div className="space-y-4">
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-ui text-muted-foreground">
               Upload a document and JurisAI will analyze it for risks, legal health, and
               recommendations.
             </p>
@@ -229,8 +241,8 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
                 className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-border px-4 py-8 text-center hover:bg-muted/40"
               >
                 <Upload className="h-5 w-5 text-primary" />
-                <span className="text-[13px] font-medium text-foreground">Choose a file</span>
-                <span className="text-[11.5px] text-muted-foreground">
+                <span className="text-ui font-medium text-foreground">Choose a file</span>
+                <span className="text-caption text-muted-foreground">
                   PDF, Word, or image — up to 25 MB
                 </span>
               </button>
@@ -239,43 +251,38 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
                 <div className="flex min-w-0 items-center gap-2.5">
                   <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-foreground">{selectedFile.name}</p>
-                    <p className="text-[11.5px] text-muted-foreground">
+                    <p className="truncate text-ui font-medium text-foreground">{selectedFile.name}</p>
+                    <p className="text-caption text-muted-foreground">
                       {selectedFile.type || 'Unknown type'} · {formatFileSize(selectedFile.size)}
                     </p>
                   </div>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0"
                   onClick={handleRemoveFile}
-                  className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted"
                   aria-label="Remove file"
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             )}
 
             {validationError && (
-              <p className="flex items-start gap-1.5 text-[12.5px] text-destructive">
+              <p className="flex items-start gap-1.5 text-meta text-destructive">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {validationError}
               </p>
             )}
 
             <div className="flex justify-end gap-2 pt-1">
-              <button
-                onClick={onClose}
-                className="rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-              >
+              <Button variant="ghost" onClick={onClose}>
                 Cancel
-              </button>
-              <button
-                onClick={runUploadAndAnalyze}
-                disabled={!selectedFile}
-                className="rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              >
+              </Button>
+              <Button onClick={runUploadAndAnalyze} disabled={!selectedFile}>
                 Upload &amp; Analyze
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -283,10 +290,10 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
         {(step === 'uploading' || step === 'analyzing') && (
           <div className="flex flex-col items-center justify-center gap-3 py-10">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <p className="text-[13px] font-medium text-foreground">
+            <p className="text-ui font-medium text-foreground">
               {step === 'uploading' ? 'Uploading your document…' : 'Analyzing your document…'}
             </p>
-            <p className="max-w-xs text-center text-[11.5px] text-muted-foreground">
+            <p className="max-w-xs text-center text-caption text-muted-foreground">
               {step === 'uploading'
                 ? 'This stays on this screen — do not close your browser.'
                 : 'Running text extraction and AI legal analysis. This can take up to a minute for larger documents.'}
@@ -298,22 +305,14 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-2 py-4 text-center">
               <AlertTriangle className="h-6 w-6 text-destructive" />
-              <p className="text-[13px] font-medium text-foreground">Upload failed</p>
-              <p className="text-[12.5px] text-muted-foreground">{errorMessage}</p>
+              <p className="text-ui font-medium text-foreground">Upload failed</p>
+              <p className="text-meta text-muted-foreground">{errorMessage}</p>
             </div>
             <div className="flex justify-end gap-2">
-              <button
-                onClick={onClose}
-                className="rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-              >
+              <Button variant="ghost" onClick={onClose}>
                 Back to dashboard
-              </button>
-              <button
-                onClick={() => setStep('select')}
-                className="rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
-              >
-                Try again
-              </button>
+              </Button>
+              <Button onClick={() => setStep('select')}>Try again</Button>
             </div>
           </div>
         )}
@@ -321,23 +320,15 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
         {step === 'analysis_incomplete' && (
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-2 py-4 text-center">
-              <AlertTriangle className="h-6 w-6 text-amber-600" />
-              <p className="text-[13px] font-medium text-foreground">Document uploaded, analysis incomplete</p>
-              <p className="text-[12.5px] text-muted-foreground">{outcome?.message}</p>
+              <AlertTriangle className="h-6 w-6 text-warning-subtle-foreground" />
+              <p className="text-ui font-medium text-foreground">Document uploaded, analysis incomplete</p>
+              <p className="text-meta text-muted-foreground">{outcome?.message}</p>
             </div>
             <div className="flex justify-end gap-2">
-              <button
-                onClick={onClose}
-                className="rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-              >
+              <Button variant="ghost" onClick={onClose}>
                 Back to dashboard
-              </button>
-              <button
-                onClick={goToDocument}
-                className="rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
-              >
-                View document
-              </button>
+              </Button>
+              <Button onClick={goToDocument}>View document</Button>
             </div>
           </div>
         )}
@@ -345,29 +336,21 @@ export function UploadAnalyzeModal({ onClose }: { onClose: () => void }) {
         {step === 'success' && (
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-2 py-4 text-center">
-              <CheckCircle2 className="h-6 w-6 text-emerald-600" />
-              <p className="text-[13px] font-medium text-foreground">Analysis complete</p>
-              <p className="text-[12.5px] text-muted-foreground">
+              <CheckCircle2 className="h-6 w-6 text-success-subtle-foreground" />
+              <p className="text-ui font-medium text-foreground">Analysis complete</p>
+              <p className="text-meta text-muted-foreground">
                 Your document&apos;s Legal Health Score, risks, and recommendations are ready.
               </p>
             </div>
             <div className="flex justify-end gap-2">
-              <button
-                onClick={onClose}
-                className="rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-              >
+              <Button variant="ghost" onClick={onClose}>
                 Back to dashboard
-              </button>
-              <button
-                onClick={goToDocument}
-                className="rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
-              >
-                View results
-              </button>
+              </Button>
+              <Button onClick={goToDocument}>View results</Button>
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

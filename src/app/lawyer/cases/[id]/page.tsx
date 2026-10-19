@@ -139,6 +139,8 @@ import {
   UserPlus,
   Shield,
 } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Select, Textarea } from '@/shared/components/ui/input';
 
 // ---- Shapes — see file header for exactly which fields are confirmed
 // against which real pasted source, and which are flagged. ----
@@ -242,8 +244,8 @@ const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
   todo: 'bg-muted text-muted-foreground',
-  in_progress: 'bg-amber-500/10 text-amber-700',
-  done: 'bg-emerald-500/10 text-emerald-700',
+  in_progress: 'bg-warning-subtle text-warning-subtle-foreground',
+  done: 'bg-success-subtle text-success-subtle-foreground',
 };
 
 // Copied verbatim from documents/[id]/page.tsx (File 160).
@@ -413,10 +415,10 @@ export default function CaseDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="mb-1 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">
             JurisAI · Case
           </p>
-          <h1 className="truncate font-serif text-[24px] leading-none text-foreground">
+          <h1 className="truncate text-xl font-semibold tracking-tight sm:text-page-title text-foreground">
             {caseRow?.title ?? (isLoading ? 'Loading…' : 'Case')}
           </h1>
         </div>
@@ -433,42 +435,39 @@ export default function CaseDetailPage() {
           router.push, same icon+label layout) rather than inventing a
           new nav treatment.
         */}
-        <button
+        <Button variant="outline" size="sm" className="shrink-0"
           onClick={() => router.push(`/lawyer/cases/${caseId}/notes`)}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
         >
           <StickyNote className="h-3.5 w-3.5" />
           Notes
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm" className="shrink-0"
           onClick={() => router.push(`/lawyer/cases/${caseId}/timeline`)}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
         >
           <History className="h-3.5 w-3.5" />
           Timeline
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm" className="shrink-0"
           onClick={() => router.push(`/lawyer/cases/${caseId}/hearings`)}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
         >
           <Gavel className="h-3.5 w-3.5" />
           Hearings
-        </button>
+        </Button>
       </header>
 
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <p className="text-[13px]">Loading case…</p>
+            <p className="text-ui">Loading case…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
-            <p className="text-[13px]">{loadError}</p>
+            <p className="text-ui">{loadError}</p>
             <button
               onClick={loadEverything}
-              className="text-[13px] font-medium underline underline-offset-2"
+              className="text-ui font-medium underline underline-offset-2"
             >
               Retry
             </button>
@@ -633,15 +632,14 @@ function TasksSection({
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ListTodo className="h-4 w-4 text-primary" strokeWidth={1.75} />
-          <h2 className="font-serif text-[18px] text-foreground">Tasks</h2>
+          <h2 className="text-section text-foreground">Tasks</h2>
         </div>
-        <button
+        <Button variant="outline" size="sm"
           onClick={() => setShowCreateForm((v) => !v)}
-          className="flex items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
         >
           <Plus className="h-3.5 w-3.5" />
           {showCreateForm ? 'Cancel' : 'New task'}
-        </button>
+        </Button>
       </div>
 
       {showCreateForm && (
@@ -651,83 +649,78 @@ function TasksSection({
           noValidate
         >
           <div className="space-y-1.5">
-            <label htmlFor="task-title" className="text-[12px] font-medium text-foreground">
+            <label htmlFor="task-title" className="text-meta font-medium text-foreground">
               Title
             </label>
-            <input
+            <Input
               id="task-title"
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="task-description" className="text-[12px] font-medium text-foreground">
+            <label htmlFor="task-description" className="text-meta font-medium text-foreground">
               Description <span className="text-muted-foreground">(optional)</span>
             </label>
-            <textarea
+            <Textarea
               id="task-description"
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="task-due-date" className="text-[12px] font-medium text-foreground">
+              <label htmlFor="task-due-date" className="text-meta font-medium text-foreground">
                 Due date <span className="text-muted-foreground">(optional)</span>
               </label>
-              <input
+              <Input
                 id="task-due-date"
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="task-assignee" className="text-[12px] font-medium text-foreground">
+              <label htmlFor="task-assignee" className="text-meta font-medium text-foreground">
                 Assignee profile ID <span className="text-muted-foreground">(optional)</span>
               </label>
               {/* Plain text input, not a picker — see file header's
                   flagged note: no members/profiles-lookup endpoint was
                   available this session to build a real picker against. */}
-              <input
+              <Input
                 id="task-assignee"
                 type="text"
                 placeholder="UUID"
                 value={assigneeProfileId}
                 onChange={(e) => setAssigneeProfileId(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
           </div>
 
           {createError !== null && (
-            <p role="alert" className="text-[12px] text-destructive">
+            <p role="alert" className="text-meta text-destructive">
               {createError}
             </p>
           )}
 
-          <button
+          <Button className="w-fit"
             type="submit"
             disabled={isCreating}
-            className="flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isCreating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {isCreating ? 'Creating…' : 'Create task'}
-          </button>
+          </Button>
         </form>
       )}
 
       {tasks.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           No tasks exist on this case yet.
         </p>
       ) : (
@@ -736,9 +729,9 @@ function TasksSection({
             <div key={task.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium text-foreground">{task.title}</p>
+                  <p className="text-ui font-medium text-foreground">{task.title}</p>
                   {task.description && (
-                    <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+                    <p className="mt-0.5 text-meta leading-relaxed text-muted-foreground">
                       {task.description}
                     </p>
                   )}
@@ -746,7 +739,7 @@ function TasksSection({
                 <button
                   onClick={() => handleAdvanceStatus(task)}
                   disabled={busyTaskId === task.id}
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60 ${STATUS_STYLES[task.status]}`}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-medium disabled:cursor-not-allowed disabled:opacity-60 ${STATUS_STYLES[task.status]}`}
                   title="Click to advance status"
                 >
                   {busyTaskId === task.id ? (
@@ -757,7 +750,7 @@ function TasksSection({
                 </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 text-caption text-muted-foreground">
                 {task.due_date && (
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
@@ -779,7 +772,7 @@ function TasksSection({
               </div>
 
               {taskErrors[task.id] && (
-                <p className="text-[12px] text-destructive">{taskErrors[task.id]}</p>
+                <p className="text-meta text-destructive">{taskErrors[task.id]}</p>
               )}
             </div>
           ))}
@@ -945,43 +938,41 @@ function DocumentsSection({
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Paperclip className="h-4 w-4 text-primary" strokeWidth={1.75} />
-          <h2 className="font-serif text-[18px] text-foreground">Documents</h2>
+          <h2 className="text-section text-foreground">Documents</h2>
         </div>
-        <button
+        <Button variant="outline" size="sm"
           onClick={() => (showAttachForm ? closeAttachForm() : openAttachForm())}
-          className="flex items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
         >
           {showAttachForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
           {showAttachForm ? 'Cancel' : 'Attach document'}
-        </button>
+        </Button>
       </div>
 
       {showAttachForm && (
         <div className="mb-5 flex flex-col gap-3 rounded-md border border-border bg-background p-4">
           {isLoadingVault ? (
-            <div className="flex items-center gap-2 py-2 text-[13px] text-muted-foreground">
+            <div className="flex items-center gap-2 py-2 text-ui text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Loading your documents…
             </div>
           ) : vaultError ? (
-            <p role="alert" className="text-[12px] text-destructive">
+            <p role="alert" className="text-meta text-destructive">
               {vaultError}
             </p>
           ) : attachableDocuments.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-ui text-muted-foreground">
               No unlinked documents in your vault. Upload one from the Documents workspace first.
             </p>
           ) : (
             <>
               <div className="space-y-1.5">
-                <label htmlFor="attach-document" className="text-[12px] font-medium text-foreground">
+                <label htmlFor="attach-document" className="text-meta font-medium text-foreground">
                   Choose a document from your vault
                 </label>
-                <select
+                <Select
                   id="attach-document"
                   value={selectedDocumentId}
                   onChange={(e) => setSelectedDocumentId(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <option value="">Select a document…</option>
                   {attachableDocuments.map((doc) => (
@@ -989,30 +980,29 @@ function DocumentsSection({
                       {doc.title} ({formatFileSize(doc.size_bytes)})
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               {attachError !== null && (
-                <p role="alert" className="text-[12px] text-destructive">
+                <p role="alert" className="text-meta text-destructive">
                   {attachError}
                 </p>
               )}
 
-              <button
+              <Button className="w-fit"
                 onClick={handleAttach}
                 disabled={isAttaching}
-                className="flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isAttaching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 {isAttaching ? 'Attaching…' : 'Attach'}
-              </button>
+              </Button>
             </>
           )}
         </div>
       )}
 
       {documents.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           No documents linked to this case yet.
         </p>
       ) : (
@@ -1022,14 +1012,14 @@ function DocumentsSection({
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <DocFileTypeIcon mime={doc.mime_type} />
-                  <p className="truncate text-[13px] font-medium text-foreground">{doc.title}</p>
+                  <p className="truncate text-ui font-medium text-foreground">{doc.title}</p>
                 </div>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
+                <span className="shrink-0 text-caption text-muted-foreground">
                   {formatFileSize(doc.size_bytes)}
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 text-caption text-muted-foreground">
                 <button
                   onClick={() => handleDownload(doc)}
                   disabled={busyDocId === doc.id}
@@ -1053,7 +1043,7 @@ function DocumentsSection({
               </div>
 
               {docErrors[doc.id] && (
-                <p className="text-[12px] text-destructive">{docErrors[doc.id]}</p>
+                <p className="text-meta text-destructive">{docErrors[doc.id]}</p>
               )}
             </div>
           ))}
@@ -1061,7 +1051,7 @@ function DocumentsSection({
       )}
 
       {hiddenDocumentCount > 0 && (
-        <p className="mt-3 text-[11px] text-muted-foreground">
+        <p className="mt-3 text-caption text-muted-foreground">
           {hiddenDocumentCount} additional linked document
           {hiddenDocumentCount === 1 ? ' is' : 's are'} not visible to you (added by another
           member of this case).
@@ -1196,73 +1186,69 @@ function TeamSection({
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" strokeWidth={1.75} />
-          <h2 className="font-serif text-[18px] text-foreground">Case Team</h2>
+          <h2 className="text-section text-foreground">Case Team</h2>
         </div>
-        <button
+        <Button variant="outline" size="sm"
           onClick={() => (showAddForm ? closeAddForm() : openAddForm())}
-          className="flex items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
         >
           {showAddForm ? <X className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
           {showAddForm ? 'Cancel' : 'Add lawyer'}
-        </button>
+        </Button>
       </div>
 
       {showAddForm && (
         <div className="mb-5 flex flex-col gap-3 rounded-md border border-border bg-background p-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="grant-lawyer-id" className="text-[12px] font-medium text-foreground">
+              <label htmlFor="grant-lawyer-id" className="text-meta font-medium text-foreground">
                 Lawyer profile ID
               </label>
-              <input
+              <Input
                 id="grant-lawyer-id"
                 type="text"
                 placeholder="UUID"
                 value={lawyerId}
                 onChange={(e) => setLawyerId(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="grant-access-level" className="text-[12px] font-medium text-foreground">
+              <label htmlFor="grant-access-level" className="text-meta font-medium text-foreground">
                 Access level
               </label>
-              <select
+              <Select
                 id="grant-access-level"
                 value={accessLevel}
                 onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <option value="read_write">{ACCESS_LEVEL_LABELS.read_write}</option>
                 <option value="read">{ACCESS_LEVEL_LABELS.read}</option>
-              </select>
+              </Select>
             </div>
           </div>
 
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             The lawyer must already be a member of this case&rsquo;s firm.
           </p>
 
           {addError !== null && (
-            <p role="alert" className="text-[12px] text-destructive">
+            <p role="alert" className="text-meta text-destructive">
               {addError}
             </p>
           )}
 
-          <button
+          <Button className="w-fit"
             onClick={handleAssign}
             disabled={isAdding}
-            className="flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isAdding && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {isAdding ? 'Adding\u2026' : 'Add to case'}
-          </button>
+          </Button>
         </div>
       )}
 
       {grants.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           No one else has access to this case yet.
         </p>
       ) : (
@@ -1272,16 +1258,16 @@ function TeamSection({
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <Shield className="h-[18px] w-[18px] text-muted-foreground" strokeWidth={1.75} />
-                  <p className="truncate text-[13px] font-medium text-foreground">
+                  <p className="truncate text-ui font-medium text-foreground">
                     {grant.grantee_id}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-caption font-medium text-muted-foreground">
                   {ACCESS_LEVEL_LABELS[grant.access_level]}
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 text-caption text-muted-foreground">
                 <span>Added {formatGrantedAt(grant.created_at)}</span>
                 <button
                   onClick={() => handleRemove(grant)}
@@ -1298,7 +1284,7 @@ function TeamSection({
               </div>
 
               {grantErrors[grant.id] && (
-                <p className="text-[12px] text-destructive">{grantErrors[grant.id]}</p>
+                <p className="text-meta text-destructive">{grantErrors[grant.id]}</p>
               )}
             </div>
           ))}

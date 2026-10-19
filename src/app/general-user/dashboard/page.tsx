@@ -54,7 +54,8 @@ import {
   Sparkles,
   Upload,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { Button } from '@/shared/components/ui/button';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { UploadAnalyzeModal } from '@/shared/components/dashboard/upload-analyze-modal';
 
 interface MeProfile {
@@ -92,16 +93,16 @@ interface DashboardData {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-600';
-  if (score >= 50) return 'text-amber-600';
+  if (score >= 80) return 'text-success';
+  if (score >= 50) return 'text-warning-subtle-foreground';
   return 'text-destructive';
 }
 
 const PRIORITY_STYLES: Record<string, string> = {
   low: 'bg-muted text-muted-foreground',
-  medium: 'bg-amber-500/10 text-amber-700',
-  high: 'bg-orange-500/10 text-orange-700',
-  critical: 'bg-destructive/10 text-destructive',
+  medium: 'bg-warning-subtle text-warning-subtle-foreground',
+  high: 'bg-destructive-subtle text-destructive-subtle-foreground',
+  critical: 'bg-destructive-subtle text-destructive-subtle-foreground',
 };
 
 function greeting(): string {
@@ -170,16 +171,14 @@ export default function GeneralDashboardPage() {
     : 0;
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="dashboard" terminal="general" />
-
+    <AppShell active="dashboard" terminal="general">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Welcome header */}
         <header className="border-b border-border bg-background px-8 py-6">
-          <h1 className="text-[22px] font-semibold leading-tight text-foreground">
+          <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">
             {greeting()}{firstName ? `, ${firstName}` : ''}
           </h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">
+          <p className="mt-1 text-ui text-muted-foreground">
             Your legal documents, risks and legal health — all in one place.
           </p>
         </header>
@@ -188,12 +187,12 @@ export default function GeneralDashboardPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your dashboard…</p>
+              <p className="text-ui">Loading your dashboard…</p>
             </div>
           ) : error || !data ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertTriangle className="h-5 w-5" />
-              <p className="text-[13px]">{error ?? 'Something went wrong.'}</p>
+              <p className="text-ui">{error ?? 'Something went wrong.'}</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -204,19 +203,16 @@ export default function GeneralDashboardPage() {
                   overview, per the "Upload another document" Quick
                   Action above instead. */}
               {data.documentSummary.total === 0 && (
-                <div className="rounded-lg border border-primary/20 bg-primary/5 p-6 text-center">
-                  <p className="text-[16px] font-semibold text-foreground">Your legal health starts here.</p>
-                  <p className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">
+                <div className="rounded-lg border border-border bg-accent p-6 text-center">
+                  <p className="text-subsection text-foreground">Your legal health starts here.</p>
+                  <p className="mx-auto mt-1 max-w-md text-ui text-muted-foreground">
                     Upload your first legal document to see your Legal Health Score, risks, and AI
                     recommendations.
                   </p>
-                  <button
-                    onClick={() => setIsUploadModalOpen(true)}
-                    className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground"
-                  >
+                  <Button className="mt-4" onClick={() => setIsUploadModalOpen(true)}>
                     <Upload className="h-4 w-4" />
                     Upload a legal document
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -254,26 +250,26 @@ export default function GeneralDashboardPage() {
                   <div className="rounded-lg border border-border bg-background p-5">
                     <div className="mb-3 flex items-center gap-2">
                       <Gauge className="h-4 w-4 text-primary" />
-                      <p className="text-[14px] font-semibold text-foreground">Legal Health Score</p>
+                      <p className="text-ui font-semibold text-foreground">Legal Health Score</p>
                     </div>
                     {data.legalHealth.averageScore === null ? (
-                      <div className="rounded-md border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
-                        <p className="text-[13px] text-muted-foreground">
+                      <div className="rounded-md border border-dashed border-border bg-muted px-4 py-6 text-center">
+                        <p className="text-ui text-muted-foreground">
                           No completed Legal Health Score yet. Upload a document and run analysis to see
                           your score here.
                         </p>
                       </div>
                     ) : (
                       <div className="flex items-end gap-4">
-                        <span className={`text-[44px] font-semibold leading-none ${scoreColor(data.legalHealth.averageScore)}`}>
+                        <span className={`text-5xl font-semibold leading-none ${scoreColor(data.legalHealth.averageScore)}`}>
                           {data.legalHealth.averageScore}
                         </span>
                         <div className="pb-1">
-                          <p className="text-[12.5px] text-muted-foreground">
+                          <p className="text-meta text-muted-foreground">
                             Average across {data.legalHealth.documentsScored} scored document
                             {data.legalHealth.documentsScored === 1 ? '' : 's'}
                           </p>
-                          <p className="text-[11.5px] text-muted-foreground/70">
+                          <p className="text-caption text-muted-foreground">
                             Each document&apos;s own score is unchanged — this is a simple average, not a
                             new score.
                           </p>
@@ -286,16 +282,16 @@ export default function GeneralDashboardPage() {
                   <div className="rounded-lg border border-border bg-background p-5">
                     <div className="mb-3 flex items-center gap-2">
                       <ShieldAlert className="h-4 w-4 text-primary" />
-                      <p className="text-[14px] font-semibold text-foreground">Risk Summary</p>
+                      <p className="text-ui font-semibold text-foreground">Risk Summary</p>
                     </div>
                     {data.riskSummary.documentsWithCompletedRiskScan === 0 ? (
-                      <div className="rounded-md border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
-                        <p className="text-[13px] text-muted-foreground">
+                      <div className="rounded-md border border-dashed border-border bg-muted px-4 py-6 text-center">
+                        <p className="text-ui text-muted-foreground">
                           No completed risk scans yet. Analyze a document to see detected risks here.
                         </p>
                       </div>
                     ) : totalRiskFlags === 0 ? (
-                      <p className="text-[13px] text-muted-foreground">
+                      <p className="text-ui text-muted-foreground">
                         No risks detected across {data.riskSummary.documentsWithCompletedRiskScan} scanned
                         document{data.riskSummary.documentsWithCompletedRiskScan === 1 ? '' : 's'}.
                       </p>
@@ -313,11 +309,11 @@ export default function GeneralDashboardPage() {
                   <div className="rounded-lg border border-border bg-background p-5">
                     <div className="mb-3 flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />
-                      <p className="text-[14px] font-semibold text-foreground">AI Recommendations</p>
+                      <p className="text-ui font-semibold text-foreground">AI Recommendations</p>
                     </div>
                     {data.recommendations.length === 0 ? (
-                      <div className="rounded-md border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
-                        <p className="text-[13px] text-muted-foreground">
+                      <div className="rounded-md border border-dashed border-border bg-muted px-4 py-6 text-center">
+                        <p className="text-ui text-muted-foreground">
                           No recommendations yet. They&apos;ll appear here once a document&apos;s analysis
                           completes.
                         </p>
@@ -329,19 +325,19 @@ export default function GeneralDashboardPage() {
                             key={rec.id}
                             onClick={() => rec.documentId && router.push(`/general-user/documents/${rec.documentId}`)}
                             disabled={!rec.documentId}
-                            className="flex w-full flex-col gap-1 rounded-md border border-border px-3 py-2.5 text-left hover:bg-muted/40 disabled:cursor-default disabled:hover:bg-transparent"
+                            className="flex w-full flex-col gap-1 rounded-md border border-border px-3 py-2.5 text-left hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-[13px] font-medium text-foreground">{rec.title}</p>
+                              <p className="text-ui font-medium text-foreground">{rec.title}</p>
                               <span
-                                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${PRIORITY_STYLES[rec.priority] ?? PRIORITY_STYLES['low']}`}
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-medium ${PRIORITY_STYLES[rec.priority] ?? PRIORITY_STYLES['low']}`}
                               >
                                 {rec.priority.charAt(0).toUpperCase() + rec.priority.slice(1)}
                               </span>
                             </div>
-                            <p className="text-[12px] text-muted-foreground">{rec.recommendation}</p>
+                            <p className="text-meta text-muted-foreground">{rec.recommendation}</p>
                             {rec.documentTitle && (
-                              <p className="text-[11px] text-muted-foreground/70">{rec.documentTitle}</p>
+                              <p className="text-caption text-muted-foreground">{rec.documentTitle}</p>
                             )}
                           </button>
                         ))}
@@ -354,7 +350,7 @@ export default function GeneralDashboardPage() {
                 <div className="space-y-4">
                   {/* Quick actions */}
                   <div className="rounded-lg border border-border bg-background p-4">
-                    <p className="mb-3 text-[13px] font-semibold text-foreground">Quick Actions</p>
+                    <p className="mb-3 text-ui font-semibold text-foreground">Quick Actions</p>
                     <div className="space-y-1">
                       <QuickAction
                         icon={<Upload className="h-4 w-4" />}
@@ -373,18 +369,19 @@ export default function GeneralDashboardPage() {
                   <div className="rounded-lg border border-border bg-background p-4">
                     <div className="mb-2 flex items-center gap-2">
                       <Scale className="h-4 w-4 text-primary" />
-                      <p className="text-[13px] font-semibold text-foreground">Need Legal Help?</p>
+                      <p className="text-ui font-semibold text-foreground">Need Legal Help?</p>
                     </div>
-                    <p className="mb-3 text-[12.5px] text-muted-foreground">
+                    <p className="mb-3 text-meta text-muted-foreground">
                       Open a document with a completed Legal Health Score to contact a lawyer directly
                       about it.
                     </p>
-                    <button
+                    <Button
+                      size="sm"
+                      className="w-full"
                       onClick={() => router.push('/general-user/documents')}
-                      className="w-full rounded-md bg-primary px-3 py-2 text-[12.5px] font-medium text-primary-foreground"
                     >
                       Find a lawyer for a document
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -394,7 +391,7 @@ export default function GeneralDashboardPage() {
       </div>
 
       {isUploadModalOpen && <UploadAnalyzeModal onClose={handleUploadModalClose} />}
-    </div>
+    </AppShell>
   );
 }
 
@@ -410,9 +407,9 @@ function SummaryCard({
   tone: 'primary' | 'success' | 'warning' | 'muted';
 }) {
   const toneClasses: Record<string, string> = {
-    primary: 'bg-primary/10 text-primary',
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
+    primary: 'bg-accent text-accent-foreground',
+    success: 'bg-success-subtle text-success-subtle-foreground',
+    warning: 'bg-warning-subtle text-warning-subtle-foreground',
     muted: 'bg-muted text-muted-foreground',
   };
   return (
@@ -420,8 +417,8 @@ function SummaryCard({
       <span className={`mb-2 flex h-8 w-8 items-center justify-center rounded-md ${toneClasses[tone]}`}>
         {icon}
       </span>
-      <p className="text-[20px] font-semibold leading-tight text-foreground">{value}</p>
-      <p className="text-[12px] text-muted-foreground">{label}</p>
+      <p className="text-section text-foreground">{value}</p>
+      <p className="text-meta text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -437,14 +434,14 @@ function RiskStat({
 }) {
   const toneClasses: Record<string, string> = {
     critical: 'text-destructive',
-    high: 'text-orange-700',
-    medium: 'text-amber-700',
+    high: 'text-destructive',
+    medium: 'text-warning-subtle-foreground',
     low: 'text-muted-foreground',
   };
   return (
-    <div className="rounded-md bg-muted/30 px-3 py-2 text-center">
-      <p className={`text-[18px] font-semibold ${toneClasses[tone]}`}>{value}</p>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
+    <div className="rounded-md bg-muted px-3 py-2 text-center">
+      <p className={`text-section ${toneClasses[tone]}`}>{value}</p>
+      <p className="text-caption text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -459,12 +456,13 @@ function QuickAction({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-[13px] text-foreground hover:bg-muted"
+      className="w-full justify-start gap-2.5 px-2 text-foreground"
     >
       <span className="text-primary">{icon}</span>
       {label}
-    </button>
+    </Button>
   );
 }

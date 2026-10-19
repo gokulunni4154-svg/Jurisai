@@ -70,6 +70,9 @@ import {
   Calendar,
   User,
 } from 'lucide-react';
+import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Textarea } from '@/shared/components/ui/input';
 
 type TaskStatus = 'todo' | 'in_progress' | 'done';
 
@@ -96,8 +99,8 @@ const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
   todo: 'bg-muted text-muted-foreground',
-  in_progress: 'bg-amber-500/10 text-amber-700',
-  done: 'bg-emerald-500/10 text-emerald-700',
+  in_progress: 'bg-warning-subtle text-warning-subtle-foreground',
+  done: 'bg-success-subtle text-success-subtle-foreground',
 };
 
 // Copied verbatim from documents/[id]/page.tsx (File 160), same as
@@ -127,6 +130,11 @@ function parseIsoDateParts(dateString: string): { year: number; month: number; d
     throw new Error(`Malformed ISO date string: "${dateString}"`);
   }
   return { year, month, day };
+}
+
+/** Today as YYYY-MM-DD in the viewer's local time zone (for due-date comparison). */
+function localToday(): string {
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function formatDueDate(dateString: string): string {
@@ -175,24 +183,23 @@ export default function FirmToDosPage() {
   return (
     <div className="flex h-screen w-full flex-col bg-background font-sans text-foreground">
       <header className="flex items-center gap-4 border-b border-border px-8 py-6">
-        <button
+        <Button variant="outline" size="icon"
           onClick={() => router.back()}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted/50"
           aria-label="Back"
         >
           <ArrowLeft className="h-4 w-4" />
-        </button>
+        </Button>
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="mb-1 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">
             JurisAI · Firm To-Dos
           </p>
           {/* No firm name available — see file header. Raw firmId
               shown as a fallback rather than a fetched, unconfirmed
               field. */}
-          <h1 className="truncate font-serif text-[24px] leading-none text-foreground">
+          <h1 className="truncate text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">
             Firm To-Dos
           </h1>
-          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{firmId}</p>
+          <p className="mt-0.5 truncate text-caption text-muted-foreground">{firmId}</p>
         </div>
       </header>
 
@@ -200,15 +207,15 @@ export default function FirmToDosPage() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <p className="text-[13px]">Loading to-dos…</p>
+            <p className="text-meta">Loading to-dos…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
-            <p className="text-[13px]">{loadError}</p>
+            <p className="text-meta">{loadError}</p>
             <button
               onClick={loadTasks}
-              className="text-[13px] font-medium underline underline-offset-2"
+              className="text-meta font-medium underline underline-offset-2"
             >
               Retry
             </button>
@@ -355,15 +362,14 @@ function StandaloneTasksSection({
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ListTodo className="h-4 w-4 text-primary" strokeWidth={1.75} />
-          <h2 className="font-serif text-[18px] text-foreground">Firm To-Dos</h2>
+          <h2 className="text-subsection font-semibold text-foreground">Firm To-Dos</h2>
         </div>
-        <button
+        <Button variant="outline" size="sm"
           onClick={() => setShowCreateForm((v) => !v)}
-          className="flex items-center gap-1.5 rounded-md border border-input px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted/50"
         >
           <Plus className="h-3.5 w-3.5" />
           {showCreateForm ? 'Cancel' : 'New to-do'}
-        </button>
+        </Button>
       </div>
 
       {showCreateForm && (
@@ -373,80 +379,75 @@ function StandaloneTasksSection({
           noValidate
         >
           <div className="space-y-1.5">
-            <label htmlFor="todo-title" className="text-[12px] font-medium text-foreground">
+            <label htmlFor="todo-title" className="text-meta font-medium text-foreground">
               Title
             </label>
-            <input
+            <Input
               id="todo-title"
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="todo-description" className="text-[12px] font-medium text-foreground">
+            <label htmlFor="todo-description" className="text-meta font-medium text-foreground">
               Description <span className="text-muted-foreground">(optional)</span>
             </label>
-            <textarea
+            <Textarea
               id="todo-description"
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label htmlFor="todo-due-date" className="text-[12px] font-medium text-foreground">
+              <label htmlFor="todo-due-date" className="text-meta font-medium text-foreground">
                 Due date <span className="text-muted-foreground">(optional)</span>
               </label>
-              <input
+              <Input
                 id="todo-due-date"
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="todo-assignee" className="text-[12px] font-medium text-foreground">
+              <label htmlFor="todo-assignee" className="text-meta font-medium text-foreground">
                 Assignee profile ID <span className="text-muted-foreground">(optional)</span>
               </label>
-              <input
+              <Input
                 id="todo-assignee"
                 type="text"
                 placeholder="UUID"
                 value={assigneeProfileId}
                 onChange={(e) => setAssigneeProfileId(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
           </div>
 
           {createError !== null && (
-            <p role="alert" className="text-[12px] text-destructive">
+            <p role="alert" className="text-meta text-destructive">
               {createError}
             </p>
           )}
 
-          <button
+          <Button className="w-fit"
             type="submit"
             disabled={isCreating}
-            className="flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isCreating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {isCreating ? 'Creating…' : 'Create to-do'}
-          </button>
+          </Button>
         </form>
       )}
 
       {tasks.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-meta text-muted-foreground">
           No standalone to-dos exist for this firm yet.
         </p>
       ) : (
@@ -455,9 +456,9 @@ function StandaloneTasksSection({
             <div key={task.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium text-foreground">{task.title}</p>
+                  <p className="text-meta font-medium text-foreground">{task.title}</p>
                   {task.description && (
-                    <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+                    <p className="mt-0.5 text-meta leading-relaxed text-muted-foreground">
                       {task.description}
                     </p>
                   )}
@@ -465,7 +466,7 @@ function StandaloneTasksSection({
                 <button
                   onClick={() => handleAdvanceStatus(task)}
                   disabled={busyTaskId === task.id}
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60 ${STATUS_STYLES[task.status]}`}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-medium disabled:cursor-not-allowed disabled:opacity-60 ${STATUS_STYLES[task.status]}`}
                   title="Click to advance status"
                 >
                   {busyTaskId === task.id ? (
@@ -476,12 +477,15 @@ function StandaloneTasksSection({
                 </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 text-caption text-muted-foreground">
                 {task.due_date && (
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     {formatDueDate(task.due_date)}
                   </span>
+                )}
+                {task.due_date && task.status !== 'done' && task.due_date.slice(0, 10) < localToday() && (
+                  <Badge variant="destructive">Overdue</Badge>
                 )}
                 <span className="flex items-center gap-1">
                   <User className="h-3 w-3" />
@@ -498,7 +502,7 @@ function StandaloneTasksSection({
               </div>
 
               {taskErrors[task.id] && (
-                <p className="text-[12px] text-destructive">{taskErrors[task.id]}</p>
+                <p className="text-meta text-destructive">{taskErrors[task.id]}</p>
               )}
             </div>
           ))}

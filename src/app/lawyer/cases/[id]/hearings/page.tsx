@@ -52,6 +52,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Select, Textarea } from '@/shared/components/ui/input';
 
 type HearingType = 'first_hearing' | 'arguments' | 'evidence' | 'judgment' | 'other';
 
@@ -281,22 +283,21 @@ export default function CaseHearingsPage() {
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+          <p className="text-meta font-medium uppercase tracking-wide text-muted-foreground">
             {caseTitleError ? `Case ${caseId}` : caseTitle ?? 'Loading case…'}
           </p>
-          <h1 className="text-xl font-semibold text-slate-900">Hearings</h1>
-          <p className="mt-1 text-sm text-slate-500">Hearing dates and listings for this case.</p>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-page-title">Hearings</h1>
+          <p className="mt-1 text-ui text-muted-foreground">Hearing dates and listings for this case.</p>
         </div>
-        <button
+        <Button
           onClick={() => setShowForm((s) => !s)}
-          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           {showForm ? 'Cancel' : 'Add hearing'}
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <div className="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       )}
@@ -304,82 +305,76 @@ export default function CaseHearingsPage() {
       {showForm && (
         <form
           onSubmit={handleCreate}
-          className="mb-8 space-y-4 rounded-lg border border-slate-200 bg-white p-5"
+          className="mb-8 space-y-4 rounded-lg border border-border bg-card p-5"
         >
           <div className="grid grid-cols-2 gap-4">
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Date &amp; time</span>
-              <input
+            <label className="block text-ui">
+              <span className="mb-1 block font-medium text-foreground">Date &amp; time</span>
+              <Input
                 type="datetime-local"
                 required
                 value={hearingDate}
                 onChange={(e) => setHearingDate(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Type</span>
-              <select
+            <label className="block text-ui">
+              <span className="mb-1 block font-medium text-foreground">Type</span>
+              <Select
                 value={hearingType}
                 onChange={(e) => setHearingType(e.target.value as HearingType)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
                 {Object.entries(HEARING_TYPE_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Court name</span>
-              <input
+            <label className="block text-ui">
+              <span className="mb-1 block font-medium text-foreground">Court name</span>
+              <Input
                 type="text"
                 value={courtName}
                 onChange={(e) => setCourtName(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Location</span>
-              <input
+            <label className="block text-ui">
+              <span className="mb-1 block font-medium text-foreground">Location</span>
+              <Input
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
           </div>
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">Notes</span>
-            <textarea
+          <label className="block text-ui">
+            <span className="mb-1 block font-medium text-foreground">Notes</span>
+            <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </label>
-          <button
+          <Button
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {submitting ? 'Saving…' : 'Save hearing'}
-          </button>
+          </Button>
         </form>
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-ui text-muted-foreground">Loading…</p>
       ) : hearings.length === 0 ? (
-        <p className="text-sm text-slate-500">No hearings recorded for this case yet.</p>
+        <p className="text-ui text-muted-foreground">No hearings recorded for this case yet.</p>
       ) : (
         <div className="space-y-8">
           {upcoming.length > 0 && (
             <section>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 className="mb-3 text-meta font-semibold uppercase tracking-wide text-muted-foreground">
                 Upcoming
               </h2>
               <ul className="space-y-3">
@@ -408,7 +403,7 @@ export default function CaseHearingsPage() {
           )}
           {past.length > 0 && (
             <section>
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 className="mb-3 text-meta font-semibold uppercase tracking-wide text-muted-foreground">
                 Past
               </h2>
               <ul className="space-y-3">
@@ -474,88 +469,80 @@ function HearingRow({
 }) {
   if (editing && draft) {
     return (
-      <li className="rounded-lg border border-slate-300 bg-white p-4 shadow-sm">
+      <li className="rounded-lg border border-input bg-card p-4 shadow-sm">
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Date &amp; time</span>
-              <input
+            <label className="block text-ui">
+              <span className="mb-1 block text-meta font-medium text-muted-foreground">Date &amp; time</span>
+              <Input
                 type="datetime-local"
                 value={draft.hearingDate}
                 onChange={(e) => onDraftChange({ ...draft, hearingDate: e.target.value })}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Type</span>
-              <select
+            <label className="block text-ui">
+              <span className="mb-1 block text-meta font-medium text-muted-foreground">Type</span>
+              <Select
                 value={draft.hearingType}
                 onChange={(e) =>
                   onDraftChange({ ...draft, hearingType: e.target.value as HearingType })
                 }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
                 {Object.entries(HEARING_TYPE_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Court name</span>
-              <input
+            <label className="block text-ui">
+              <span className="mb-1 block text-meta font-medium text-muted-foreground">Court name</span>
+              <Input
                 type="text"
                 value={draft.courtName}
                 onChange={(e) => onDraftChange({ ...draft, courtName: e.target.value })}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Location</span>
-              <input
+            <label className="block text-ui">
+              <span className="mb-1 block text-meta font-medium text-muted-foreground">Location</span>
+              <Input
                 type="text"
                 value={draft.location}
                 onChange={(e) => onDraftChange({ ...draft, location: e.target.value })}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
           </div>
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Notes</span>
-            <textarea
+          <label className="block text-ui">
+            <span className="mb-1 block text-meta font-medium text-muted-foreground">Notes</span>
+            <Textarea
               value={draft.notes}
               onChange={(e) => onDraftChange({ ...draft, notes: e.target.value })}
               rows={2}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Outcome</span>
-            <textarea
+          <label className="block text-ui">
+            <span className="mb-1 block text-meta font-medium text-muted-foreground">Outcome</span>
+            <Textarea
               value={draft.outcome}
               onChange={(e) => onDraftChange({ ...draft, outcome: e.target.value })}
               rows={2}
               placeholder="Outcome / notes from this hearing"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </label>
           <div className="flex justify-end gap-2 pt-1">
-            <button
+            <Button variant="outline" size="sm"
               onClick={onCancel}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button size="sm"
               onClick={onSave}
               disabled={saving}
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save'}
-            </button>
+            </Button>
           </div>
         </div>
       </li>
@@ -563,32 +550,32 @@ function HearingRow({
   }
 
   return (
-    <li className="rounded-lg border border-slate-200 bg-white p-4">
+    <li className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-slate-900">{formatDateTime(hearing.hearing_date)}</p>
-          <p className="mt-0.5 text-xs text-slate-500">{HEARING_TYPE_LABELS[hearing.hearing_type]}</p>
+          <p className="text-ui font-medium text-foreground">{formatDateTime(hearing.hearing_date)}</p>
+          <p className="mt-0.5 text-meta text-muted-foreground">{HEARING_TYPE_LABELS[hearing.hearing_type]}</p>
           {(hearing.court_name || hearing.location) && (
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-meta text-muted-foreground">
               {[hearing.court_name, hearing.location].filter(Boolean).join(' · ')}
             </p>
           )}
-          {hearing.notes && <p className="mt-2 text-sm text-slate-600">{hearing.notes}</p>}
+          {hearing.notes && <p className="mt-2 text-ui text-muted-foreground">{hearing.notes}</p>}
         </div>
         <div className="flex shrink-0 gap-3">
-          <button onClick={onEditStart} className="text-xs font-medium text-slate-500 hover:text-slate-700">
+          <button onClick={onEditStart} className="text-meta font-medium text-muted-foreground hover:text-foreground">
             Edit
           </button>
-          <button onClick={onDelete} className="text-xs font-medium text-red-600 hover:text-red-700">
+          <button onClick={onDelete} className="text-meta font-medium text-destructive hover:text-destructive">
             Delete
           </button>
         </div>
       </div>
 
       {hearing.outcome && (
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <p className="text-sm text-slate-700">
-            <span className="font-medium text-slate-500">Outcome: </span>
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="text-ui text-foreground">
+            <span className="font-medium text-muted-foreground">Outcome: </span>
             {hearing.outcome}
           </p>
         </div>

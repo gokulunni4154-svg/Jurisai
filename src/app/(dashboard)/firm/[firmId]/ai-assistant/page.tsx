@@ -1,6 +1,6 @@
 "use client";
 
-import { AppSidebar } from "@/shared/components/layout/app-sidebar";
+import { AppShell } from "@/shared/components/layout/app-shell";
 import { AssistantChat } from "@/shared/components/assistant/assistant-chat";
 
 export default function FirmAiAssistantPage({
@@ -10,8 +10,7 @@ export default function FirmAiAssistantPage({
 }) {
   const firmId = params.firmId;
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="ai-assistant" terminal="firm" firmId={firmId} />
+    <AppShell active="ai-assistant" terminal="firm" firmId={firmId}>
       <div className="min-w-0 flex-1">
         <AssistantChat
           endpoint={`/api/assistant/firm/${encodeURIComponent(firmId)}`}
@@ -25,6 +24,6 @@ export default function FirmAiAssistantPage({
           disclaimer="AI-generated from data you are permitted to access. Verify before relying on it."
         />
       </div>
-    </div>
+    </AppShell>
   );
 }

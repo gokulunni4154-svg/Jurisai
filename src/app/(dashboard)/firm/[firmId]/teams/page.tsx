@@ -96,7 +96,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, ChevronDown, ChevronRight } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Badge, type BadgeProps } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Select } from '@/shared/components/ui/input';
 
 type FirmRole = 'owner' | 'admin' | 'employee' | 'lawyer';
 type TeamMemberRole = 'member' | 'lead';
@@ -178,17 +181,14 @@ function shortId(id: string): string {
   return id.slice(0, 8);
 }
 
-function invitationStatusClasses(status: string): string {
+function invitationStatusVariant(status: string): BadgeProps['variant'] {
   switch (status) {
     case 'pending':
-      return 'border-amber-200 bg-amber-50 text-amber-700';
+      return 'warning';
     case 'accepted':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-    case 'revoked':
-    case 'expired':
-      return 'border-slate-200 bg-slate-100 text-slate-500';
+      return 'success';
     default:
-      return 'border-slate-200 bg-slate-100 text-slate-500';
+      return 'neutral';
   }
 }
 
@@ -583,81 +583,79 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
   const headerTitle = firm ? firm.name : `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="teams" terminal="firm" firmId={firmId} />
+    <AppShell active="teams" terminal="firm" firmId={firmId}>
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
           {headerTitle}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">Teams</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">Teams</h1>
+        <p className="mt-1 text-ui text-muted-foreground">
           Firm-wide team roster -- visible to every firm member; only firm owners and admins can
           create, delete, or manage membership.
         </p>
       </div>
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : forbidden ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           Teams are only visible to members of this firm.
         </div>
       ) : error ? (
-        <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       ) : (
         <div className="mt-6 space-y-6">
           {isManager && (
             <div className="flex items-center justify-end">
-              <button
+              <Button
+                className="shrink-0"
                 type="button"
                 onClick={() => setShowNewTeamForm((v) => !v)}
-                className="shrink-0 rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white"
               >
                 {showNewTeamForm ? 'Cancel' : '+ New team'}
-              </button>
+              </Button>
             </div>
           )}
 
           {isManager && showNewTeamForm && (
             <form
               onSubmit={handleCreateTeam}
-              className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3"
+              className="flex items-start gap-3 rounded-md border border-border bg-muted px-4 py-3"
             >
-              <input
+              <Input aria-label="Team name"
+                className="flex-1"
                 type="text"
                 placeholder="Team name"
                 value={newTeamName}
                 onChange={(e) => setNewTeamName(e.target.value)}
                 maxLength={255}
-                className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
               />
               <div className="flex items-center gap-3">
-                {createTeamError && <p className="text-xs text-red-700">{createTeamError}</p>}
-                <button
+                {createTeamError && <p className="text-meta text-destructive">{createTeamError}</p>}
+                <Button
                   type="submit"
                   disabled={creatingTeam || newTeamName.trim().length === 0}
-                  className="rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
                   {creatingTeam ? 'Creating…' : 'Create team'}
-                </button>
+                </Button>
               </div>
             </form>
           )}
 
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
-              All teams <span className="font-normal text-slate-400">({teams.length})</span>
+            <h2 className="text-subsection font-semibold text-foreground">
+              All teams <span className="font-normal text-muted-foreground">({teams.length})</span>
             </h2>
 
             {teams.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">
+              <p className="mt-3 text-ui text-muted-foreground">
                 {isManager
                   ? 'No teams yet -- use "+ New team" to create the first one.'
                   : 'No teams exist in this firm yet.'}
@@ -674,7 +672,7 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                   );
 
                   return (
-                    <li key={team.id} className="rounded-md border border-slate-200 bg-white">
+                    <li key={team.id} className="rounded-md border border-border bg-card">
                       <div className="flex items-center justify-between gap-3 px-4 py-3">
                         <button
                           type="button"
@@ -682,58 +680,60 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                           className="flex min-w-0 flex-1 items-center gap-2 text-left"
                         >
                           {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                           ) : (
-                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                           )}
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-900">
+                            <p className="truncate text-ui font-medium text-foreground">
                               {team.name}
                             </p>
-                            <p className="mt-1 truncate text-xs text-slate-500">
+                            <p className="mt-1 truncate text-meta text-muted-foreground">
                               Created {formatTimestamp(team.created_at)}
                             </p>
                           </div>
                         </button>
 
                         {isManager && (
-                          <button
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-destructive text-destructive hover:text-destructive shrink-0"
                             type="button"
                             disabled={teamRowBusy[team.id]}
                             onClick={() => handleDeleteTeam(team)}
-                            className="shrink-0 rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-50"
                           >
                             Delete
-                          </button>
+                          </Button>
                         )}
                       </div>
 
                       {teamRowError[team.id] && (
-                        <p className="px-4 pb-2 text-xs text-red-700">{teamRowError[team.id]}</p>
+                        <p className="px-4 pb-2 text-meta text-destructive">{teamRowError[team.id]}</p>
                       )}
 
                       {isExpanded && (
-                        <div className="space-y-6 border-t border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="space-y-6 border-t border-border bg-muted px-4 py-4">
                           {panelLoading[team.id] ? (
-                            <div className="flex items-center justify-center py-4 text-sm text-slate-500">
+                            <div className="flex items-center justify-center py-4 text-ui text-muted-foreground">
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Loading…
                             </div>
                           ) : panelError[team.id] ? (
-                            <p className="text-sm text-red-700">{panelError[team.id]}</p>
+                            <p className="text-ui text-destructive">{panelError[team.id]}</p>
                           ) : (
                             <>
                               {/* Members */}
                               <div>
-                                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                <h3 className="text-caption font-semibold uppercase tracking-wide text-muted-foreground">
                                   Members{' '}
-                                  <span className="font-normal text-slate-400">
+                                  <span className="font-normal text-muted-foreground">
                                     ({members.length})
                                   </span>
                                 </h3>
 
                                 {members.length === 0 ? (
-                                  <p className="mt-2 text-sm text-slate-500">
+                                  <p className="mt-2 text-ui text-muted-foreground">
                                     No members on this team yet.
                                   </p>
                                 ) : (
@@ -741,21 +741,22 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                     {members.map((m) => (
                                       <li
                                         key={m.id}
-                                        className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                                        className="rounded-md border border-border bg-card px-3 py-2"
                                       >
                                         <div className="flex items-center justify-between gap-3">
                                           <div className="min-w-0">
-                                            <p className="truncate text-sm text-slate-900">
+                                            <p className="truncate text-ui text-foreground">
                                               {profileLabel(m.profile_id)}
                                             </p>
-                                            <p className="mt-0.5 text-xs text-slate-500">
+                                            <p className="mt-0.5 text-meta text-muted-foreground">
                                               Joined {formatTimestamp(m.created_at)}
                                             </p>
                                           </div>
 
                                           {isManager ? (
                                             <div className="flex shrink-0 items-center gap-2">
-                                              <select
+                                              <Select aria-label="Member role"
+                                                className="h-8 w-auto text-meta"
                                                 value={m.role}
                                                 disabled={memberRowBusy[m.id]}
                                                 onChange={(e) =>
@@ -765,31 +766,32 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                                     e.target.value as TeamMemberRole,
                                                   )
                                                 }
-                                                className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-50"
                                               >
                                                 {TEAM_MEMBER_ROLE_VALUES.map((role) => (
                                                   <option key={role} value={role}>
                                                     {role}
                                                   </option>
                                                 ))}
-                                              </select>
-                                              <button
+                                              </Select>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="border-destructive text-destructive hover:text-destructive"
                                                 type="button"
                                                 disabled={memberRowBusy[m.id]}
                                                 onClick={() => handleRemoveMember(team.id, m)}
-                                                className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-50"
                                               >
                                                 Remove
-                                              </button>
+                                              </Button>
                                             </div>
                                           ) : (
-                                            <span className="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-600">
+                                            <Badge variant={m.role === 'lead' ? 'primary' : 'neutral'} className="shrink-0 capitalize">
                                               {m.role}
-                                            </span>
+                                            </Badge>
                                           )}
                                         </div>
                                         {memberRowError[m.id] && (
-                                          <p className="mt-2 text-xs text-red-700">
+                                          <p className="mt-2 text-meta text-destructive">
                                             {memberRowError[m.id]}
                                           </p>
                                         )}
@@ -803,7 +805,8 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                     onSubmit={(e) => handleAddMember(team.id, e)}
                                     className="mt-3 flex items-start gap-2"
                                   >
-                                    <select
+                                    <Select aria-label="Firm member to add"
+                                      className="flex-1"
                                       value={addMemberProfileId[team.id] ?? ''}
                                       onChange={(e) =>
                                         setAddMemberProfileId((prev) => ({
@@ -811,7 +814,6 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                           [team.id]: e.target.value,
                                         }))
                                       }
-                                      className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                                     >
                                       <option value="">Select a firm member to add…</option>
                                       {eligibleForAdd.map((fm) => (
@@ -819,20 +821,20 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                           {fm.profile?.full_name ?? shortId(fm.profile_id)}
                                         </option>
                                       ))}
-                                    </select>
-                                    <button
+                                    </Select>
+                                    <Button
+                                      className="shrink-0"
                                       type="submit"
                                       disabled={
                                         addingMember[team.id] || !addMemberProfileId[team.id]
                                       }
-                                      className="shrink-0 rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                                     >
                                       {addingMember[team.id] ? 'Adding…' : 'Add'}
-                                    </button>
+                                    </Button>
                                   </form>
                                 )}
                                 {isManager && addMemberError[team.id] && (
-                                  <p className="mt-2 text-xs text-red-700">
+                                  <p className="mt-2 text-meta text-destructive">
                                     {addMemberError[team.id]}
                                   </p>
                                 )}
@@ -841,15 +843,15 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                               {/* Invitations -- owner/admin only */}
                               {isManager && (
                                 <div>
-                                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  <h3 className="text-caption font-semibold uppercase tracking-wide text-muted-foreground">
                                     Invitations{' '}
-                                    <span className="font-normal text-slate-400">
+                                    <span className="font-normal text-muted-foreground">
                                       ({invitations.length})
                                     </span>
                                   </h3>
 
                                   {invitations.length === 0 ? (
-                                    <p className="mt-2 text-sm text-slate-500">
+                                    <p className="mt-2 text-ui text-muted-foreground">
                                       No invitations sent yet.
                                     </p>
                                   ) : (
@@ -857,14 +859,14 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                       {invitations.map((inv) => (
                                         <li
                                           key={inv.id}
-                                          className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                                          className="rounded-md border border-border bg-card px-3 py-2"
                                         >
                                           <div className="flex items-center justify-between gap-3">
                                             <div className="min-w-0">
-                                              <p className="truncate text-sm text-slate-900">
+                                              <p className="truncate text-ui text-foreground">
                                                 {profileLabel(inv.profile_id)}
                                               </p>
-                                              <p className="mt-0.5 text-xs text-slate-500">
+                                              <p className="mt-0.5 text-meta text-muted-foreground">
                                                 sent {formatTimestamp(inv.created_at)}
                                                 {inv.status === 'pending'
                                                   ? ` · expires ${formatTimestamp(inv.expires_at)}`
@@ -873,27 +875,25 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                             </div>
 
                                             <div className="flex shrink-0 items-center gap-2">
-                                              <span
-                                                className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${invitationStatusClasses(inv.status)}`}
-                                              >
-                                                {inv.status}
-                                              </span>
+                                              <Badge variant={invitationStatusVariant(inv.status)} className="capitalize">{inv.status}</Badge>
                                               {inv.status === 'pending' && (
-                                                <button
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="border-destructive text-destructive hover:text-destructive"
                                                   type="button"
                                                   disabled={invRowBusy[inv.id]}
                                                   onClick={() =>
                                                     handleRevokeInvitation(team.id, inv)
                                                   }
-                                                  className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-50"
                                                 >
                                                   Revoke
-                                                </button>
+                                                </Button>
                                               )}
                                             </div>
                                           </div>
                                           {invRowError[inv.id] && (
-                                            <p className="mt-2 text-xs text-red-700">
+                                            <p className="mt-2 text-meta text-destructive">
                                               {invRowError[inv.id]}
                                             </p>
                                           )}
@@ -906,7 +906,8 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                     onSubmit={(e) => handleInvite(team.id, e)}
                                     className="mt-3 flex items-start gap-2"
                                   >
-                                    <select
+                                    <Select aria-label="Firm member to invite"
+                                      className="flex-1"
                                       value={inviteProfileId[team.id] ?? ''}
                                       onChange={(e) =>
                                         setInviteProfileId((prev) => ({
@@ -914,7 +915,6 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                           [team.id]: e.target.value,
                                         }))
                                       }
-                                      className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                                     >
                                       <option value="">Select a firm member to invite…</option>
                                       {firmMembers.map((fm) => (
@@ -922,17 +922,17 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
                                           {fm.profile?.full_name ?? shortId(fm.profile_id)}
                                         </option>
                                       ))}
-                                    </select>
-                                    <button
+                                    </Select>
+                                    <Button
+                                      className="shrink-0"
                                       type="submit"
                                       disabled={inviting[team.id] || !inviteProfileId[team.id]}
-                                      className="shrink-0 rounded-md border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                                     >
                                       {inviting[team.id] ? 'Sending…' : 'Send invite'}
-                                    </button>
+                                    </Button>
                                   </form>
                                   {inviteError[team.id] && (
-                                    <p className="mt-2 text-xs text-red-700">
+                                    <p className="mt-2 text-meta text-destructive">
                                       {inviteError[team.id]}
                                     </p>
                                   )}
@@ -952,6 +952,6 @@ export default function FirmTeamsPage({ params }: { params: { firmId: string } }
       )}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

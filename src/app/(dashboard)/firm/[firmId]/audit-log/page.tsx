@@ -77,6 +77,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, Loader2, ScrollText } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
 
 // Real columns confirmed via database.types.ts, pasted this session.
 interface AuditLogRow {
@@ -225,14 +227,13 @@ export default function FirmAuditLogPage() {
   return (
     <div className="flex min-h-screen w-full flex-col bg-background font-sans text-foreground">
       <header className="flex items-center gap-3 border-b border-border px-8 py-6">
-        <button
+        <Button variant="ghost" size="icon-sm"
           onClick={() => router.push('/general-user/documents')}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50"
           aria-label="Back to documents"
         >
           <ArrowLeft className="h-4 w-4" />
-        </button>
-        <h1 className="font-serif text-[22px] leading-none text-foreground">Firm audit log</h1>
+        </Button>
+        <h1 className="text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">Firm audit log</h1>
       </header>
 
       <main className="flex-1 px-8 py-10">
@@ -240,60 +241,58 @@ export default function FirmAuditLogPage() {
           {isResolvingFirm ? (
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Resolving your firm…</p>
+              <p className="text-meta">Resolving your firm…</p>
             </div>
           ) : firmError ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-16 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-16 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{firmError}</p>
+              <p className="text-meta">{firmError}</p>
               <button
                 onClick={() => fetchFirm()}
-                className="text-[13px] font-medium underline underline-offset-2"
+                className="text-meta font-medium underline underline-offset-2"
               >
                 Try again
               </button>
             </div>
           ) : !firm ? (
             <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-              <h2 className="font-serif text-[18px] text-foreground">No firm found</h2>
-              <p className="text-[13px] leading-relaxed text-muted-foreground">
+              <h2 className="text-subsection font-semibold text-foreground">No firm found</h2>
+              <p className="text-meta leading-relaxed text-muted-foreground">
                 You don&apos;t own a firm right now, so there&apos;s no firm audit log to show.
               </p>
             </div>
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between gap-4">
-                <p className="text-[13px] text-muted-foreground">
+                <p className="text-meta text-muted-foreground">
                   Showing events for <span className="text-foreground">{firm.name}</span>
                 </p>
                 <form onSubmit={handleApplyFilter} className="flex items-center gap-2">
-                  <input
+                  <Input aria-label="Filter by action prefix" className="w-64"
                     value={actionPrefix}
                     onChange={(e) => setActionPrefix(e.target.value)}
                     placeholder="Filter by action prefix, e.g. billing."
-                    className="w-64 rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
                   />
-                  <button
+                  <Button variant="outline"
                     type="submit"
-                    className="rounded-md border border-border px-3 py-2 text-[13px] font-medium text-foreground hover:bg-muted/50"
                   >
                     Apply
-                  </button>
+                  </Button>
                 </form>
               </div>
 
               {isLoadingEvents ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  <p className="text-[13px]">Loading events…</p>
+                  <p className="text-meta">Loading events…</p>
                 </div>
               ) : eventsError ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-16 text-destructive">
+                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-16 text-destructive-subtle-foreground">
                   <AlertCircle className="h-5 w-5" />
-                  <p className="text-[13px]">{eventsError}</p>
+                  <p className="text-meta">{eventsError}</p>
                   <button
                     onClick={() => fetchEvents(offset, appliedActionPrefix)}
-                    className="text-[13px] font-medium underline underline-offset-2"
+                    className="text-meta font-medium underline underline-offset-2"
                   >
                     Try again
                   </button>
@@ -301,21 +300,21 @@ export default function FirmAuditLogPage() {
               ) : events.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-16 text-muted-foreground">
                   <ScrollText className="h-6 w-6" />
-                  <p className="text-[13px]">No audit events match this view yet.</p>
+                  <p className="text-meta">No audit events match this view yet.</p>
                 </div>
               ) : (
                 <>
                   <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
                     {events.map((event) => (
                       <div key={event.id} className="flex items-center gap-4 px-5 py-4">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                          <ScrollText className="h-4 w-4 text-primary" strokeWidth={1.5} />
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent">
+                          <ScrollText className="h-4 w-4 text-accent-foreground" strokeWidth={1.5} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[14px] font-medium text-foreground">
+                          <p className="truncate text-ui font-medium text-foreground">
                             {event.action}
                           </p>
-                          <p className="mt-0.5 text-[12px] text-muted-foreground">
+                          <p className="mt-0.5 text-meta text-muted-foreground">
                             {formatTimestamp(event.created_at)} ·{' '}
                             {ACTOR_TYPE_LABELS[event.actor_type]}
                             {event.actor_id ? ` (${event.actor_id.slice(0, 8)})` : ''}
@@ -327,26 +326,24 @@ export default function FirmAuditLogPage() {
                   </div>
 
                   {(hasPrevPage || hasNextPage) && (
-                    <div className="mt-4 flex items-center justify-between text-[13px] text-muted-foreground">
-                      <button
+                    <div className="mt-4 flex items-center justify-between text-meta text-muted-foreground">
+                      <Button variant="ghost" size="sm"
                         disabled={!hasPrevPage}
                         onClick={() => fetchEvents(Math.max(0, offset - PAGE_SIZE), appliedActionPrefix)}
-                        className="flex items-center gap-1 rounded-md px-2 py-1 disabled:opacity-30"
                       >
                         <ChevronLeft className="h-3.5 w-3.5" />
                         Previous
-                      </button>
+                      </Button>
                       <span>
                         {offset + 1}–{offset + events.length} of {total}
                       </span>
-                      <button
+                      <Button variant="ghost" size="sm"
                         disabled={!hasNextPage}
                         onClick={() => fetchEvents(offset + PAGE_SIZE, appliedActionPrefix)}
-                        className="flex items-center gap-1 rounded-md px-2 py-1 disabled:opacity-30"
                       >
                         Next
                         <ChevronRight className="h-3.5 w-3.5" />
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </>

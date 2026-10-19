@@ -74,6 +74,8 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
+import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
 
 // Real columns confirmed via 20260801000000_create_document_sets_tables.sql.
 interface DocumentSetRow {
@@ -285,8 +287,8 @@ export default function DocumentSetDetailPage() {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center gap-3 bg-background text-destructive">
         <AlertCircle className="h-5 w-5" />
-        <p className="text-[13px]">{error}</p>
-        <button onClick={() => fetchAll()} className="text-[13px] font-medium underline underline-offset-2">
+        <p className="text-ui">{error}</p>
+        <button onClick={() => fetchAll()} className="text-ui font-medium underline underline-offset-2">
           Try again
         </button>
       </div>
@@ -306,8 +308,8 @@ export default function DocumentSetDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-primary" strokeWidth={1.5} />
-          <h1 className="font-serif text-[22px] leading-none text-foreground">{set.name}</h1>
+          <Layers className="h-4 w-4 text-accent-foreground" strokeWidth={1.5} />
+          <h1 className="text-xl font-semibold tracking-tight sm:text-page-title text-foreground">{set.name}</h1>
         </div>
       </header>
 
@@ -316,29 +318,28 @@ export default function DocumentSetDetailPage() {
           {/* Members */}
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-medium text-foreground">
+              <h2 className="text-body font-medium text-foreground">
                 Documents <span className="text-muted-foreground">({members.length})</span>
               </h2>
-              <button
+              <Button variant="outline" size="sm"
                 onClick={openPicker}
-                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[13px] font-medium text-foreground hover:bg-muted/50"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add document
-              </button>
+              </Button>
             </div>
 
             {members.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-10 text-muted-foreground">
                 <FileText className="h-5 w-5" />
-                <p className="text-[13px]">No documents in this set yet.</p>
+                <p className="text-ui">No documents in this set yet.</p>
               </div>
             ) : (
               <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
                 {members.map((doc) => (
                   <div key={doc.id} className="flex items-center gap-3 px-4 py-3">
                     <FileText className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
-                    <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">{doc.title}</p>
+                    <p className="min-w-0 flex-1 truncate text-ui text-foreground">{doc.title}</p>
                     <button
                       onClick={() => handleRemoveMember(doc.id)}
                       disabled={removingId === doc.id}
@@ -359,7 +360,7 @@ export default function DocumentSetDetailPage() {
             {showPicker && (
               <div className="mt-3 rounded-lg border border-border bg-card p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-[13px] font-medium text-foreground">Add a document</p>
+                  <p className="text-ui font-medium text-foreground">Add a document</p>
                   <button
                     onClick={() => setShowPicker(false)}
                     className="text-muted-foreground hover:text-foreground"
@@ -373,9 +374,9 @@ export default function DocumentSetDetailPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   </div>
                 ) : pickerError ? (
-                  <p className="text-[13px] text-destructive">{pickerError}</p>
+                  <p className="text-ui text-destructive">{pickerError}</p>
                 ) : availableDocs.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No other documents available to add.
                   </p>
                 ) : (
@@ -383,11 +384,11 @@ export default function DocumentSetDetailPage() {
                     {availableDocs.map((doc) => (
                       <div key={doc.id} className="flex items-center gap-3 py-2">
                         <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.5} />
-                        <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">{doc.title}</p>
+                        <p className="min-w-0 flex-1 truncate text-ui text-foreground">{doc.title}</p>
                         <button
                           onClick={() => handleAddMember(doc.id)}
                           disabled={addingId === doc.id}
-                          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-40"
+                          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-meta font-medium text-foreground hover:bg-muted/50 disabled:opacity-40"
                         >
                           {addingId === doc.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -407,11 +408,10 @@ export default function DocumentSetDetailPage() {
           {/* Synthesis */}
           <section>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-medium text-foreground">Combined synthesis</h2>
-              <button
+              <h2 className="text-body font-medium text-foreground">Combined synthesis</h2>
+              <Button variant="outline" size="sm"
                 onClick={handleRunSynthesis}
                 disabled={isRunning || members.length < 2}
-                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[13px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-40"
               >
                 {isRunning ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -419,17 +419,17 @@ export default function DocumentSetDetailPage() {
                   <Sparkles className="h-3.5 w-3.5" />
                 )}
                 {isRunning ? 'Running synthesis…' : 'Run synthesis'}
-              </button>
+              </Button>
             </div>
 
             {members.length < 2 && (
-              <p className="mb-3 text-[13px] text-muted-foreground">
+              <p className="mb-3 text-ui text-muted-foreground">
                 Add at least 2 documents before running a combined synthesis.
               </p>
             )}
 
             {runError && (
-              <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+              <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-ui text-destructive-subtle-foreground">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 {runError}
               </div>
@@ -438,64 +438,57 @@ export default function DocumentSetDetailPage() {
             {analyses.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-10 text-muted-foreground">
                 <Sparkles className="h-5 w-5" />
-                <p className="text-[13px]">No synthesis runs yet.</p>
+                <p className="text-ui">No synthesis runs yet.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-4">
                 {analyses.map((run) => (
                   <div key={run.id} className="rounded-lg border border-border bg-card p-4">
                     <div className="mb-3 flex items-center justify-between">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          run.status === 'completed'
-                            ? 'bg-primary/10 text-primary'
-                            : run.status === 'failed'
-                              ? 'bg-destructive/10 text-destructive'
-                              : 'bg-muted text-muted-foreground'
-                        }`}
+                      <Badge
+                        variant={
+                          run.status === 'completed' ? 'primary' : run.status === 'failed' ? 'destructive' : 'neutral'
+                        }
                       >
                         {STATUS_LABELS[run.status]}
-                      </span>
-                      <span className="text-[12px] text-muted-foreground">
+                      </Badge>
+                      <span className="text-meta text-muted-foreground">
                         {formatTimestamp(run.created_at)}
                       </span>
                     </div>
 
                     {run.status === 'failed' && run.error_message && (
-                      <p className="text-[13px] text-destructive">{run.error_message}</p>
+                      <p className="text-ui text-destructive">{run.error_message}</p>
                     )}
 
                     {run.status === 'completed' && run.result && (
                       <div className="flex flex-col gap-4">
-                        <p className="text-[13px] leading-relaxed text-foreground">
+                        <p className="text-ui leading-relaxed text-foreground">
                           {run.result.setOverview}
                         </p>
 
                         {run.result.keyThemes.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
                             {run.result.keyThemes.map((theme, i) => (
-                              <span
-                                key={i}
-                                className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-                              >
+                              <Badge key={i} className="font-normal">
                                 {theme}
-                              </span>
+                              </Badge>
                             ))}
                           </div>
                         )}
 
                         {run.result.crossDocumentInsights.length > 0 && (
                           <div className="flex flex-col gap-2">
-                            <p className="text-[12px] font-medium text-muted-foreground">
+                            <p className="text-meta font-medium text-muted-foreground">
                               Cross-document insights
                             </p>
                             {run.result.crossDocumentInsights.map((insight, i) => (
                               <div key={i} className="rounded-md border border-border p-3">
-                                <p className="text-[13px] font-medium text-foreground">{insight.title}</p>
-                                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                                <p className="text-ui font-medium text-foreground">{insight.title}</p>
+                                <p className="mt-1 text-ui leading-relaxed text-muted-foreground">
                                   {insight.narrative}
                                 </p>
-                                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                <p className="mt-1.5 text-caption text-muted-foreground">
                                   {insight.sourceDocumentTitles.join(', ')}
                                 </p>
                               </div>
@@ -505,10 +498,10 @@ export default function DocumentSetDetailPage() {
 
                         {run.result.recommendedActions.length > 0 && (
                           <div className="flex flex-col gap-1">
-                            <p className="text-[12px] font-medium text-muted-foreground">
+                            <p className="text-meta font-medium text-muted-foreground">
                               Recommended actions
                             </p>
-                            <ul className="list-disc pl-4 text-[13px] text-foreground">
+                            <ul className="list-disc pl-4 text-ui text-foreground">
                               {run.result.recommendedActions.map((action, i) => (
                                 <li key={i}>{action}</li>
                               ))}

@@ -38,20 +38,18 @@ function immediateProfile(profile: Me) {
   );
 }
 
-/** Clicks every enabled nav button; returns the router.push targets in order. */
-function clickAllNav(labels: string[]): string[] {
-  push.mockClear();
-  for (const label of labels) fireEvent.click(screen.getByRole('button', { name: label }));
-  return push.mock.calls.map((c) => c[0] as string);
+/** Returns the href of each named nav link, in order (nav items are real <a> links). */
+function navTargets(labels: string[]): string[] {
+  return labels.map((label) => screen.getByRole('link', { name: label }).getAttribute('href') as string);
 }
 
-const NAV_BUTTON_LABELS = {
+const NAV_LABELS = {
   lawyer: ['Dashboard', 'Matters', 'Inquiries', 'Hearings & Calendar', 'Tasks & Deadlines', 'Document Sets'],
   firm: ['Dashboard', 'Clients', 'Team', 'Firm Tasks', 'Reports', 'Run History', 'Settings'],
   general: ['Dashboard', 'Documents', 'Find a Lawyer', 'My Inquiries'],
 };
 
-const ALL_LABELS = [...new Set(Object.values(NAV_BUTTON_LABELS).flat()), 'Dashboard'];
+const ALL_LABELS = [...new Set(Object.values(NAV_LABELS).flat()), 'Dashboard'];
 
 beforeEach(() => push.mockClear());
 afterEach(() => {
@@ -77,7 +75,7 @@ describe('AppSidebar — explicit terminal renders instantly and never changes',
     renderSidebar({ active: 'matters', terminal: 'lawyer' });
 
     expect(screen.queryByTestId('sidebar-nav-loading')).not.toBeInTheDocument();
-    const targets = clickAllNav(NAV_BUTTON_LABELS.lawyer);
+    const targets = navTargets(NAV_LABELS.lawyer);
     expect(targets).toEqual([
       '/lawyer/dashboard',
       '/lawyer/cases',
@@ -109,7 +107,7 @@ describe('AppSidebar — explicit terminal renders instantly and never changes',
     const release = deferredProfile();
     renderSidebar({ active: 'clients', terminal: 'firm', firmId: 'f-9' });
 
-    const targets = clickAllNav(NAV_BUTTON_LABELS.firm);
+    const targets = navTargets(NAV_LABELS.firm);
     expect(targets).toEqual([
       '/firm/f-9/dashboard',
       '/firm/f-9/clients',
@@ -126,14 +124,14 @@ describe('AppSidebar — explicit terminal renders instantly and never changes',
     // A profile whose own firm_id/role disagree must not change the firm nav.
     release(me({ role: 'lawyer', firm_id: 'some-other-firm' }));
     await waitFor(() => expect(screen.getByText('Test User')).toBeInTheDocument());
-    expect(clickAllNav(['Dashboard'])).toEqual(['/firm/f-9/dashboard']);
+    expect(navTargets(['Dashboard'])).toEqual(['/firm/f-9/dashboard']);
   });
 
   it('general: /general-user/* targets only; no lawyer or firm items (even disabled ones)', () => {
     deferredProfile();
     renderSidebar({ active: 'documents', terminal: 'general' });
 
-    expect(clickAllNav(NAV_BUTTON_LABELS.general)).toEqual([
+    expect(navTargets(NAV_LABELS.general)).toEqual([
       '/general-user/dashboard',
       '/general-user/documents',
       '/general-user/lawyers',
@@ -148,7 +146,7 @@ describe('AppSidebar — explicit terminal renders instantly and never changes',
     deferredProfile();
     renderSidebar({ active: 'dashboard', terminal: 'client' });
 
-    expect(clickAllNav(['Dashboard'])).toEqual(['/client']);
+    expect(navTargets(['Dashboard'])).toEqual(['/client']);
     for (const other of ['Documents', 'Find a Lawyer', 'Matters', 'Clients']) {
       expect(screen.queryByText(other)).not.toBeInTheDocument();
     }
@@ -157,15 +155,24 @@ describe('AppSidebar — explicit terminal renders instantly and never changes',
   it('marks the active item with aria-current', () => {
     deferredProfile();
     renderSidebar({ active: 'tasks', terminal: 'lawyer' });
-    expect(screen.getByRole('button', { name: 'Tasks & Deadlines' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: 'Matters' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: 'Tasks & Deadlines' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Matters' })).not.toHaveAttribute('aria-current');
   });
 
-  it('AI Assistant navigates inside the general terminal', () => {
+  it('AI Assistant links inside the general terminal', () => {
     deferredProfile();
     renderSidebar({ active: 'dashboard', terminal: 'general' });
-    fireEvent.click(screen.getByRole('button', { name: 'AI Assistant' }));
-    expect(push).toHaveBeenCalledWith('/general-user/ai-assistant');
+    expect(screen.getByRole('link', { name: 'AI Assistant' })).toHaveAttribute('href', '/general-user/ai-assistant');
+  });
+
+  it('nav items are real anchors (middle-click / open-in-new-tab) and never call router.push', () => {
+    deferredProfile();
+    renderSidebar({ active: 'dashboard', terminal: 'lawyer' });
+    const link = screen.getByRole('link', { name: 'Matters' });
+    expect(link.tagName).toBe('A');
+    expect(link).toHaveAttribute('href', '/lawyer/cases');
+    expect(screen.queryByRole('button', { name: 'Matters' })).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
   });
 });
 
@@ -177,7 +184,7 @@ describe('AppSidebar — shared page with no terminal (/profile) resolves from t
     expect(screen.getByTestId('sidebar-nav-loading')).toBeInTheDocument();
     expect(screen.getByRole('navigation')).toHaveAttribute('aria-busy', 'true');
     for (const label of ALL_LABELS) {
-      expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument();
     }
   });
 
@@ -186,9 +193,9 @@ describe('AppSidebar — shared page with no terminal (/profile) resolves from t
     renderSidebar({ active: 'profile' });
     release(me({ role: 'lawyer', firm_id: 'solo-firm-1' }));
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Matters' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Matters' })).toBeInTheDocument());
     expect(screen.queryByTestId('sidebar-nav-loading')).not.toBeInTheDocument();
-    expect(clickAllNav(['Dashboard'])).toEqual(['/lawyer/dashboard']);
+    expect(navTargets(['Dashboard'])).toEqual(['/lawyer/dashboard']);
     expect(screen.queryByText('Clients')).not.toBeInTheDocument();
   });
 
@@ -196,8 +203,8 @@ describe('AppSidebar — shared page with no terminal (/profile) resolves from t
     immediateProfile(me({ role: 'individual', firm_id: 'f-7' }));
     renderSidebar({ active: 'profile' });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Clients' })).toBeInTheDocument());
-    expect(clickAllNav(['Dashboard'])).toEqual(['/firm/f-7/dashboard']);
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Clients' })).toBeInTheDocument());
+    expect(navTargets(['Dashboard'])).toEqual(['/firm/f-7/dashboard']);
     expect(screen.queryByText('Documents')).not.toBeInTheDocument();
   });
 
@@ -205,16 +212,16 @@ describe('AppSidebar — shared page with no terminal (/profile) resolves from t
     immediateProfile(me({ role: 'individual', firm_id: null }));
     renderSidebar({ active: 'profile' });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Documents' })).toBeInTheDocument());
-    expect(clickAllNav(['Dashboard'])).toEqual(['/general-user/dashboard']);
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Documents' })).toBeInTheDocument());
+    expect(navTargets(['Dashboard'])).toEqual(['/general-user/dashboard']);
   });
 
   it('client resolves to a client-only nav', async () => {
     immediateProfile(me({ role: 'client', firm_id: 'f-1' }));
     renderSidebar({ active: 'profile' });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Dashboard' })).toBeInTheDocument());
-    expect(clickAllNav(['Dashboard'])).toEqual(['/client']);
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument());
+    expect(navTargets(['Dashboard'])).toEqual(['/client']);
     expect(screen.queryByText('Documents')).not.toBeInTheDocument();
     expect(screen.queryByText('Clients')).not.toBeInTheDocument();
   });
@@ -223,8 +230,8 @@ describe('AppSidebar — shared page with no terminal (/profile) resolves from t
     immediateProfile(me({ role, firm_id: null }));
     renderSidebar({ active: 'profile' });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Documents' })).toBeInTheDocument());
-    expect(clickAllNav(['Dashboard'])).toEqual(['/general-user/dashboard']);
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Documents' })).toBeInTheDocument());
+    expect(navTargets(['Dashboard'])).toEqual(['/general-user/dashboard']);
     expect(screen.queryByText('Matters')).not.toBeInTheDocument();
   });
 
@@ -235,7 +242,7 @@ describe('AppSidebar — shared page with no terminal (/profile) resolves from t
 
     await waitFor(() => expect(screen.queryByTestId('sidebar-nav-loading')).not.toBeInTheDocument());
     for (const label of ALL_LABELS) {
-      expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: label })).not.toBeInTheDocument();
     }
     // Shell still works: account menu + sign-out remain available.
     openAccountMenu();

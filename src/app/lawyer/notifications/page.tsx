@@ -111,8 +111,9 @@ import {
   Inbox,
   Loader2,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { Button } from '@/shared/components/ui/button';
 
 // Mirrors the real `notifications` table's generated Row type
 // (database.types.ts) field-for-field — same "mirrored, not imported"
@@ -266,30 +267,27 @@ export default function NotificationsPage() {
   const canGoNext = offset + PAGE_SIZE < total;
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="notifications" terminal="lawyer" />
-
+    <AppShell active="notifications" terminal="lawyer">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-background px-8 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
               <Bell className="h-5 w-5 text-primary" strokeWidth={1.75} />
             </div>
             <div>
-              <h1 className="text-[19px] font-semibold leading-tight text-foreground">
+              <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">
                 My Notifications
               </h1>
-              <p className="text-[12.5px] text-muted-foreground">
+              <p className="text-meta text-muted-foreground">
                 Everything you&apos;ve been notified about, in one place.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            <Button variant="outline" size="icon" className="relative"
               onClick={() => setIsNotificationsPanelOpen((v) => !v)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />
@@ -298,7 +296,7 @@ export default function NotificationsPage() {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -314,7 +312,7 @@ export default function NotificationsPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleFilterChange('all')}
-                className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-meta font-medium transition-colors ${
                   filter === 'all'
                     ? 'bg-primary text-primary-foreground'
                     : 'border border-input text-muted-foreground hover:bg-muted'
@@ -324,7 +322,7 @@ export default function NotificationsPage() {
               </button>
               <button
                 onClick={() => handleFilterChange('unread')}
-                className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-meta font-medium transition-colors ${
                   filter === 'unread'
                     ? 'bg-primary text-primary-foreground'
                     : 'border border-input text-muted-foreground hover:bg-muted'
@@ -335,7 +333,7 @@ export default function NotificationsPage() {
             </div>
 
             {actionError && (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+              <div className="flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-meta text-destructive-subtle-foreground">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 {actionError}
               </div>
@@ -344,15 +342,15 @@ export default function NotificationsPage() {
             {isLoading ? (
               <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <p className="text-[13px]">Loading your notifications…</p>
+                <p className="text-ui">Loading your notifications…</p>
               </div>
             ) : loadError ? (
-              <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+              <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
                 <AlertCircle className="h-5 w-5" />
-                <p className="text-[13px]">{loadError}</p>
+                <p className="text-ui">{loadError}</p>
                 <button
                   onClick={() => loadNotifications(offset, filter)}
-                  className="text-[13px] font-medium underline underline-offset-2"
+                  className="text-ui font-medium underline underline-offset-2"
                 >
                   Retry
                 </button>
@@ -360,7 +358,7 @@ export default function NotificationsPage() {
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card px-6 py-16 text-muted-foreground">
                 <Briefcase className="h-6 w-6" strokeWidth={1.5} />
-                <p className="text-[13px]">
+                <p className="text-ui">
                   {filter === 'unread'
                     ? "You're all caught up — no unread notifications."
                     : "You don't have any notifications yet."}
@@ -379,7 +377,7 @@ export default function NotificationsPage() {
                       <div
                         key={n.id}
                         className={`flex flex-wrap items-start justify-between gap-4 rounded-lg border border-border px-6 py-5 ${
-                          isUnread ? 'bg-primary/5' : 'bg-card'
+                          isUnread ? 'bg-accent' : 'bg-card'
                         }`}
                       >
                         <div className="flex min-w-0 items-start gap-3">
@@ -388,7 +386,7 @@ export default function NotificationsPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className="truncate text-[13.5px] font-medium text-foreground">
+                              <p className="truncate text-ui font-medium text-foreground">
                                 {n.title}
                               </p>
                               {isUnread && (
@@ -398,10 +396,10 @@ export default function NotificationsPage() {
                                 />
                               )}
                             </div>
-                            <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                            <p className="mt-0.5 text-meta leading-relaxed text-muted-foreground">
                               {n.message}
                             </p>
-                            <p className="mt-1.5 text-[11px] text-muted-foreground/70">
+                            <p className="mt-1.5 text-caption text-muted-foreground/70">
                               {formatTimestamp(n.created_at)}
                             </p>
                           </div>
@@ -411,7 +409,7 @@ export default function NotificationsPage() {
                           {view && (
                             <button
                               onClick={() => router.push(view.href)}
-                              className="rounded-md border border-input px-3 py-1.5 text-[12.5px] font-medium text-foreground hover:bg-muted"
+                              className="rounded-md border border-input px-3 py-1.5 text-meta font-medium text-foreground hover:bg-muted"
                             >
                               {view.label}
                             </button>
@@ -420,7 +418,7 @@ export default function NotificationsPage() {
                             <button
                               onClick={() => handleMarkRead(n.id)}
                               disabled={isMarking}
-                              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12.5px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-meta font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {isMarking && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                               Mark read
@@ -434,14 +432,14 @@ export default function NotificationsPage() {
 
                 {/* Pagination */}
                 <div className="flex items-center justify-between border-t border-border pt-4">
-                  <p className="text-[12px] text-muted-foreground">
+                  <p className="text-meta text-muted-foreground">
                     Page {page} of {pageCount} · {total} total
                   </p>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
                       disabled={!canGoPrev}
-                      className="flex items-center gap-1 rounded-md border border-input px-3 py-1.5 text-[12.5px] font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-md border border-input px-3 py-1.5 text-meta font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
                       Previous
@@ -449,7 +447,7 @@ export default function NotificationsPage() {
                     <button
                       onClick={() => setOffset((o) => o + PAGE_SIZE)}
                       disabled={!canGoNext}
-                      className="flex items-center gap-1 rounded-md border border-input px-3 py-1.5 text-[12.5px] font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-md border border-input px-3 py-1.5 text-meta font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Next
                       <ChevronRight className="h-3.5 w-3.5" />
@@ -461,6 +459,6 @@ export default function NotificationsPage() {
           </div>
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }
