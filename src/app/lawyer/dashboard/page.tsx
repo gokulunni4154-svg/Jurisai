@@ -77,13 +77,24 @@ import {
   Inbox,
   Gavel,
   MapPin,
-  X,
   Sparkles,
   MessageCircle,
   ArrowRight,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog';
+import { Input } from '@/shared/components/ui/input';
+import { FieldError, Label } from '@/shared/components/ui/label';
 
 interface CaseRow {
   id: string;
@@ -239,61 +250,55 @@ function NewCaseModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 px-4">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-serif text-[19px] text-foreground">New case</h2>
-          <button
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        // The previous modal never closed on backdrop click; keep that so a
+        // stray click cannot discard a half-typed title.
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>New case</DialogTitle>
+          <DialogDescription className="sr-only">Create a new case by giving it a title.</DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="case-title" className="mb-1.5 block text-[13px] font-medium text-foreground">
-              Case title
-            </label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="case-title">Case title</Label>
+            <Input
               id="case-title"
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Sharma vs. Patel — Property Dispute"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-invalid={error ? true : undefined}
             />
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
+            <FieldError role="alert" className="flex items-center gap-2">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               {error}
-            </div>
+            </FieldError>
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-            >
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {isSubmitting ? 'Creating…' : 'Create case'}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -430,9 +435,7 @@ export default function LawyerDashboardPage() {
   };
 
   return (
-    <div className="relative flex h-screen w-full bg-background font-sans text-foreground">
-      <AppSidebar active="dashboard" terminal="lawyer" />
-
+    <AppShell active="dashboard" terminal="lawyer">
       <NotificationsPanel
         isOpen={isNotificationsPanelOpen}
         onClose={() => setIsNotificationsPanelOpen(false)}
@@ -445,35 +448,40 @@ export default function LawyerDashboardPage() {
 
       {/* Main column */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex flex-col gap-4 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-6">
+        <header className="flex flex-col gap-4 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="mb-1 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">
               JurisAI
             </p>
-            <h1 className="whitespace-normal break-normal font-serif text-[22px] leading-tight text-foreground sm:text-[26px]">
+            <h1 className="whitespace-normal break-normal text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">
               My cases, tasks &amp; hearings
             </h1>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 sm:flex-none">
-              <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
-              <input
+            <div className="relative min-w-0 flex-1 sm:flex-none">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search cases, tasks, hearings"
-                className="w-full min-w-0 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none sm:w-56"
+                aria-label="Search cases, tasks and hearings"
+                className="pl-9 sm:w-64"
               />
             </div>
-            <button
-              onClick={() => setIsNewCaseOpen(true)}
-              className="flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
-            >
+            <Button className="shrink-0" onClick={() => setIsNewCaseOpen(true)}>
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
               New case
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="relative"
               onClick={() => setIsNotificationsPanelOpen((prev) => !prev)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
               aria-label="Notifications"
               aria-expanded={isNotificationsPanelOpen}
             >
@@ -483,51 +491,51 @@ export default function LawyerDashboardPage() {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-8 py-6">
+        <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your docket…</p>
+              <p className="text-ui">Loading your docket…</p>
             </div>
           ) : forbidden ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-24 text-muted-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">This dashboard is only available to lawyer accounts.</p>
+              <p className="text-ui">This dashboard is only available to lawyer accounts.</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{error}</p>
+              <p className="text-ui">{error}</p>
             </div>
           ) : data ? (
-            <div className="space-y-10">
+            <div className="mx-auto w-full max-w-6xl space-y-10">
               {/* Today's Legal Briefing + Ask JurisAI */}
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-5 py-4 lg:col-span-2">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <Sparkles className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <Sparkles className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
                       Today&apos;s legal briefing
                     </p>
-                    <p className="mt-1 text-[15px] text-foreground">{briefing}</p>
+                    <p className="mt-1 text-body text-foreground">{briefing}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push('/general-user/documents')}
                   className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4 text-left transition-colors hover:bg-muted"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <MessageCircle className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <MessageCircle className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-medium text-foreground">Ask JurisAI</p>
-                    <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                    <p className="text-ui font-medium text-foreground">Ask JurisAI</p>
+                    <p className="mt-0.5 truncate text-meta text-muted-foreground">
                       Chat about a document&apos;s analysis
                     </p>
                   </div>
@@ -538,50 +546,50 @@ export default function LawyerDashboardPage() {
               {/* Summary strip */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <FileText className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <FileText className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">{data.myCases.length}</p>
-                    <p className="text-[12px] text-muted-foreground">Active cases</p>
+                    <p className="text-section text-foreground">{data.myCases.length}</p>
+                    <p className="text-meta text-muted-foreground">Active cases</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <FileText className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <FileText className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">
+                    <p className="text-section text-foreground">
                       {taskGroups.overdue.length + taskGroups.thisWeek.length}
                     </p>
-                    <p className="text-[12px] text-muted-foreground">Tasks due within 7 days</p>
+                    <p className="text-meta text-muted-foreground">Tasks due within 7 days</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <Gavel className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <Gavel className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-[15px] font-semibold text-foreground">
+                    <p className="text-section text-foreground">
                       {nextHearing ? urgencyLabel(daysUntil(nextHearing.hearing_date)) : '—'}
                     </p>
-                    <p className="text-[12px] text-muted-foreground">Next hearing</p>
+                    <p className="text-meta text-muted-foreground">Next hearing</p>
                   </div>
                 </div>
               </div>
 
               {/* Hearings */}
               <section>
-                <h2 className="font-serif text-[17px] text-foreground">
+                <h2 className="text-section text-foreground">
                   Upcoming hearings{' '}
-                  <span className="font-sans text-[13px] font-normal text-muted-foreground">
+                  <span className="text-ui font-normal text-muted-foreground">
                     ({filteredHearings.length})
                   </span>
                 </h2>
                 {filteredHearings.length === 0 ? (
                   <div className="mt-3 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-12 text-muted-foreground">
                     <Inbox className="h-5 w-5" />
-                    <p className="text-[13px]">
+                    <p className="text-ui">
                       {q ? 'No hearings match your search.' : 'No hearings on the docket.'}
                     </p>
                   </div>
@@ -595,21 +603,21 @@ export default function LawyerDashboardPage() {
                         <div key={h.id} className="flex items-center gap-4 px-5 py-4">
                           <div
                             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${
-                              urgent ? 'bg-destructive/10' : soon ? 'bg-primary/10' : 'bg-muted'
+                              urgent ? 'bg-destructive-subtle' : soon ? 'bg-accent' : 'bg-muted'
                             }`}
                           >
                             <Gavel
                               className={`h-[18px] w-[18px] ${
-                                urgent ? 'text-destructive' : soon ? 'text-primary' : 'text-muted-foreground'
+                                urgent ? 'text-destructive-subtle-foreground' : soon ? 'text-accent-foreground' : 'text-muted-foreground'
                               }`}
                               strokeWidth={1.5}
                             />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[14px] font-medium text-foreground">
+                            <p className="truncate text-ui font-medium text-foreground">
                               {h.hearing_type} · Case {shortId(h.case_id)}
                             </p>
-                            <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+                            <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-muted-foreground">
                               <span>{formatDateTime(h.hearing_date)}</span>
                               {h.court_name && <span>{h.court_name}</span>}
                               {h.location && (
@@ -619,17 +627,9 @@ export default function LawyerDashboardPage() {
                               )}
                             </p>
                           </div>
-                          <span
-                            className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                              urgent
-                                ? 'bg-destructive/10 text-destructive'
-                                : soon
-                                  ? 'bg-primary/10 text-primary'
-                                  : 'bg-muted text-muted-foreground'
-                            }`}
-                          >
+                          <Badge className="shrink-0" variant={urgent ? 'destructive' : soon ? 'primary' : 'neutral'}>
                             {urgencyLabel(d)}
-                          </span>
+                          </Badge>
                         </div>
                       );
                     })}
@@ -639,16 +639,16 @@ export default function LawyerDashboardPage() {
 
               {/* Tasks */}
               <section>
-                <h2 className="font-serif text-[17px] text-foreground">
+                <h2 className="text-section text-foreground">
                   My tasks{' '}
-                  <span className="font-sans text-[13px] font-normal text-muted-foreground">
+                  <span className="text-ui font-normal text-muted-foreground">
                     ({filteredTasks.length})
                   </span>
                 </h2>
                 {filteredTasks.length === 0 ? (
                   <div className="mt-3 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-12 text-muted-foreground">
                     <Inbox className="h-5 w-5" />
-                    <p className="text-[13px]">{q ? 'No tasks match your search.' : 'Nothing assigned to you.'}</p>
+                    <p className="text-ui">{q ? 'No tasks match your search.' : 'Nothing assigned to you.'}</p>
                   </div>
                 ) : (
                   <div className="mt-3 space-y-5">
@@ -661,22 +661,24 @@ export default function LawyerDashboardPage() {
                     ).map(([label, rows]) =>
                       rows.length === 0 ? null : (
                         <div key={label}>
-                          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          <p
+                            className={`mb-1.5 text-caption font-medium uppercase tracking-wide ${
+                              label === 'Overdue' ? 'text-destructive' : 'text-muted-foreground'
+                            }`}
+                          >
                             {label} ({rows.length})
                           </p>
                           <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
                             {rows.map((t) => (
                               <div key={t.id} className="flex items-center gap-4 px-5 py-3.5">
                                 <div className="min-w-0 flex-1">
-                                  <p className="truncate text-[14px] font-medium text-foreground">{t.title}</p>
-                                  <p className="mt-0.5 text-[12px] text-muted-foreground">
+                                  <p className="truncate text-ui font-medium text-foreground">{t.title}</p>
+                                  <p className="mt-0.5 text-meta text-muted-foreground">
                                     {t.case_id ? `Case ${shortId(t.case_id)}` : 'Standalone'}
                                     {t.due_date ? ` · Due ${formatDate(t.due_date)}` : ''}
                                   </p>
                                 </div>
-                                <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                                  {t.status}
-                                </span>
+                                <Badge className="shrink-0">{t.status}</Badge>
                               </div>
                             ))}
                           </div>
@@ -689,42 +691,37 @@ export default function LawyerDashboardPage() {
 
               {/* Cases */}
               <section>
-                <h2 className="font-serif text-[17px] text-foreground">
+                <h2 className="text-section text-foreground">
                   My cases{' '}
-                  <span className="font-sans text-[13px] font-normal text-muted-foreground">
+                  <span className="text-ui font-normal text-muted-foreground">
                     ({filteredCases.length})
                   </span>
                 </h2>
                 {filteredCases.length === 0 ? (
                   <div className="mt-3 flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-16 text-muted-foreground">
                     <Inbox className="h-6 w-6" />
-                    <p className="text-[13px]">{q ? 'No cases match your search.' : 'No cases yet.'}</p>
+                    <p className="text-ui">{q ? 'No cases match your search.' : 'No cases yet.'}</p>
                     {!q && (
-                      <button
-                        onClick={() => setIsNewCaseOpen(true)}
-                        className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
-                      >
+                      <Button onClick={() => setIsNewCaseOpen(true)}>
                         <Plus className="h-3.5 w-3.5" strokeWidth={2} />
                         Create your first case
-                      </button>
+                      </Button>
                     )}
                   </div>
                 ) : (
                   <div className="mt-3 flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
                     {filteredCases.map((c) => (
                       <div key={c.id} className="flex items-center gap-4 px-5 py-4">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                          <FileText className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                          <FileText className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[14px] font-medium text-foreground">{c.title}</p>
-                          <p className="mt-0.5 text-[12px] text-muted-foreground">
+                          <p className="truncate text-ui font-medium text-foreground">{c.title}</p>
+                          <p className="mt-0.5 text-meta text-muted-foreground">
                             Updated {formatDate(c.updated_at)}
                           </p>
                         </div>
-                        <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                          {c.status}
-                        </span>
+                        <Badge className="shrink-0">{c.status}</Badge>
                       </div>
                     ))}
                   </div>
@@ -734,6 +731,6 @@ export default function LawyerDashboardPage() {
           ) : null}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

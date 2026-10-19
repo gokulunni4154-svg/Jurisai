@@ -5,6 +5,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, AlertCircle, BadgeCheck } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table';
 
 // Same mirrored-shapes convention as src/app/user-management/admin/page.tsx
 // and src/app/observability/admin/page.tsx — the client-side type below
@@ -80,9 +88,9 @@ function formatTimestamp(isoString: string | null): string {
 function StatusPill({ status }: { status: VerificationStatus }) {
   const styles: Record<VerificationStatus, string> = {
     pending: 'bg-muted text-muted-foreground',
-    resubmitted: 'bg-amber-500/10 text-amber-600',
-    verified: 'bg-emerald-500/10 text-emerald-600',
-    rejected: 'bg-destructive/10 text-destructive',
+    resubmitted: 'bg-warning-subtle text-warning-subtle-foreground',
+    verified: 'bg-success-subtle text-success-subtle-foreground',
+    rejected: 'bg-destructive-subtle text-destructive-subtle-foreground',
   };
 
   const labels: Record<VerificationStatus, string> = {
@@ -221,7 +229,7 @@ export default function ProfessionalVerificationAdminPage() {
           Approve or reject professional account verification submissions.
         </p>
         <div className="mt-4">
-          <select
+          <select aria-label="Filter by verification status"
             value={statusFilter}
             onChange={(e) => handleFilterChange(e.target.value as VerificationStatus | 'all')}
             className="rounded-md border px-3 py-1.5 text-[13px] outline-none focus:ring-1 focus:ring-ring"
@@ -237,7 +245,7 @@ export default function ProfessionalVerificationAdminPage() {
 
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {actionError && (
-          <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-[13px] text-destructive-subtle-foreground">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{actionError}</span>
           </div>
@@ -248,7 +256,7 @@ export default function ProfessionalVerificationAdminPage() {
             <p className="text-[13px]">Loading review queue…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
             <p className="text-[13px]">{loadError}</p>
             <button
@@ -265,53 +273,53 @@ export default function ProfessionalVerificationAdminPage() {
         ) : (
           <>
             <div className="overflow-hidden rounded-lg border">
-              <table className="w-full text-left text-[13px]">
-                <thead className="bg-muted/50 text-[12px] font-medium text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2.5">Registration No.</th>
-                    <th className="px-4 py-2.5">Profile</th>
-                    <th className="px-4 py-2.5">Role</th>
-                    <th className="px-4 py-2.5">Status</th>
-                    <th className="px-4 py-2.5">Submitted</th>
-                    <th className="px-4 py-2.5">Reviewed</th>
-                    <th className="px-4 py-2.5">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+              <Table className="text-meta">
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="px-4">Registration No.</TableHead>
+                    <TableHead className="px-4">Profile</TableHead>
+                    <TableHead className="px-4">Role</TableHead>
+                    <TableHead className="px-4">Status</TableHead>
+                    <TableHead className="px-4">Submitted</TableHead>
+                    <TableHead className="px-4">Reviewed</TableHead>
+                    <TableHead className="px-4">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {rows.map((row) => (
-                    <tr key={row.id}>
-                      <td className="px-4 py-2.5">{row.registration_number}</td>
-                      <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">
+                    <TableRow key={row.id}>
+                      <TableCell className="px-4">{row.registration_number}</TableCell>
+                      <TableCell className="px-4 font-mono text-[11px] text-muted-foreground">
                         {row.profile_id}
-                      </td>
-                      <td className="px-4 py-2.5">
+                      </TableCell>
+                      <TableCell className="px-4">
                         {row.role ?? (
-                          <span className="text-[12px] text-amber-600">Not set</span>
+                          <span className="text-[12px] text-warning-subtle-foreground">Not set</span>
                         )}
-                      </td>
-                      <td className="px-4 py-2.5">
+                      </TableCell>
+                      <TableCell className="px-4">
                         <StatusPill status={row.status} />
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                         {formatTimestamp(row.created_at)}
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                         {formatTimestamp(row.reviewed_at)}
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">
+                      </TableCell>
+                      <TableCell className="px-4 whitespace-nowrap">
                         {actioningIds.has(row.id) ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                         ) : row.status === 'pending' || row.status === 'resubmitted' ? (
                           <div className="flex gap-3">
                             <button
                               onClick={() => handleDecision(row.id, 'verified')}
-                              className="text-[12px] font-medium text-emerald-600 hover:text-emerald-800"
+                              className="text-[12px] font-medium text-success hover:underline"
                             >
                               Approve
                             </button>
                             <button
                               onClick={() => handleDecision(row.id, 'rejected')}
-                              className="text-[12px] font-medium text-red-600 hover:text-red-800"
+                              className="text-[12px] font-medium text-destructive hover:underline"
                             >
                               Reject
                             </button>
@@ -319,11 +327,11 @@ export default function ProfessionalVerificationAdminPage() {
                         ) : (
                           <span className="text-[12px] text-muted-foreground">Decided</span>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
             <div className="mt-4 flex items-center justify-between text-[13px] text-muted-foreground">

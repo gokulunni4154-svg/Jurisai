@@ -28,8 +28,50 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
-        serif: ['var(--font-serif)', 'ui-serif', 'Georgia', 'serif'],
+        // Geist is self-hosted via the `geist` package (next/font/local) and
+        // exposed as --font-geist-sans in the root layout.
+        sans: [
+          'var(--font-geist-sans)',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'sans-serif',
+        ],
+        // Serif is reserved for legal-document reading and formal previews.
+        serif: ['ui-serif', 'Georgia', 'Cambria', 'Times New Roman', 'serif'],
+        mono: [
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Consolas',
+          'Liberation Mono',
+          'monospace',
+        ],
+      },
+      // Opt-in type scale (size / line-height / weight / tracking). Nothing
+      // existing is remapped, so text-[13px] layouts are unaffected.
+      fontSize: {
+        'page-title': ['1.75rem', { lineHeight: '2.25rem', letterSpacing: '-0.02em', fontWeight: '600' }],
+        section: ['1.25rem', { lineHeight: '1.75rem', letterSpacing: '-0.01em', fontWeight: '600' }],
+        subsection: ['1rem', { lineHeight: '1.5rem', fontWeight: '600' }],
+        body: ['0.9375rem', { lineHeight: '1.5rem' }],
+        ui: ['0.875rem', { lineHeight: '1.25rem' }],
+        legal: ['1rem', { lineHeight: '1.75rem' }],
+        meta: ['0.8125rem', { lineHeight: '1.125rem' }],
+        caption: ['0.75rem', { lineHeight: '1rem' }],
+      },
+      boxShadow: {
+        xs: 'var(--shadow-xs)',
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        popover: 'var(--shadow-popover)',
+      },
+      spacing: {
+        sidebar: 'var(--sidebar-width)',
+        'sidebar-collapsed': 'var(--sidebar-width-collapsed)',
+        topbar: 'var(--topbar-height)',
       },
       colors: {
         border: 'hsl(var(--border))',
@@ -49,6 +91,8 @@ const config: Config = {
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
+          subtle: 'hsl(var(--destructive-subtle))',
+          'subtle-foreground': 'hsl(var(--destructive-subtle-foreground))',
         },
         muted: {
           DEFAULT: 'hsl(var(--muted))',
@@ -85,14 +129,20 @@ const config: Config = {
         success: {
           DEFAULT: 'hsl(var(--success))',
           foreground: 'hsl(var(--success-foreground))',
+          subtle: 'hsl(var(--success-subtle))',
+          'subtle-foreground': 'hsl(var(--success-subtle-foreground))',
         },
         warning: {
           DEFAULT: 'hsl(var(--warning))',
           foreground: 'hsl(var(--warning-foreground))',
+          subtle: 'hsl(var(--warning-subtle))',
+          'subtle-foreground': 'hsl(var(--warning-subtle-foreground))',
         },
         info: {
           DEFAULT: 'hsl(var(--info))',
           foreground: 'hsl(var(--info-foreground))',
+          subtle: 'hsl(var(--info-subtle))',
+          'subtle-foreground': 'hsl(var(--info-subtle-foreground))',
         },
       },
       borderRadius: {

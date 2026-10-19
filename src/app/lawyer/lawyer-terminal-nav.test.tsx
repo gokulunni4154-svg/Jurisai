@@ -2,7 +2,8 @@
 // (matters) and upcoming-hearings pages used to carry their own hardcoded
 // icon rails that linked from the lawyer terminal into /general-user/* and
 // (via /audit-log/firm's redirect) into the firm terminal. They now render
-// the shared <AppSidebar terminal="lawyer" />.
+// the shared lawyer sidebar (now via <AppShell terminal="lawyer">, whose
+// nav items are real links).
 //
 // These tests render the REAL page components (data fetches are stubbed to
 // fail, which every page handles with an error state; the sidebar does not
@@ -90,11 +91,9 @@ describe.each(PAGES)('lawyer $name page', ({ Page, activeLabel }) => {
   it('sidebar nav is the lawyer terminal and every target stays under /lawyer/', () => {
     render(<Page />);
 
-    push.mockClear();
-    for (const [label] of LAWYER_NAV) {
-      fireEvent.click(screen.getByRole('button', { name: label }));
-    }
-    const targets = push.mock.calls.map((c) => c[0] as string);
+    const targets = LAWYER_NAV.map(
+      ([label]) => screen.getByRole('link', { name: label }).getAttribute('href') as string,
+    );
 
     expect(targets).toEqual(LAWYER_NAV.map(([, href]) => href));
     for (const t of targets) {
@@ -117,7 +116,7 @@ describe.each(PAGES)('lawyer $name page', ({ Page, activeLabel }) => {
       'My Inquiries',
       'Audit log',
     ]) {
-      expect(screen.queryByRole('button', { name: other })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: other })).not.toBeInTheDocument();
     }
   });
 
@@ -125,9 +124,9 @@ describe.each(PAGES)('lawyer $name page', ({ Page, activeLabel }) => {
     render(<Page />);
 
     const current = screen
-      .getAllByRole('button')
-      .filter((b) => b.getAttribute('aria-current') === 'page')
-      .map((b) => b.textContent?.trim());
+      .getAllByRole('link')
+      .filter((a) => a.getAttribute('aria-current') === 'page')
+      .map((a) => a.textContent?.trim());
     expect(current).toEqual([activeLabel]);
   });
 
@@ -172,8 +171,8 @@ describe.each(PAGES)('lawyer $name page source', ({ file }) => {
   // Strip comments so the guard reads executable code, not history notes.
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-  it('uses the shared lawyer AppSidebar and has no inline <aside> rail', () => {
-    expect(code).toMatch(/<AppSidebar\s+active="[a-z-]+"\s+terminal="lawyer"\s*\/>/);
+  it('uses the shared lawyer AppShell (AppSidebar) and has no inline <aside> rail', () => {
+    expect(code).toMatch(/<AppShell\s+active="[a-z-]+"\s+terminal="lawyer"\s*>/);
     expect(code).not.toContain('<aside');
   });
 

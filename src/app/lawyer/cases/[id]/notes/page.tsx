@@ -56,6 +56,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
 
 interface CaseNote {
   id: string;
@@ -276,62 +277,61 @@ export default function CaseNotesPage({ params }: { params: { id: string } }) {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <p className="text-meta font-medium uppercase tracking-wide text-muted-foreground">
           {headerTitle}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">Internal notes</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-page-title">Internal notes</h1>
+        <p className="mt-1 text-ui text-muted-foreground">
           Visible only to firm staff with edit access on this case -- not shown to read-only
           clients.
         </p>
       </div>
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : forbidden ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           Internal notes are only visible to the case owner or firm staff with edit access on
           this case.
         </div>
       ) : (
         <>
           {error && (
-            <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
               {error}
             </div>
           )}
 
-          <div className="mt-6 rounded-md border border-slate-300 bg-white p-3">
-            <textarea
+          <div className="mt-6 rounded-md border border-input bg-card p-3">
+            <textarea aria-label="New internal note"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Add an internal note…"
               rows={3}
               maxLength={10000}
-              className="w-full resize-none text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              className="w-full resize-none text-ui text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             <div className="mt-2 flex justify-end">
-              <button
+              <Button size="sm"
                 onClick={handlePost}
                 disabled={posting || !draft.trim()}
-                className="rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
               >
                 {posting ? 'Posting…' : 'Post note'}
-              </button>
+              </Button>
             </div>
           </div>
 
           {rowError && (
-            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mt-3 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
               {rowError}
             </div>
           )}
 
           {notes.length === 0 && !error ? (
-            <p className="mt-8 text-sm text-slate-500">No internal notes yet.</p>
+            <p className="mt-8 text-ui text-muted-foreground">No internal notes yet.</p>
           ) : (
             <ul className="mt-6 space-y-3">
               {notes.map((note) => {
@@ -341,10 +341,10 @@ export default function CaseNotesPage({ params }: { params: { id: string } }) {
                 return (
                   <li
                     key={note.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-border bg-card px-4 py-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-xs text-slate-500">
+                      <p className="text-meta text-muted-foreground">
                         {authorLabel} · {formatTimestamp(note.created_at)}
                         {note.updated_at !== note.created_at && ' · edited'}
                       </p>
@@ -353,7 +353,7 @@ export default function CaseNotesPage({ params }: { params: { id: string } }) {
                         <div className="flex shrink-0 gap-2">
                           <button
                             onClick={() => startEdit(note)}
-                            className="text-slate-400 hover:text-slate-600"
+                            className="text-muted-foreground hover:text-foreground"
                             aria-label="Edit note"
                           >
                             <Pencil className="h-3.5 w-3.5" />
@@ -361,7 +361,7 @@ export default function CaseNotesPage({ params }: { params: { id: string } }) {
                           <button
                             onClick={() => handleDelete(note.id)}
                             disabled={deletingId === note.id}
-                            className="text-slate-400 hover:text-red-600 disabled:opacity-50"
+                            className="text-muted-foreground hover:text-destructive disabled:opacity-50"
                             aria-label="Delete note"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -372,31 +372,29 @@ export default function CaseNotesPage({ params }: { params: { id: string } }) {
 
                     {isEditing ? (
                       <div className="mt-2">
-                        <textarea
+                        <textarea aria-label="Edit note"
                           value={editDraft}
                           onChange={(e) => setEditDraft(e.target.value)}
                           rows={3}
                           maxLength={10000}
-                          className="w-full resize-none rounded-md border border-slate-300 p-2 text-sm text-slate-900 focus:outline-none"
+                          className="w-full resize-none rounded-md border border-input p-2 text-ui text-foreground focus:outline-none"
                         />
                         <div className="mt-2 flex justify-end gap-2">
-                          <button
+                          <Button variant="outline" size="sm"
                             onClick={cancelEdit}
-                            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
                           >
                             Cancel
-                          </button>
-                          <button
+                          </Button>
+                          <Button size="sm"
                             onClick={() => handleSaveEdit(note.id)}
                             disabled={savingEditId === note.id || !editDraft.trim()}
-                            className="rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                           >
                             {savingEditId === note.id ? 'Saving…' : 'Save'}
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-900">
+                      <p className="mt-2 whitespace-pre-wrap text-ui text-foreground">
                         {note.content}
                       </p>
                     )}

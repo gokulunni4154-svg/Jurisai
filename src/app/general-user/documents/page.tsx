@@ -86,7 +86,9 @@ import {
 } from 'lucide-react';
 import { uploadDocument, uploadDocumentsBulk, UploadValidationError } from '@/core/storage/document-upload';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table';
+import { Button } from '@/shared/components/ui/button';
 
 interface DocumentRow {
   id: string;
@@ -203,8 +205,32 @@ export default function DocumentsPage() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   const [openActionsFor, setOpenActionsFor] = useState<string | null>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
   const [busyDocId, setBusyDocId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
+
+  // Row-actions menu: close on Escape (focus returns to its trigger) and on an
+  // outside pointer press.
+  useEffect(() => {
+    if (!openActionsFor) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenActionsFor(null);
+        actionsMenuRef.current?.querySelector<HTMLElement>('[aria-haspopup]')?.focus();
+      }
+    };
+    const onPointerDown = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setOpenActionsFor(null);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [openActionsFor]);
 
   const fetchDocuments = useCallback(async () => {
     setIsLoading(true);
@@ -460,19 +486,17 @@ export default function DocumentsPage() {
   // ---- Render -------------------------------------------------------------
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="documents" terminal="general" />
-
+    <AppShell active="documents" terminal="general">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-background px-8 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <FileText className="h-5 w-5 text-primary" strokeWidth={1.75} />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+              <FileText className="h-5 w-5 text-accent-foreground" strokeWidth={1.75} />
             </div>
             <div>
-              <h1 className="text-[19px] font-semibold leading-tight text-foreground">Documents</h1>
-              <p className="text-[12.5px] text-muted-foreground">
+              <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">Documents</h1>
+              <p className="text-meta text-muted-foreground">
                 Store, organize and manage your legal documents securely.
               </p>
             </div>
@@ -481,11 +505,11 @@ export default function DocumentsPage() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
               <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
-              <input
+              <input aria-label="Search documents"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search documents…"
-                className="w-52 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                className="w-52 bg-transparent text-ui text-foreground placeholder:text-muted-foreground focus:outline-none"
               />
             </div>
 
@@ -513,7 +537,7 @@ export default function DocumentsPage() {
             <button
               onClick={handleUploadClick}
               disabled={isUploading}
-              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isUploading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -593,7 +617,7 @@ export default function DocumentsPage() {
             {/* Left: tabs, filters, table */}
             <div>
               {/* Tabs */}
-              <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-border">
+              <div role="group" aria-label="Document views" className="mb-4 flex flex-wrap items-center gap-1 border-b border-border">
                 <TabButton active={tab === 'all'} onClick={() => setTab('all')}>
                   All Documents
                 </TabButton>
@@ -613,17 +637,17 @@ export default function DocumentsPage() {
 
               {/* Filters */}
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                <select
+                <select aria-label="Matter filter (not available yet)"
                   disabled
                   title="Matter linking isn't available yet — documents aren't currently attached to a case."
-                  className="cursor-not-allowed rounded-md border border-input bg-muted/40 px-2.5 py-1.5 text-[12.5px] text-muted-foreground"
+                  className="cursor-not-allowed rounded-md border border-input bg-muted px-2.5 py-1.5 text-meta text-muted-foreground"
                 >
                   <option>All Matters (coming soon)</option>
                 </select>
-                <select
+                <select aria-label="Filter by file type"
                   value={fileTypeFilter}
                   onChange={(e) => setFileTypeFilter(e.target.value)}
-                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-[12.5px] text-foreground"
+                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-meta text-foreground"
                 >
                   <option value="all">All File Types</option>
                   {fileTypes.map((mime) => (
@@ -632,10 +656,10 @@ export default function DocumentsPage() {
                     </option>
                   ))}
                 </select>
-                <select
+                <select aria-label="Filter by date"
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
-                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-[12.5px] text-foreground"
+                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-meta text-foreground"
                 >
                   <option value="any">Any time</option>
                   <option value="7d">Last 7 days</option>
@@ -643,12 +667,9 @@ export default function DocumentsPage() {
                   <option value="1y">Last year</option>
                 </select>
                 {filtersActive && (
-                  <button
-                    onClick={clearFilters}
-                    className="ml-auto text-[12.5px] font-medium text-primary underline underline-offset-2"
-                  >
+                  <Button variant="link" size="sm" onClick={clearFilters} className="ml-auto">
                     Clear Filters
-                  </button>
+                  </Button>
                 )}
               </div>
 
@@ -656,23 +677,23 @@ export default function DocumentsPage() {
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background py-24 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  <p className="text-[13px]">Loading documents…</p>
+                  <p className="text-ui">Loading documents…</p>
                 </div>
               ) : error ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
                   <AlertCircle className="h-5 w-5" />
-                  <p className="text-[13px]">{error}</p>
-                  <button onClick={fetchDocuments} className="text-[13px] font-medium underline underline-offset-2">
+                  <p className="text-ui">{error}</p>
+                  <Button variant="outline" size="sm" onClick={fetchDocuments}>
                     Retry
-                  </button>
+                  </Button>
                 </div>
               ) : tab === 'shared' || tab === 'favorites' ? (
                 <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background py-24 text-center text-muted-foreground">
                   <FileText className="h-6 w-6" />
-                  <p className="text-[13px]">
+                  <p className="text-ui">
                     {tab === 'shared' ? 'Document sharing' : 'Favorites'} isn&apos;t available yet.
                   </p>
-                  <p className="max-w-xs text-[12px]">
+                  <p className="max-w-xs text-meta">
                     This needs a small schema addition we haven&apos;t built yet — flagged for a future
                     session rather than shown with fake data.
                   </p>
@@ -680,7 +701,7 @@ export default function DocumentsPage() {
               ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background py-24 text-muted-foreground">
                   <Inbox className="h-6 w-6" />
-                  <p className="text-[13px]">
+                  <p className="text-ui">
                     {tabDocuments.length === 0
                       ? tab === 'trash'
                         ? 'Trash is empty.'
@@ -689,57 +710,57 @@ export default function DocumentsPage() {
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-border bg-background">
-                  <table className="w-full min-w-[860px] text-left text-[13px]">
-                    <thead>
-                      <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-muted-foreground">
-                        <th className="px-4 py-3 font-medium">Document Name</th>
-                        <th className="px-4 py-3 font-medium">Matter</th>
-                        <th className="px-4 py-3 font-medium">Type</th>
-                        <th className="px-4 py-3 font-medium">Uploaded By</th>
-                        <th className="px-4 py-3 font-medium">Uploaded On</th>
-                        <th className="px-4 py-3 font-medium">Size</th>
-                        <th className="px-4 py-3 text-right font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
+                <div className="rounded-lg border border-border bg-background">
+                  <Table className="min-w-[860px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="px-4">Document Name</TableHead>
+                        <TableHead className="px-4">Matter</TableHead>
+                        <TableHead className="px-4">Type</TableHead>
+                        <TableHead className="px-4">Uploaded By</TableHead>
+                        <TableHead className="px-4">Uploaded On</TableHead>
+                        <TableHead className="px-4">Size</TableHead>
+                        <TableHead className="px-4 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {filtered.map((doc) => (
-                        <tr key={doc.id} className="hover:bg-muted/30">
-                          <td className="px-4 py-3">
+                        <TableRow key={doc.id}>
+                          <TableCell className="px-4 py-3">
                             <button
                               onClick={() => router.push(`/general-user/documents/${doc.id}`)}
                               className="flex items-center gap-3 text-left"
                             >
-                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
                                 <FileTypeIcon mime={doc.mime_type} />
                               </span>
                               <span className="truncate font-medium text-foreground hover:underline">
                                 {doc.title}
                               </span>
                             </button>
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                            <span className="text-[12px] italic" title="Documents aren't linked to a matter yet.">
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-muted-foreground">
+                            <span className="text-meta italic" title="Documents aren't linked to a matter yet.">
                               Not linked
                             </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="rounded-full bg-secondary px-2 py-0.5 text-[11.5px] font-medium text-secondary-foreground">
+                          </TableCell>
+                          <TableCell className="px-4 py-3">
+                            <span className="rounded-full bg-secondary px-2 py-0.5 text-caption font-medium text-secondary-foreground">
                               {fileMeta(doc.mime_type).label}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-muted-foreground">
                             {me && doc.owner_id === me.id ? 'You' : doc.owner_id.slice(0, 8)}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground" title={formatDateTime(doc.created_at)}>
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-muted-foreground" title={formatDateTime(doc.created_at)}>
                             {formatDate(doc.created_at)}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">{formatFileSize(doc.size_bytes)}</td>
-                          <td className="px-4 py-3">
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-muted-foreground">{formatFileSize(doc.size_bytes)}</TableCell>
+                          <TableCell className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => router.push(`/general-user/documents/${doc.id}`)}
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:h-7 md:w-7"
                                 aria-label="View"
                                 title="View"
                               >
@@ -748,7 +769,7 @@ export default function DocumentsPage() {
                               <button
                                 onClick={() => handleDownload(doc)}
                                 disabled={busyDocId === doc.id || !!doc.deleted_at}
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40"
+                                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 md:h-7 md:w-7"
                                 aria-label="Download"
                                 title="Download"
                               >
@@ -758,11 +779,13 @@ export default function DocumentsPage() {
                                   <Download className="h-3.5 w-3.5" />
                                 )}
                               </button>
-                              <div className="relative">
+                              <div className="relative" ref={openActionsFor === doc.id ? actionsMenuRef : undefined}>
                                 <button
                                   onClick={() => setOpenActionsFor((v) => (v === doc.id ? null : doc.id))}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                                  className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:h-7 md:w-7"
                                   aria-label="More actions"
+                                  aria-haspopup="true"
+                                  aria-expanded={openActionsFor === doc.id}
                                 >
                                   <MoreHorizontal className="h-3.5 w-3.5" />
                                 </button>
@@ -771,14 +794,14 @@ export default function DocumentsPage() {
                                     <button
                                       disabled
                                       title="Document sharing isn't available yet."
-                                      className="flex w-full cursor-not-allowed items-center px-3 py-2 text-left text-[12.5px] text-muted-foreground/60"
+                                      className="flex w-full cursor-not-allowed items-center px-3 py-2 text-left text-meta text-muted-foreground"
                                     >
                                       Share (coming soon)
                                     </button>
                                     {!doc.deleted_at ? (
                                       <button
                                         onClick={() => handleTrash(doc)}
-                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-destructive hover:bg-destructive/5"
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-meta text-destructive hover:bg-destructive-subtle"
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
                                         Move to Trash
@@ -788,14 +811,14 @@ export default function DocumentsPage() {
                                         <button
                                           onClick={() => handleRestore(doc)}
                                           disabled={busyDocId === doc.id}
-                                          className="flex w-full items-center px-3 py-2 text-left text-[12.5px] text-foreground hover:bg-muted disabled:opacity-40"
+                                          className="flex w-full items-center px-3 py-2 text-left text-meta text-foreground hover:bg-muted disabled:opacity-40"
                                         >
                                           Restore
                                         </button>
                                         <button
                                           onClick={() => handlePermanentDelete(doc)}
                                           disabled={busyDocId === doc.id}
-                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] text-destructive hover:bg-destructive/5 disabled:opacity-40"
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-meta text-destructive hover:bg-destructive-subtle disabled:opacity-40"
                                         >
                                           <Trash2 className="h-3.5 w-3.5" />
                                           Delete permanently
@@ -806,16 +829,16 @@ export default function DocumentsPage() {
                                 )}
                               </div>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               )}
 
               {!isLoading && !error && tab !== 'shared' && tab !== 'favorites' && total > FETCH_LIMIT && (
-                <p className="mt-3 text-[12px] text-muted-foreground">
+                <p className="mt-3 text-meta text-muted-foreground">
                   Showing the first {FETCH_LIMIT} of {total} documents. Server-side pagination for larger
                   document sets isn&apos;t built yet.
                 </p>
@@ -826,21 +849,21 @@ export default function DocumentsPage() {
             <div className="space-y-4">
               {/* Storage overview */}
               <div className="rounded-lg border border-border bg-background p-4">
-                <p className="mb-3 text-[13px] font-semibold text-foreground">Storage Overview</p>
-                <p className="text-[22px] font-semibold text-foreground">
+                <p className="mb-3 text-ui font-semibold text-foreground">Storage Overview</p>
+                <p className="text-section text-foreground">
                   {isLoading ? '—' : formatFileSize(storageUsedBytes)}
                 </p>
-                <p className="text-[12px] text-muted-foreground">
+                <p className="text-meta text-muted-foreground">
                   Used across {active.length} document{active.length === 1 ? '' : 's'}
                 </p>
-                <p className="mt-2 text-[11.5px] italic text-muted-foreground/80">
+                <p className="mt-2 text-caption italic text-muted-foreground">
                   Plan storage limits aren&apos;t available yet — not shown.
                 </p>
               </div>
 
               {/* Quick actions */}
               <div className="rounded-lg border border-border bg-background p-4">
-                <p className="mb-3 text-[13px] font-semibold text-foreground">Quick Actions</p>
+                <p className="mb-3 text-ui font-semibold text-foreground">Quick Actions</p>
                 <div className="space-y-1">
                   <QuickAction icon={<Upload className="h-4 w-4" />} label="Upload Document" onClick={handleUploadClick} />
                   <QuickAction icon={<FileUp className="h-4 w-4" />} label="Bulk Upload" onClick={handleUploadClick} />
@@ -854,14 +877,14 @@ export default function DocumentsPage() {
               {/* Recent uploads */}
               <div className="rounded-lg border border-border bg-background p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-foreground">Recent Uploads</p>
+                  <p className="text-ui font-semibold text-foreground">Recent Uploads</p>
                   <button
                     onClick={() => {
                       setTab('all');
                       setDateFilter('any');
                       setQuery('');
                     }}
-                    className="text-[12px] font-medium text-primary"
+                    className="text-meta font-medium text-primary"
                   >
                     View all
                   </button>
@@ -871,7 +894,7 @@ export default function DocumentsPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   </div>
                 ) : recentUploadsPanel.length === 0 ? (
-                  <p className="text-[12.5px] text-muted-foreground">No uploads yet.</p>
+                  <p className="text-meta text-muted-foreground">No uploads yet.</p>
                 ) : (
                   <div className="space-y-3">
                     {recentUploadsPanel.map((doc) => (
@@ -880,12 +903,12 @@ export default function DocumentsPage() {
                         onClick={() => router.push(`/general-user/documents/${doc.id}`)}
                         className="flex w-full items-center gap-2.5 text-left"
                       >
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground">
                           <FileTypeIcon mime={doc.mime_type} />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <p className="truncate text-[12.5px] font-medium text-foreground">{doc.title}</p>
-                          <p className="truncate text-[11px] text-muted-foreground">{formatDate(doc.created_at)}</p>
+                          <p className="truncate text-meta font-medium text-foreground">{doc.title}</p>
+                          <p className="truncate text-caption text-muted-foreground">{formatDate(doc.created_at)}</p>
                         </span>
                       </button>
                     ))}
@@ -896,7 +919,7 @@ export default function DocumentsPage() {
           </div>
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }
 
@@ -916,9 +939,9 @@ function SummaryCard({
   tone: 'primary' | 'success' | 'warning' | 'muted';
 }) {
   const toneClasses: Record<string, string> = {
-    primary: 'bg-primary/10 text-primary',
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
+    primary: 'bg-accent text-accent-foreground',
+    success: 'bg-success-subtle text-success-subtle-foreground',
+    warning: 'bg-warning-subtle text-warning-subtle-foreground',
     muted: 'bg-muted text-muted-foreground',
   };
   return (
@@ -926,9 +949,9 @@ function SummaryCard({
       <div className="mb-2 flex items-center justify-between">
         <span className={`flex h-8 w-8 items-center justify-center rounded-md ${toneClasses[tone]}`}>{icon}</span>
       </div>
-      <p className="text-[20px] font-semibold leading-tight text-foreground">{value}</p>
-      <p className="text-[12px] text-muted-foreground">{label}</p>
-      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground/70">{hint}</p>}
+      <p className="text-section text-foreground">{value}</p>
+      <p className="text-meta text-muted-foreground">{label}</p>
+      {hint && <p className="mt-0.5 text-caption text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -944,8 +967,10 @@ function TabButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`-mb-px border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors ${
+      aria-pressed={active}
+      className={`-mb-px border-b-2 px-3 py-2.5 text-ui font-medium transition-colors ${
         active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
       }`}
     >
@@ -970,11 +995,11 @@ function QuickAction({
       onClick={onClick}
       disabled={disabled}
       title={disabled ? 'Coming soon' : undefined}
-      className={`flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-[13px] ${
-        disabled ? 'cursor-not-allowed text-muted-foreground/50' : 'text-foreground hover:bg-muted'
+      className={`flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-ui ${
+        disabled ? 'cursor-not-allowed text-muted-foreground opacity-60' : 'text-foreground hover:bg-muted'
       }`}
     >
-      <span className={disabled ? 'text-muted-foreground/50' : 'text-primary'}>{icon}</span>
+      <span className={disabled ? 'text-muted-foreground opacity-60' : 'text-primary'}>{icon}</span>
       {label}
       {disabled && <ChevronDown className="ml-auto h-3 w-3 rotate-[-90deg] opacity-0" />}
     </button>
@@ -992,10 +1017,10 @@ function Banner({
 }) {
   const toneClasses =
     tone === 'destructive'
-      ? 'border-destructive/20 bg-destructive/5 text-destructive'
-      : 'border-info/20 bg-info/5 text-info';
+      ? 'border-destructive bg-destructive-subtle text-destructive-subtle-foreground'
+      : 'border-info bg-info-subtle text-info-subtle-foreground';
   return (
-    <div className={`flex items-center gap-2 rounded-md border px-4 py-3 text-[13px] ${toneClasses}`}>
+    <div className={`flex items-center gap-2 rounded-md border px-4 py-3 text-ui ${toneClasses}`}>
       <AlertCircle className="h-4 w-4 shrink-0" />
       <span className="flex-1">{children}</span>
       <button onClick={onDismiss} aria-label="Dismiss">

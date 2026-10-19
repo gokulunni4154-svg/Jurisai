@@ -72,7 +72,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, Clock, FileText, Inbox, Loader2, Scale, Search } from 'lucide-react';
 
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
+import { Button } from '@/shared/components/ui/button';
 
 // Mirrors LawyerInquiryService's own LawyerInquiryListing DTO
 // field-for-field — same "mirrored, not imported" convention the
@@ -117,9 +118,9 @@ function formatTimestamp(isoString: string): string {
 
 function StatusPill({ status }: { status: InquiryStatus }) {
   const styles: Record<InquiryStatus, string> = {
-    pending: 'bg-amber-500/10 text-amber-600',
-    accepted: 'bg-primary/10 text-primary',
-    converted_to_case: 'bg-emerald-500/10 text-emerald-600',
+    pending: 'bg-warning-subtle text-warning-subtle-foreground',
+    accepted: 'bg-accent text-accent-foreground',
+    converted_to_case: 'bg-success-subtle text-success-subtle-foreground',
     declined: 'bg-muted text-muted-foreground',
   };
   const labels: Record<InquiryStatus, string> = {
@@ -138,7 +139,7 @@ function StatusPill({ status }: { status: InquiryStatus }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium ${styles[status]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-meta font-medium ${styles[status]}`}
     >
       <IconComponent className="h-3.5 w-3.5" strokeWidth={2} />
       {labels[status]}
@@ -198,13 +199,11 @@ export default function MySentInquiriesPage() {
   }, [firms]);
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="inquiries-mine" terminal="general" />
-
+    <AppShell active="inquiries-mine" terminal="general">
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="border-b border-border bg-background px-8 py-6">
-          <h1 className="text-[22px] font-semibold leading-tight text-foreground">My Inquiries</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-muted-foreground">
+          <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">My Inquiries</h1>
+          <p className="mt-1 max-w-2xl text-ui text-muted-foreground">
             Inquiries you&apos;ve sent to lawyers and firms through JurisAI, and what&apos;s
             happened to them since.
           </p>
@@ -214,30 +213,27 @@ export default function MySentInquiriesPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-background py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your inquiries…</p>
+              <p className="text-ui">Loading your inquiries…</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertTriangle className="h-5 w-5" />
-              <p className="text-[13px]">{error}</p>
+              <p className="text-ui">{error}</p>
             </div>
           ) : !inquiries || inquiries.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-background py-24 text-center">
               <Inbox className="h-5 w-5 text-muted-foreground" />
-              <p className="text-[13.5px] font-medium text-foreground">
+              <p className="text-ui font-medium text-foreground">
                 You haven&apos;t contacted a lawyer yet.
               </p>
-              <p className="max-w-sm text-[12.5px] text-muted-foreground">
+              <p className="max-w-sm text-meta text-muted-foreground">
                 Once you reach out to a lawyer or firm about a document, you&apos;ll be able to
                 track it here.
               </p>
-              <button
-                onClick={() => router.push('/general-user/lawyers')}
-                className="mt-2 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground"
-              >
+              <Button className="mt-2" onClick={() => router.push('/general-user/lawyers')}>
                 <Search className="h-4 w-4" />
                 Find a Lawyer
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -249,10 +245,10 @@ export default function MySentInquiriesPage() {
                     className="flex flex-col gap-3 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-[13.5px] font-semibold text-foreground">
+                      <p className="truncate text-ui font-semibold text-foreground">
                         {firmName}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">
                           <FileText className="h-3.5 w-3.5" />
                           {inquiry.documentName}
@@ -274,6 +270,6 @@ export default function MySentInquiriesPage() {
           )}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

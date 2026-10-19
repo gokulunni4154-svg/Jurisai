@@ -16,6 +16,11 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ArrowLeft, CheckCircle2, Clock, FileText, Loader2 } from 'lucide-react';
 
+import { Badge, type BadgeProps } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Select, Textarea } from '@/shared/components/ui/input';
+import { Label } from '@/shared/components/ui/label';
+
 type AnalysisState = 'complete' | 'processing' | 'unavailable';
 
 interface ReviewDocument {
@@ -73,10 +78,10 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-const STATE_LABEL: Record<AnalysisState, { text: string; className: string }> = {
-  complete: { text: 'Analysis complete', className: 'bg-emerald-500/10 text-emerald-700' },
-  processing: { text: 'Analysis still processing', className: 'bg-amber-500/10 text-amber-700' },
-  unavailable: { text: 'Analysis unavailable', className: 'bg-muted text-muted-foreground' },
+const STATE_LABEL: Record<AnalysisState, { text: string; variant: NonNullable<BadgeProps['variant']> }> = {
+  complete: { text: 'Analysis complete', variant: 'success' },
+  processing: { text: 'Analysis still processing', variant: 'warning' },
+  unavailable: { text: 'Analysis unavailable', variant: 'neutral' },
 };
 
 function humanize(key: string): string {
@@ -106,10 +111,10 @@ function ReportValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     <dl className="space-y-1.5">
       {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
         <div key={k}>
-          <dt className="text-[11.5px] font-medium uppercase tracking-wide text-muted-foreground">
+          <dt className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
             {humanize(k)}
           </dt>
-          <dd className="ml-3 text-[13px] text-foreground">
+          <dd className="ml-3 text-ui text-foreground">
             <ReportValue value={v} depth={depth + 1} />
           </dd>
         </div>
@@ -220,26 +225,26 @@ export function InquiryReviewPanel({ inquiryId, backHref, firmId }: Props) {
     <div className="mx-auto w-full max-w-4xl px-8 py-6">
       <Link
         href={backHref}
-        className="mb-4 inline-flex items-center gap-2 text-[13px] text-muted-foreground hover:text-foreground"
+        className="mb-4 inline-flex items-center gap-2 text-ui text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Back to inquiries
       </Link>
 
       {loading && (
-        <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+        <div className="flex items-center gap-2 text-ui text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading inquiry…
         </div>
       )}
 
       {loadError && (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-[13px] text-destructive">
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-ui text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{loadError}</span>
         </div>
       )}
 
       {outcome && (
-        <div className="mb-4 flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-[13px] text-emerald-700">
+        <div className="mb-4 flex items-start gap-2 rounded-md border border-success/30 bg-success-subtle px-4 py-3 text-meta text-success-subtle-foreground">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             {outcome === 'accepted'
@@ -252,18 +257,18 @@ export function InquiryReviewPanel({ inquiryId, backHref, firmId }: Props) {
       {review && !outcome && (
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-[19px] font-semibold text-foreground">
+            <h1 className="text-section text-foreground">
               {review.stage === 'pre_acceptance' ? 'Review before you decide' : 'Inquiry materials'}
             </h1>
             {review.stage === 'pre_acceptance' && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[12px] font-medium text-amber-700">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-subtle px-2.5 py-1 text-caption font-medium text-warning-subtle-foreground">
                 <Clock className="h-3.5 w-3.5" />
                 Review access ends {formatTimestamp(review.reviewExpiresAt)}
               </span>
             )}
           </div>
 
-          <p className="text-[12.5px] text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             Received {formatTimestamp(review.inquiry.createdAt)}.{' '}
             {review.stage === 'pre_acceptance'
               ? 'You can read only the document(s) and report attached to this inquiry. Declining ends your access.'
@@ -271,7 +276,7 @@ export function InquiryReviewPanel({ inquiryId, backHref, firmId }: Props) {
           </p>
 
           {review.documents.length === 0 && (
-            <p className="rounded-md border border-border bg-card px-4 py-3 text-[13px] text-muted-foreground">
+            <p className="rounded-md border border-border bg-card px-4 py-3 text-ui text-muted-foreground">
               No document is attached to this inquiry.
             </p>
           )}
@@ -281,41 +286,40 @@ export function InquiryReviewPanel({ inquiryId, backHref, firmId }: Props) {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <FileText className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-                  <p className="truncate text-[14px] font-medium text-foreground">{doc.fileName}</p>
+                  <p className="truncate text-ui font-medium text-foreground">{doc.fileName}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${STATE_LABEL[doc.analysisState].className}`}
-                  >
+                  <Badge variant={STATE_LABEL[doc.analysisState].variant}>
                     {STATE_LABEL[doc.analysisState].text}
-                  </span>
-                  <button
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => openDocument(doc.id)}
                     disabled={openingId === doc.id}
-                    className="flex items-center gap-2 rounded-md border border-input px-3 py-1.5 text-[12.5px] font-medium text-foreground hover:bg-muted disabled:opacity-60"
                   >
                     {openingId === doc.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     Open document
-                  </button>
+                  </Button>
                 </div>
               </div>
 
               {doc.analysisState === 'complete' && (
                 <div className="mt-4 rounded-md bg-muted/30 p-4">
-                  <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className="mb-2 text-caption font-medium uppercase tracking-wide text-muted-foreground">
                     AI analysis report (as sent with the inquiry)
                   </p>
                   <ReportValue value={doc.report} />
                 </div>
               )}
               {doc.analysisState === 'processing' && (
-                <p className="mt-3 text-[12.5px] text-muted-foreground">
+                <p className="mt-3 text-meta text-muted-foreground">
                   The analysis for this document had not finished when the inquiry was sent. You can
                   still open the document.
                 </p>
               )}
               {doc.analysisState === 'unavailable' && (
-                <p className="mt-3 text-[12.5px] text-muted-foreground">
+                <p className="mt-3 text-meta text-muted-foreground">
                   No analysis report is available for this document. You can still open it.
                 </p>
               )}
@@ -323,7 +327,7 @@ export function InquiryReviewPanel({ inquiryId, backHref, firmId }: Props) {
           ))}
 
           {actionError && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-[13px] text-destructive">
+            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-ui text-destructive">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{actionError}</span>
             </div>
@@ -331,74 +335,53 @@ export function InquiryReviewPanel({ inquiryId, backHref, firmId }: Props) {
 
           {review.canDecide && (
             <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
-              <h2 className="text-[14px] font-semibold text-foreground">Your decision</h2>
+              <h2 className="text-subsection text-foreground">Your decision</h2>
 
               {review.requiresAssignee && (
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="assignee" className="text-[12.5px] font-medium text-foreground">
-                    Assign to (required to accept for the firm)
-                  </label>
-                  <select
-                    id="assignee"
-                    value={assigneeId}
-                    onChange={(e) => setAssigneeId(e.target.value)}
-                    className="rounded-md border border-input bg-background px-3 py-2 text-[13px]"
-                  >
+                  <Label htmlFor="assignee">Assign to (required to accept for the firm)</Label>
+                  <Select id="assignee" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
                     <option value="">Select a lawyer…</option>
                     {roster.map((m) => (
                       <option key={m.profile_id} value={m.profile_id}>
                         {m.profile?.full_name ?? m.profile_id} ({m.role})
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               )}
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="case-title" className="text-[12.5px] font-medium text-foreground">
-                  Case title (optional)
-                </label>
-                <input
+                <Label htmlFor="case-title">Case title (optional)</Label>
+                <Input
                   id="case-title"
                   value={title}
                   maxLength={255}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Defaults to the document name"
-                  className="rounded-md border border-input bg-background px-3 py-2 text-[13px]"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="decline-note" className="text-[12.5px] font-medium text-foreground">
-                  Note if declining (optional, private to reviewers)
-                </label>
-                <textarea
+                <Label htmlFor="decline-note">Note if declining (optional, private to reviewers)</Label>
+                <Textarea
                   id="decline-note"
                   value={note}
                   maxLength={1000}
                   rows={2}
                   onChange={(e) => setNote(e.target.value)}
-                  className="rounded-md border border-input bg-background px-3 py-2 text-[13px]"
                 />
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => decide('accept')}
-                  disabled={busy !== null}
-                  className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
-                >
+                <Button onClick={() => decide('accept')} disabled={busy !== null}>
                   {busy === 'accept' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Accept
-                </button>
-                <button
-                  onClick={() => decide('decline')}
-                  disabled={busy !== null}
-                  className="flex items-center gap-2 rounded-md border border-input px-4 py-2 text-[13px] font-medium text-foreground hover:bg-muted disabled:opacity-60"
-                >
+                </Button>
+                <Button variant="outline" onClick={() => decide('decline')} disabled={busy !== null}>
                   {busy === 'decline' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Decline
-                </button>
+                </Button>
               </div>
             </section>
           )}

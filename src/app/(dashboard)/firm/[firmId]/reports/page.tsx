@@ -103,7 +103,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 
 interface StatusCounts {
   total: number;
@@ -215,53 +215,52 @@ export default function FirmReportsPage({ params }: { params: { firmId: string }
   const headerTitle = `Firm ${shortId(firmId)}`;
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="reports" terminal="firm" firmId={firmId} />
+    <AppShell active="reports" terminal="firm" firmId={firmId}>
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-5xl px-6 py-10">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <p className="text-caption font-medium uppercase tracking-wide text-muted-foreground">
           {headerTitle}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">Reports &amp; analytics</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">Reports &amp; analytics</h1>
+        <p className="mt-1 text-ui text-muted-foreground">
           Firm-wide case and task status, upcoming hearings, and subscription --
           visible only to firm owners and admins.
         </p>
       </div>
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : forbidden ? (
-        <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="mt-6 rounded-md border border-border bg-muted px-4 py-3 text-ui text-muted-foreground">
           Reports are only visible to this firm&apos;s owner or admins.
         </div>
       ) : error ? (
-        <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       ) : data ? (
         <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Cases */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Cases <span className="font-normal text-slate-400">({data.cases.total})</span>
+            <h2 className="text-subsection font-semibold text-foreground">
+              Cases <span className="font-normal text-muted-foreground">({data.cases.total})</span>
             </h2>
 
             {Object.keys(data.cases.byStatus).length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No cases yet.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No cases yet.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {Object.entries(data.cases.byStatus).map(([status, count]) => (
                   <li
                     key={status}
-                    className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-4 py-2.5"
+                    className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2.5"
                   >
-                    <span className="text-sm text-slate-700">{status}</span>
-                    <span className="text-sm font-medium text-slate-900">{count}</span>
+                    <span className="text-ui text-foreground">{status}</span>
+                    <span className="text-ui font-medium text-foreground">{count}</span>
                   </li>
                 ))}
               </ul>
@@ -270,21 +269,21 @@ export default function FirmReportsPage({ params }: { params: { firmId: string }
 
           {/* Tasks */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Tasks <span className="font-normal text-slate-400">({data.tasks.total})</span>
+            <h2 className="text-subsection font-semibold text-foreground">
+              Tasks <span className="font-normal text-muted-foreground">({data.tasks.total})</span>
             </h2>
 
             {Object.keys(data.tasks.byStatus).length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No tasks yet.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No tasks yet.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {Object.entries(data.tasks.byStatus).map(([status, count]) => (
                   <li
                     key={status}
-                    className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-4 py-2.5"
+                    className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2.5"
                   >
-                    <span className="text-sm text-slate-700">{status}</span>
-                    <span className="text-sm font-medium text-slate-900">{count}</span>
+                    <span className="text-ui text-foreground">{status}</span>
+                    <span className="text-ui font-medium text-foreground">{count}</span>
                   </li>
                 ))}
               </ul>
@@ -293,24 +292,24 @@ export default function FirmReportsPage({ params }: { params: { firmId: string }
 
           {/* Upcoming hearings */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-subsection font-semibold text-foreground">
               Upcoming hearings{' '}
-              <span className="font-normal text-slate-400">
+              <span className="font-normal text-muted-foreground">
                 ({data.upcomingHearings.length})
               </span>
             </h2>
 
             {data.upcomingHearings.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">No upcoming hearings.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No upcoming hearings.</p>
             ) : (
               <ul className="mt-3 space-y-3">
                 {data.upcomingHearings.map((h) => (
                   <li
                     key={h.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-border bg-card px-4 py-3"
                   >
-                    <p className="text-sm font-medium text-slate-900">{h.hearing_type}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="text-ui font-medium text-foreground">{h.hearing_type}</p>
+                    <p className="mt-1 text-meta text-muted-foreground">
                       {formatTimestamp(h.hearing_date)}
                       {h.court_name ? ` · ${h.court_name}` : ''}
                     </p>
@@ -324,22 +323,22 @@ export default function FirmReportsPage({ params }: { params: { firmId: string }
               above: real confirmed fields, rendered now that
               database.types.ts has been pasted this session. */}
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">Subscription</h2>
+            <h2 className="text-subsection font-semibold text-foreground">Subscription</h2>
 
             {data.subscription === null ? (
-              <p className="mt-3 text-sm text-slate-500">No active subscription.</p>
+              <p className="mt-3 text-ui text-muted-foreground">No active subscription.</p>
             ) : (
-              <div className="mt-3 rounded-md border border-slate-200 bg-white px-4 py-3">
-                <p className="text-sm font-medium text-slate-900">
+              <div className="mt-3 rounded-md border border-border bg-card px-4 py-3">
+                <p className="text-ui font-medium text-foreground">
                   {data.subscription.plan.name}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-meta text-muted-foreground">
                   {data.subscription.subscription.status} ·{' '}
                   {formatPricePaise(data.subscription.plan.price_paise)}/
                   {data.subscription.plan.billing_interval}
                 </p>
                 {data.subscription.subscription.current_period_end && (
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-meta text-muted-foreground">
                     Renews {formatTimestamp(data.subscription.subscription.current_period_end)}
                   </p>
                 )}
@@ -350,6 +349,6 @@ export default function FirmReportsPage({ params }: { params: { firmId: string }
       ) : null}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

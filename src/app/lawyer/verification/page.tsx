@@ -88,8 +88,9 @@ import {
   XCircle,
   RotateCcw,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { Button } from '@/shared/components/ui/button';
 
 // Mirrors professional-verification.repository.ts's own
 // `VerificationStatus` union and the real `professional_verifications`
@@ -139,9 +140,9 @@ function formatTimestamp(isoString: string | null): string {
 function StatusPill({ status }: { status: VerificationStatus }) {
   const styles: Record<VerificationStatus, string> = {
     pending: 'bg-muted text-muted-foreground',
-    resubmitted: 'bg-amber-500/10 text-amber-600',
-    verified: 'bg-emerald-500/10 text-emerald-600',
-    rejected: 'bg-destructive/10 text-destructive',
+    resubmitted: 'bg-warning-subtle text-warning-subtle-foreground',
+    verified: 'bg-success-subtle text-success-subtle-foreground',
+    rejected: 'bg-destructive-subtle text-destructive-subtle-foreground',
   };
   const labels: Record<VerificationStatus, string> = {
     pending: 'Pending review',
@@ -159,7 +160,7 @@ function StatusPill({ status }: { status: VerificationStatus }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium ${styles[status]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-meta font-medium ${styles[status]}`}
     >
       <IconComponent className="h-3.5 w-3.5" strokeWidth={2} />
       {labels[status]}
@@ -255,30 +256,27 @@ export default function ProfessionalVerificationPage() {
   const canSubmit = verification === null || verification.status === 'rejected';
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="verification" terminal="lawyer" />
-
+    <AppShell active="verification" terminal="lawyer">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-background px-8 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
               <BadgeCheck className="h-5 w-5 text-primary" strokeWidth={1.75} />
             </div>
             <div>
-              <h1 className="text-[19px] font-semibold leading-tight text-foreground">
+              <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">
                 My Verification
               </h1>
-              <p className="text-[12.5px] text-muted-foreground">
+              <p className="text-meta text-muted-foreground">
                 Submit your professional registration number for manual review.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            <Button variant="outline" size="icon" className="relative"
               onClick={() => setIsNotificationsPanelOpen((v) => !v)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />
@@ -287,7 +285,7 @@ export default function ProfessionalVerificationPage() {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -301,15 +299,15 @@ export default function ProfessionalVerificationPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your verification…</p>
+              <p className="text-ui">Loading your verification…</p>
             </div>
           ) : loadError ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{loadError}</p>
+              <p className="text-ui">{loadError}</p>
               <button
                 onClick={loadVerification}
-                className="text-[13px] font-medium underline underline-offset-2"
+                className="text-ui font-medium underline underline-offset-2"
               >
                 Retry
               </button>
@@ -319,13 +317,13 @@ export default function ProfessionalVerificationPage() {
               {/* Current status */}
               <div className="flex flex-col gap-4 rounded-lg border border-border bg-card px-6 py-5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <h2 className="text-ui font-medium uppercase tracking-wide text-muted-foreground">
                     Status
                   </h2>
                   {verification ? (
                     <StatusPill status={verification.status} />
                   ) : (
-                    <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
+                    <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-meta font-medium text-muted-foreground">
                       Not submitted
                     </span>
                   )}
@@ -333,14 +331,14 @@ export default function ProfessionalVerificationPage() {
 
                 {verification ? (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="text-[12.5px] text-muted-foreground">
-                      <span className="block text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                    <div className="text-meta text-muted-foreground">
+                      <span className="block text-caption uppercase tracking-wide text-muted-foreground/70">
                         Registration number
                       </span>
                       <span className="text-foreground">{verification.registration_number}</span>
                     </div>
-                    <div className="text-[12.5px] text-muted-foreground">
-                      <span className="block text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                    <div className="text-meta text-muted-foreground">
+                      <span className="block text-caption uppercase tracking-wide text-muted-foreground/70">
                         Submitted
                       </span>
                       <span className="text-foreground">
@@ -348,8 +346,8 @@ export default function ProfessionalVerificationPage() {
                       </span>
                     </div>
                     {verification.reviewed_at && (
-                      <div className="text-[12.5px] text-muted-foreground">
-                        <span className="block text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                      <div className="text-meta text-muted-foreground">
+                        <span className="block text-caption uppercase tracking-wide text-muted-foreground/70">
                           Reviewed
                         </span>
                         <span className="text-foreground">
@@ -359,26 +357,26 @@ export default function ProfessionalVerificationPage() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-[12.5px] text-muted-foreground">
+                  <p className="text-meta text-muted-foreground">
                     You haven&apos;t submitted a professional verification yet. Submit your
                     registration number below to get verified.
                   </p>
                 )}
 
                 {verification?.status === 'verified' && (
-                  <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[12.5px] text-emerald-700">
+                  <div className="flex items-center gap-2 rounded-md border border-success bg-success-subtle px-3 py-2 text-meta text-success-subtle-foreground">
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                     Your account is verified. No further action needed.
                   </div>
                 )}
                 {(verification?.status === 'pending' || verification?.status === 'resubmitted') && (
-                  <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[12.5px] text-amber-700">
+                  <div className="flex items-center gap-2 rounded-md border border-warning bg-warning-subtle px-3 py-2 text-meta text-warning-subtle-foreground">
                     <Clock className="h-3.5 w-3.5 shrink-0" />
                     Awaiting manual review. You&apos;ll be notified once a decision is made.
                   </div>
                 )}
                 {verification?.status === 'rejected' && (
-                  <div className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                  <div className="flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-meta text-destructive-subtle-foreground">
                     <XCircle className="h-3.5 w-3.5 shrink-0" />
                     Your submission was rejected. Correct your registration number below and
                     resubmit.
@@ -393,7 +391,7 @@ export default function ProfessionalVerificationPage() {
                   onSubmit={handleSubmit}
                   className="flex flex-col gap-5 rounded-lg border border-border bg-card px-6 py-5"
                 >
-                  <h2 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <h2 className="text-ui font-medium uppercase tracking-wide text-muted-foreground">
                     {verification?.status === 'rejected'
                       ? 'Resubmit verification'
                       : 'Submit for verification'}
@@ -402,7 +400,7 @@ export default function ProfessionalVerificationPage() {
                   <div className="flex flex-col gap-1.5">
                     <label
                       htmlFor="registration_number"
-                      className="text-[13px] font-medium text-foreground"
+                      className="text-ui font-medium text-foreground"
                     >
                       Registration number
                     </label>
@@ -413,35 +411,34 @@ export default function ProfessionalVerificationPage() {
                       onChange={(e) => setRegistrationNumberInput(e.target.value)}
                       maxLength={MAX_REGISTRATION_NUMBER_LENGTH}
                       placeholder="e.g. Bar Council enrollment number"
-                      className="rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                      className="rounded-md border border-input bg-background px-3 py-2 text-ui text-foreground placeholder:text-muted-foreground focus:outline-none"
                     />
                     {fieldError ? (
-                      <p className="text-[12px] text-destructive">{fieldError}</p>
+                      <p className="text-meta text-destructive">{fieldError}</p>
                     ) : (
-                      <p className="text-[12px] text-muted-foreground">
+                      <p className="text-meta text-muted-foreground">
                         Reviewed manually — no external registry check is performed.
                       </p>
                     )}
                   </div>
 
                   {submitError && (
-                    <div className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                    <div className="flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-meta text-destructive-subtle-foreground">
                       <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                       {submitError}
                     </div>
                   )}
                   {submitSuccess && !isSubmitting && (
-                    <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[12.5px] text-emerald-700">
+                    <div className="flex items-center gap-2 rounded-md border border-success bg-success-subtle px-3 py-2 text-meta text-success-subtle-foreground">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                       Submitted. You&apos;ll see the updated status above once reviewed.
                     </div>
                   )}
 
                   <div>
-                    <button
+                    <Button
                       type="submit"
                       disabled={isSubmitting}
-                      className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       {isSubmitting
@@ -449,7 +446,7 @@ export default function ProfessionalVerificationPage() {
                         : verification?.status === 'rejected'
                           ? 'Resubmit'
                           : 'Submit'}
-                    </button>
+                    </Button>
                   </div>
                 </form>
               )}
@@ -457,6 +454,6 @@ export default function ProfessionalVerificationPage() {
           )}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

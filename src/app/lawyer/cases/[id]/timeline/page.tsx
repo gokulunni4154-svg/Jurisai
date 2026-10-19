@@ -64,6 +64,7 @@ import {
   Shield,
   Trash2,
 } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
 
 type ActorType = 'user' | 'system' | 'webhook';
 
@@ -334,11 +335,11 @@ export default function CaseTimelinePage({ params }: { params: { id: string } })
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <p className="text-meta font-medium uppercase tracking-wide text-muted-foreground">
           {headerTitle}
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">Case activity</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-page-title">Case activity</h1>
+        <p className="mt-1 text-ui text-muted-foreground">
           Everything that&apos;s happened on this case, most recent first.
         </p>
       </div>
@@ -348,10 +349,10 @@ export default function CaseTimelinePage({ params }: { params: { id: string } })
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+            className={`rounded-full border px-3 py-1 text-meta font-medium transition-colors ${
               filter === f.key
-                ? 'border-slate-900 bg-slate-900 text-white'
-                : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                ? 'border-foreground bg-primary text-primary-foreground'
+                : 'border-input text-muted-foreground hover:bg-muted'
             }`}
           >
             {f.label}
@@ -360,20 +361,20 @@ export default function CaseTimelinePage({ params }: { params: { id: string } })
       </div>
 
       {error && (
-        <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mt-6 rounded-md border border-destructive bg-destructive-subtle px-4 py-3 text-ui text-destructive-subtle-foreground">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="mt-10 flex items-center justify-center text-sm text-slate-500">
+        <div className="mt-10 flex items-center justify-center text-ui text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : (
         <>
           {events.length === 0 && !error ? (
-            <p className="mt-8 text-sm text-slate-500">No activity recorded yet.</p>
+            <p className="mt-8 text-ui text-muted-foreground">No activity recorded yet.</p>
           ) : (
             <ol className="mt-6 space-y-0">
               {events.map((event, index) => {
@@ -391,15 +392,15 @@ export default function CaseTimelinePage({ params }: { params: { id: string } })
                 const rowContent = (
                   <div className="flex gap-3">
                     <div className="flex flex-col items-center">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-input bg-card text-muted-foreground">
                         <Icon className="h-3.5 w-3.5" />
                       </span>
-                      {!isLast && <span className="mt-1 w-px flex-1 bg-slate-200" />}
+                      {!isLast && <span className="mt-1 w-px flex-1 bg-border" />}
                     </div>
                     <div className="flex-1 pb-6">
-                      <p className="text-sm font-medium text-slate-900">{label}</p>
-                      {summary && <p className="mt-0.5 text-sm text-slate-600">{summary}</p>}
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="text-ui font-medium text-foreground">{label}</p>
+                      {summary && <p className="mt-0.5 text-ui text-muted-foreground">{summary}</p>}
+                      <p className="mt-1 text-meta text-muted-foreground">
                         {actorLabel} · {formatTimestamp(event.created_at)}
                       </p>
                     </div>
@@ -414,7 +415,7 @@ export default function CaseTimelinePage({ params }: { params: { id: string } })
                     <li key={event.id}>
                       <Link
                         href={`/lawyer/cases/${caseId}/hearings`}
-                        className="-mx-2 block rounded-md px-2 hover:bg-slate-50"
+                        className="-mx-2 block rounded-md px-2 hover:bg-muted"
                       >
                         {rowContent}
                       </Link>
@@ -429,13 +430,12 @@ export default function CaseTimelinePage({ params }: { params: { id: string } })
 
           {hasMore && (
             <div className="mt-2 flex justify-center">
-              <button
+              <Button variant="outline" size="sm"
                 onClick={() => loadTimeline(offset + PAGE_SIZE, false)}
                 disabled={loadingMore}
-                className="rounded-md border border-slate-300 px-4 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
               >
                 {loadingMore ? 'Loading…' : `Load more (${total - events.length} remaining)`}
-              </button>
+              </Button>
             </div>
           )}
         </>

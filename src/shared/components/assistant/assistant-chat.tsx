@@ -7,6 +7,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Loader2, Plus, Send, Sparkles } from "lucide-react";
 
+import { Button } from "@/shared/components/ui/button";
+import { Textarea } from "@/shared/components/ui/input";
+
 import { SafeMarkdown } from "./safe-markdown";
 
 const STREAM_ERROR_MARKER = "\n[[JURISAI_STREAM_ERROR]]";
@@ -68,7 +71,13 @@ export function AssistantChat({
   }, [loadConversations]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    bottomRef.current?.scrollIntoView?.({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "end",
+    });
   }, [messages]);
 
   async function openConversation(id: string) {
@@ -184,22 +193,24 @@ export function AssistantChat({
 
   return (
     <div className="flex h-full min-h-0 flex-col md:flex-row">
-      <aside className="border-b border-border bg-card md:w-64 md:shrink-0 md:border-b-0 md:border-r">
+      <aside aria-label="Conversations" className="border-b border-border bg-card md:w-64 md:shrink-0 md:border-b-0 md:border-r">
         <div className="flex items-center justify-between px-4 py-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-meta font-medium text-muted-foreground">
             Conversations
           </p>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={newConversation}
-            className="flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs hover:bg-muted"
+            className="gap-1"
           >
             <Plus className="h-3 w-3" /> New
-          </button>
+          </Button>
         </div>
         <ul className="max-h-32 overflow-y-auto px-2 pb-2 md:max-h-none md:h-[calc(100%-3rem)]">
           {conversations.length === 0 && (
-            <li className="px-2 py-1.5 text-xs text-muted-foreground">
+            <li className="px-2 py-1.5 text-meta text-muted-foreground">
               No conversations yet.
             </li>
           )}
@@ -209,8 +220,8 @@ export function AssistantChat({
                 type="button"
                 onClick={() => void openConversation(c.id)}
                 aria-current={c.id === conversationId ? "true" : undefined}
-                className={`w-full truncate rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted ${
-                  c.id === conversationId ? "bg-muted font-medium" : ""
+                className={`w-full truncate rounded-md px-2 py-2.5 text-left text-meta hover:bg-muted md:py-1.5 ${
+                  c.id === conversationId ? "bg-accent font-medium text-accent-foreground" : ""
                 }`}
               >
                 {c.title || "Untitled conversation"}
@@ -222,38 +233,51 @@ export function AssistantChat({
 
       <section className="flex min-h-0 flex-1 flex-col" aria-label={heading}>
         <header className="border-b border-border bg-card px-6 py-4">
-          <h1 className="flex items-center gap-2 font-serif text-xl text-foreground">
+          <h1 className="flex items-center gap-2 text-section text-foreground">
             <Sparkles className="h-4 w-4 text-primary" strokeWidth={1.75} />
             {heading}
           </h1>
-          <p className="mt-1 text-xs text-muted-foreground">{contextLabel}</p>
+          <p className="mt-1 text-meta text-muted-foreground">{contextLabel}</p>
         </header>
 
+        {/* One short announcement per turn instead of a live region over the
+            whole transcript, which would re-read every streamed chunk. */}
+        <p aria-live="polite" className="sr-only">
+          {sending &&
+          messages[messages.length - 1]?.role === "assistant" &&
+          messages[messages.length - 1]?.content
+            ? "The assistant is responding."
+            : ""}
+        </p>
         <div
           className="flex-1 overflow-y-auto px-4 py-6 md:px-6"
-          aria-live="polite"
+          tabIndex={0}
+          role="region"
+          aria-label="Conversation"
         >
           {messages.length === 0 ? (
             <div className="mx-auto max-w-xl text-center">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-ui text-muted-foreground">
                 Try one of these to get started:
               </p>
               <div className="mt-4 flex flex-col gap-2">
                 {suggestions.map((s) => (
-                  <button
+                  <Button
                     key={s}
                     type="button"
+                    variant="outline"
                     onClick={() => void send(s)}
                     disabled={sending}
-                    className="rounded-md border border-border bg-card px-4 py-2.5 text-left text-[13.5px] hover:bg-muted disabled:opacity-50"
+                    className="h-auto justify-start whitespace-normal bg-card px-4 py-2.5 text-left font-normal"
                   >
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
           ) : (
-            <ol className="mx-auto flex max-w-3xl flex-col gap-4">
+            <>
+            <ol className="mx-auto flex max-w-3xl flex-col gap-5">
               {messages.map((m) => (
                 <li
                   key={m.id}
@@ -264,46 +288,56 @@ export function AssistantChat({
                   }
                 >
                   <div
-                    className={`max-w-[85%] rounded-lg px-4 py-3 ${
+                    className={`max-w-[85%] break-words rounded-lg px-4 py-3 ${
                       m.role === "user"
                         ? "bg-primary text-primary-foreground"
                         : "border border-border bg-card text-foreground"
                     }`}
                   >
                     {m.role === "user" ? (
-                      <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
+                      <p className="whitespace-pre-wrap text-body">
+                        <span className="sr-only">You: </span>
                         {m.content}
                       </p>
                     ) : m.content ? (
-                      <SafeMarkdown text={m.content} />
+                      <>
+                        <span className="sr-only">Assistant: </span>
+                        <SafeMarkdown text={m.content} />
+                      </>
                     ) : (
-                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span
+                        role="status"
+                        className="flex items-center gap-2 text-meta text-muted-foreground"
+                      >
                         <Loader2 className="h-3 w-3 animate-spin" /> Thinking…
                       </span>
                     )}
                   </div>
                 </li>
               ))}
-              <div ref={bottomRef} />
             </ol>
+            <div ref={bottomRef} />
+            </>
           )}
         </div>
 
         {error && (
           <div
             role="alert"
-            className="mx-4 mb-2 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive md:mx-6"
+            className="mx-4 mb-2 flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-meta text-destructive-subtle-foreground md:mx-6"
           >
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1">{error}</span>
             {lastPrompt && !sending && (
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => void send(lastPrompt)}
-                className="font-medium underline"
+                className="h-9 border-destructive bg-transparent md:h-7"
               >
                 Retry
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -319,7 +353,7 @@ export function AssistantChat({
             <label htmlFor="assistant-input" className="sr-only">
               Message the assistant
             </label>
-            <textarea
+            <Textarea
               id="assistant-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -332,22 +366,22 @@ export function AssistantChat({
               rows={2}
               maxLength={MAX_CHARS}
               placeholder="Ask a question… (Enter to send, Shift+Enter for a new line)"
-              className="min-h-[44px] flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-[13.5px] focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="min-h-[44px] flex-1 resize-none text-body"
             />
-            <button
+            <Button
               type="submit"
+              size="icon"
               disabled={sending || input.trim() === ""}
               aria-label="Send message"
-              className="flex h-10 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-50"
             >
               {sending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
-            </button>
+            </Button>
           </div>
-          <p className="mx-auto mt-2 max-w-3xl text-[11px] text-muted-foreground">
+          <p className="mx-auto mt-2 max-w-3xl text-caption text-muted-foreground">
             {disclaimer}
           </p>
         </form>

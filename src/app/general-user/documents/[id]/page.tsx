@@ -171,14 +171,14 @@ function formatCategoryFallback(raw: string): string {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-600';
-  if (score >= 50) return 'text-amber-600';
+  if (score >= 80) return 'text-success';
+  if (score >= 50) return 'text-warning-subtle-foreground';
   return 'text-destructive';
 }
 
 function scoreBg(score: number): string {
-  if (score >= 80) return 'bg-emerald-500';
-  if (score >= 50) return 'bg-amber-500';
+  if (score >= 80) return 'bg-success';
+  if (score >= 50) return 'bg-warning';
   return 'bg-destructive';
 }
 
@@ -256,9 +256,9 @@ interface RiskDetection {
 
 const SEVERITY_STYLES: Record<RiskSeverity, string> = {
   low: 'bg-muted text-muted-foreground',
-  medium: 'bg-amber-500/10 text-amber-700',
-  high: 'bg-orange-500/10 text-orange-700',
-  critical: 'bg-destructive/10 text-destructive',
+  medium: 'bg-warning-subtle text-warning-subtle-foreground',
+  high: 'bg-destructive-subtle text-destructive-subtle-foreground',
+  critical: 'bg-destructive-subtle text-destructive-subtle-foreground',
 };
 
 function formatRiskType(raw: string): string {
@@ -1602,16 +1602,16 @@ export default function DocumentAnalysisPage() {
       <header className="flex items-center gap-4 border-b border-border px-8 py-6">
         <button
           onClick={() => router.push('/general-user/documents')}
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted/50"
+          className="flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
           aria-label="Back to documents"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="mb-1 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">
             JurisAI · Analysis
           </p>
-          <h1 className="truncate font-serif text-[24px] leading-none text-foreground">
+          <h1 className="truncate text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-page-title">
             {doc?.title ?? (isLoading ? 'Loading…' : 'Document')}
           </h1>
 
@@ -1622,16 +1622,16 @@ export default function DocumentAnalysisPage() {
               <CalendarClock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
               {isEditingHearingDate ? (
                 <>
-                  <input
+                  <input aria-label="Hearing date"
                     type="date"
                     value={hearingDateInput}
                     onChange={(e) => setHearingDateInput(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2 py-1 text-[12px] text-foreground focus:outline-none"
+                    className="rounded-md border border-input bg-background px-2 py-1 text-meta text-foreground focus:outline-none"
                   />
                   <button
                     onClick={handleSaveHearingDate}
                     disabled={isSavingHearingDate}
-                    className="text-[12px] font-medium text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    className="text-meta font-medium text-primary disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSavingHearingDate ? 'Saving…' : 'Save'}
                   </button>
@@ -1641,21 +1641,21 @@ export default function DocumentAnalysisPage() {
                       setHearingDateError(null);
                     }}
                     disabled={isSavingHearingDate}
-                    className="text-[12px] text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="text-meta text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancel
                   </button>
                 </>
               ) : (
                 <>
-                  <span className="text-[12px] text-muted-foreground">
+                  <span className="text-meta text-muted-foreground">
                     {doc.hearing_date
                       ? `Hearing date: ${formatHearingDate(doc.hearing_date)}`
                       : 'No hearing date set'}
                   </span>
                   <button
                     onClick={handleStartEditHearingDate}
-                    className="text-[12px] font-medium text-primary underline underline-offset-2"
+                    className="text-meta font-medium text-primary underline underline-offset-2"
                   >
                     {doc.hearing_date ? 'Change' : 'Set date'}
                   </button>
@@ -1664,7 +1664,7 @@ export default function DocumentAnalysisPage() {
             </div>
           )}
           {hearingDateError && (
-            <p className="mt-1 text-[12px] text-destructive">{hearingDateError}</p>
+            <p className="mt-1 text-meta text-destructive">{hearingDateError}</p>
           )}
         </div>
       </header>
@@ -1673,15 +1673,15 @@ export default function DocumentAnalysisPage() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
-            <p className="text-[13px]">Loading analysis…</p>
+            <p className="text-ui">Loading analysis…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
-            <p className="text-[13px]">{loadError}</p>
+            <p className="text-ui">{loadError}</p>
             <button
               onClick={loadEverything}
-              className="text-[13px] font-medium underline underline-offset-2"
+              className="text-ui font-medium underline underline-offset-2"
             >
               Retry
             </button>
@@ -1689,8 +1689,8 @@ export default function DocumentAnalysisPage() {
         ) : !analysis ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-24 text-muted-foreground">
             <FileText className="h-6 w-6" />
-            <p className="text-[13px]">No analysis exists for this document yet.</p>
-            <p className="max-w-sm text-center text-[12px]">
+            <p className="text-ui">No analysis exists for this document yet.</p>
+            <p className="max-w-sm text-center text-meta">
               This extracts the document&apos;s text and runs the first analysis
               pass. It can take up to a minute — the page will stay on this
               screen until it&apos;s done, there&apos;s no progress bar to watch.
@@ -1698,7 +1698,7 @@ export default function DocumentAnalysisPage() {
             <button
               onClick={handleStartAnalysis}
               disabled={isStartingAnalysis}
-              className="mt-1 flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isStartingAnalysis ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1708,7 +1708,7 @@ export default function DocumentAnalysisPage() {
               {isStartingAnalysis ? 'Analyzing… this can take up to a minute' : 'Start Analysis'}
             </button>
             {startAnalysisError && (
-              <p className="max-w-sm text-center text-[12px] text-destructive">
+              <p className="max-w-sm text-center text-meta text-destructive">
                 {startAnalysisError}
               </p>
             )}
@@ -1717,8 +1717,8 @@ export default function DocumentAnalysisPage() {
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-5 py-4">
               <div>
-                <p className="text-[13px] font-medium text-foreground">PDF Report</p>
-                <p className="text-[12px] text-muted-foreground">
+                <p className="text-ui font-medium text-foreground">PDF Report</p>
+                <p className="text-meta text-muted-foreground">
                   {pdfExport
                     ? 'A report has already been generated — download it, or regenerate for the latest data.'
                     : 'Combines Clause Classification and Legal Health Score into a downloadable PDF.'}
@@ -1727,7 +1727,7 @@ export default function DocumentAnalysisPage() {
               <button
                 onClick={handleDownloadPdf}
                 disabled={isGeneratingPdf || isFetchingPdfUrl}
-                className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {(isGeneratingPdf || isFetchingPdfUrl) && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1742,23 +1742,23 @@ export default function DocumentAnalysisPage() {
               </button>
             </div>
             {pdfError && (
-              <p className="text-[12px] text-destructive">{pdfError}</p>
+              <p className="text-meta text-destructive">{pdfError}</p>
             )}
 
             {/* Legal Health Score */}
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Scale className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">Legal Health Score</h2>
+                <h2 className="text-section text-foreground">Legal Health Score</h2>
               </div>
 
               {healthScore?.status === 'completed' && healthScore.overall_score !== null ? (
                 <div className="flex flex-col gap-5">
                   <div className="flex items-baseline gap-2">
-                    <span className={`text-[40px] font-semibold leading-none ${scoreColor(healthScore.overall_score)}`}>
+                    <span className={`text-5xl font-semibold leading-none ${scoreColor(healthScore.overall_score)}`}>
                       {healthScore.overall_score}
                     </span>
-                    <span className="text-[13px] text-muted-foreground">/ 100</span>
+                    <span className="text-ui text-muted-foreground">/ 100</span>
                   </div>
 
                   {healthScore.category_scores && (
@@ -1766,7 +1766,7 @@ export default function DocumentAnalysisPage() {
                       {(Object.entries(healthScore.category_scores) as [string, number][]).map(
                         ([key, value]) => (
                           <div key={key} className="rounded-md border border-border p-3">
-                            <div className="mb-1.5 flex items-center justify-between text-[12px]">
+                            <div className="mb-1.5 flex items-center justify-between text-meta">
                               <span className="text-muted-foreground">
                                 {key === 'negotiationLeverage'
                                   ? 'Negotiation Leverage'
@@ -1790,10 +1790,10 @@ export default function DocumentAnalysisPage() {
                     <div className="flex flex-col gap-3">
                       {healthScore.result.categoryBreakdown.map((entry) => (
                         <div key={entry.category} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
-                          <p className="mb-1 text-[13px] font-medium text-foreground">
+                          <p className="mb-1 text-ui font-medium text-foreground">
                             {CATEGORY_LABELS[entry.category] ?? entry.category}
                           </p>
-                          <p className="text-[12px] leading-relaxed text-muted-foreground">
+                          <p className="text-meta leading-relaxed text-muted-foreground">
                             {entry.rationale}
                           </p>
                         </div>
@@ -1803,20 +1803,20 @@ export default function DocumentAnalysisPage() {
                 </div>
               ) : healthScore?.status === 'failed' ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-[13px] text-destructive">
+                  <p className="text-ui text-destructive">
                     {healthScore.error_message ?? 'The last health score run failed.'}
                   </p>
                   <button
                     onClick={handleRunHealthScore}
                     disabled={isRunningHealthScore}
-                    className="w-fit rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:opacity-60"
                   >
                     Try again
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No health score has been generated for this analysis yet.
                     This depends on four other Phase 2 modules having already
                     run — if any haven&apos;t, this may fail with a message naming
@@ -1825,7 +1825,7 @@ export default function DocumentAnalysisPage() {
                   <button
                     onClick={handleRunHealthScore}
                     disabled={isRunningHealthScore}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunningHealthScore ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1835,7 +1835,7 @@ export default function DocumentAnalysisPage() {
                     {isRunningHealthScore ? 'Generating…' : 'Generate Health Score'}
                   </button>
                   {healthScoreError && (
-                    <p className="text-[12px] text-destructive">{healthScoreError}</p>
+                    <p className="text-meta text-destructive">{healthScoreError}</p>
                   )}
                 </div>
               )}
@@ -1851,23 +1851,23 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Users className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">Contact a Lawyer</h2>
+                <h2 className="text-section text-foreground">Contact a Lawyer</h2>
               </div>
 
               {healthScore?.status !== 'completed' ? (
-                <p className="text-[13px] text-muted-foreground">
+                <p className="text-ui text-muted-foreground">
                   Generate a Legal Health Score above first — it&apos;s required before you can
                   contact a lawyer about this document.
                 </p>
               ) : !isContactLawyerOpen ? (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     Not sure what to do next? Reach out to a verified firm and share this
                     document&apos;s analysis with them directly.
                   </p>
                   <button
                     onClick={handleOpenContactLawyer}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground"
                   >
                     <Scale className="h-3.5 w-3.5" strokeWidth={1.75} />
                     Contact a Lawyer
@@ -1875,17 +1875,17 @@ export default function DocumentAnalysisPage() {
                 </div>
               ) : submittedInquiry ? (
                 <div className="flex flex-col items-start gap-3">
-                  <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" strokeWidth={1.75} />
+                  <div className="flex items-center gap-2 text-ui font-medium text-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={1.75} />
                     Your inquiry has been sent.
                   </div>
-                  <p className="text-[12.5px] text-muted-foreground">
+                  <p className="text-meta text-muted-foreground">
                     The firm can now review your Legal Health Score and analysis. You&apos;ll be
                     notified once they respond.
                   </p>
                   <button
                     onClick={handleCloseContactLawyer}
-                    className="rounded-md border border-input px-3.5 py-2 text-[13px] font-medium text-foreground hover:bg-muted"
+                    className="rounded-md border border-input px-3.5 py-2 text-ui font-medium text-foreground hover:bg-muted"
                   >
                     Close
                   </button>
@@ -1894,18 +1894,18 @@ export default function DocumentAnalysisPage() {
                 <div className="flex flex-col gap-4">
                   {/* Step 1 — pick a firm */}
                   <div>
-                    <p className="mb-2 text-[12.5px] font-medium text-foreground">
+                    <p className="mb-2 text-meta font-medium text-foreground">
                       Choose a firm
                     </p>
                     {isLoadingFirms ? (
-                      <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-meta text-muted-foreground">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         Loading firms…
                       </div>
                     ) : firmsError ? (
-                      <p className="text-[12.5px] text-destructive">{firmsError}</p>
+                      <p className="text-meta text-destructive">{firmsError}</p>
                     ) : firms && firms.length === 0 ? (
-                      <p className="text-[12.5px] text-muted-foreground">
+                      <p className="text-meta text-muted-foreground">
                         No verified firms are available right now.
                       </p>
                     ) : (
@@ -1914,10 +1914,10 @@ export default function DocumentAnalysisPage() {
                           <button
                             key={firm.id}
                             onClick={() => handleSelectFirm(firm.id)}
-                            className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-[13px] transition-colors ${
+                            className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-ui transition-colors ${
                               selectedFirmId === firm.id
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-border text-foreground hover:bg-muted/50'
+                                ? 'border-primary bg-accent text-accent-foreground'
+                                : 'border-border text-foreground hover:bg-muted'
                             }`}
                           >
                             <span className="flex items-center gap-2">
@@ -1934,19 +1934,19 @@ export default function DocumentAnalysisPage() {
                   {/* Step 2 — optionally pick a specific lawyer at that firm */}
                   {selectedFirmId && (
                     <div>
-                      <p className="mb-2 text-[12.5px] font-medium text-foreground">
+                      <p className="mb-2 text-meta font-medium text-foreground">
                         Choose a lawyer (optional — leave unselected to contact the firm
                         generally)
                       </p>
                       {isLoadingMembers ? (
-                        <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+                        <div className="flex items-center gap-2 text-meta text-muted-foreground">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           Loading members…
                         </div>
                       ) : membersError ? (
-                        <p className="text-[12.5px] text-destructive">{membersError}</p>
+                        <p className="text-meta text-destructive">{membersError}</p>
                       ) : firmMembers && firmMembers.length === 0 ? (
-                        <p className="text-[12.5px] text-muted-foreground">
+                        <p className="text-meta text-muted-foreground">
                           This firm has no members listed yet — you can still contact the
                           firm generally.
                         </p>
@@ -1954,10 +1954,10 @@ export default function DocumentAnalysisPage() {
                         <div className="flex flex-col gap-1.5">
                           <button
                             onClick={() => setSelectedProfileId(null)}
-                            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left text-[13px] transition-colors ${
+                            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left text-ui transition-colors ${
                               selectedProfileId === null
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-border text-foreground hover:bg-muted/50'
+                                ? 'border-primary bg-accent text-accent-foreground'
+                                : 'border-border text-foreground hover:bg-muted'
                             }`}
                           >
                             Contact the firm generally
@@ -1966,14 +1966,14 @@ export default function DocumentAnalysisPage() {
                             <button
                               key={member.profileId}
                               onClick={() => setSelectedProfileId(member.profileId)}
-                              className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-[13px] transition-colors ${
+                              className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-ui transition-colors ${
                                 selectedProfileId === member.profileId
-                                  ? 'border-primary bg-primary/10 text-primary'
-                                  : 'border-border text-foreground hover:bg-muted/50'
+                                  ? 'border-primary bg-accent text-accent-foreground'
+                                  : 'border-border text-foreground hover:bg-muted'
                               }`}
                             >
                               <span>{member.fullName}</span>
-                              <span className="text-[11px] capitalize text-muted-foreground">
+                              <span className="text-caption capitalize text-muted-foreground">
                                 {member.role}
                               </span>
                             </button>
@@ -1984,14 +1984,14 @@ export default function DocumentAnalysisPage() {
                   )}
 
                   {inquiryError && (
-                    <p className="text-[12.5px] text-destructive">{inquiryError}</p>
+                    <p className="text-meta text-destructive">{inquiryError}</p>
                   )}
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleSubmitInquiry}
                       disabled={!selectedFirmId || isSubmittingInquiry}
-                      className="flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      className="flex items-center gap-2 rounded-md bg-primary px-3.5 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSubmittingInquiry && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       Send Inquiry
@@ -1999,7 +1999,7 @@ export default function DocumentAnalysisPage() {
                     <button
                       onClick={handleCloseContactLawyer}
                       disabled={isSubmittingInquiry}
-                      className="flex items-center gap-1.5 rounded-md px-3 py-2 text-[13px] text-muted-foreground hover:bg-muted"
+                      className="flex items-center gap-1.5 rounded-md px-3 py-2 text-ui text-muted-foreground hover:bg-muted"
                     >
                       <X className="h-3.5 w-3.5" />
                       Cancel
@@ -2013,7 +2013,7 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <ListChecks className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">Clause Classification</h2>
+                <h2 className="text-section text-foreground">Clause Classification</h2>
               </div>
 
               {classification?.status === 'completed' && classification.result ? (
@@ -2024,14 +2024,14 @@ export default function DocumentAnalysisPage() {
                     .map((clause, i) => (
                       <div key={i} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
                         <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          <span className="rounded-full bg-accent px-2 py-0.5 text-caption font-medium text-accent-foreground">
                             {formatCategoryFallback(clause.category)}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-caption text-muted-foreground">
                             {Math.round(clause.confidence * 100)}% confidence
                           </span>
                         </div>
-                        <p className="text-[13px] leading-relaxed text-foreground">
+                        <p className="text-ui leading-relaxed text-foreground">
                           {clause.excerpt}
                         </p>
                       </div>
@@ -2039,26 +2039,26 @@ export default function DocumentAnalysisPage() {
                 </div>
               ) : classification?.status === 'failed' ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-[13px] text-destructive">
+                  <p className="text-ui text-destructive">
                     {classification.error_message ?? 'The last classification run failed.'}
                   </p>
                   <button
                     onClick={handleRunClassification}
                     disabled={isRunningClassification}
-                    className="w-fit rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:opacity-60"
                   >
                     Try again
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No clause classification has been run for this analysis yet.
                   </p>
                   <button
                     onClick={handleRunClassification}
                     disabled={isRunningClassification}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunningClassification ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2068,7 +2068,7 @@ export default function DocumentAnalysisPage() {
                     {isRunningClassification ? 'Classifying…' : 'Classify Clauses'}
                   </button>
                   {classificationError && (
-                    <p className="text-[12px] text-destructive">{classificationError}</p>
+                    <p className="text-meta text-destructive">{classificationError}</p>
                   )}
                 </div>
               )}
@@ -2081,12 +2081,12 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">Risk Detection</h2>
+                <h2 className="text-section text-foreground">Risk Detection</h2>
               </div>
 
               {riskDetection?.status === 'completed' && riskDetection.result ? (
                 riskDetection.result.flags.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No risks were flagged for this document.
                   </p>
                 ) : (
@@ -2095,19 +2095,19 @@ export default function DocumentAnalysisPage() {
                       <div key={i} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SEVERITY_STYLES[flag.severity]}`}
+                            className={`rounded-full px-2 py-0.5 text-caption font-medium ${SEVERITY_STYLES[flag.severity]}`}
                           >
                             {flag.severity.charAt(0).toUpperCase() + flag.severity.slice(1)}
                           </span>
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          <span className="rounded-full bg-accent px-2 py-0.5 text-caption font-medium text-accent-foreground">
                             {formatRiskType(flag.type)}
                           </span>
                           {flag.category && (
-                            <span className="text-[11px] text-muted-foreground">
+                            <span className="text-caption text-muted-foreground">
                               {formatCategoryFallback(flag.category)}
                             </span>
                           )}
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-caption text-muted-foreground">
                             {Math.round(flag.confidence * 100)}% confidence
                           </span>
                         </div>
@@ -2115,11 +2115,11 @@ export default function DocumentAnalysisPage() {
                             DECISION — a missing_clause flag has no excerpt
                             since the clause it describes isn't present. */}
                         {flag.excerpt && (
-                          <p className="text-[13px] leading-relaxed text-foreground">
+                          <p className="text-ui leading-relaxed text-foreground">
                             {flag.excerpt}
                           </p>
                         )}
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">
+                        <p className="text-meta leading-relaxed text-muted-foreground">
                           {flag.explanation}
                         </p>
                       </div>
@@ -2128,27 +2128,27 @@ export default function DocumentAnalysisPage() {
                 )
               ) : riskDetection?.status === 'failed' ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-[13px] text-destructive">
+                  <p className="text-ui text-destructive">
                     {riskDetection.error_message ?? 'The last risk detection run failed.'}
                   </p>
                   <button
                     onClick={handleRunRiskDetection}
                     disabled={isRunningRiskDetection}
-                    className="w-fit rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:opacity-60"
                   >
                     Try again
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No risk detection has been run for this analysis yet. This depends on
                     Clause Classification having already completed.
                   </p>
                   <button
                     onClick={handleRunRiskDetection}
                     disabled={isRunningRiskDetection}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunningRiskDetection ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2158,7 +2158,7 @@ export default function DocumentAnalysisPage() {
                     {isRunningRiskDetection ? 'Detecting risks…' : 'Detect Risks'}
                   </button>
                   {riskDetectionError && (
-                    <p className="text-[12px] text-destructive">{riskDetectionError}</p>
+                    <p className="text-meta text-destructive">{riskDetectionError}</p>
                   )}
                 </div>
               )}
@@ -2172,14 +2172,14 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <ListX className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">
+                <h2 className="text-section text-foreground">
                   Missing Clause Detection
                 </h2>
               </div>
 
               {missingClauseDetection?.status === 'completed' && missingClauseDetection.result ? (
                 missingClauseDetection.result.flags.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No expected clause categories appear to be missing from this document.
                   </p>
                 ) : (
@@ -2188,18 +2188,18 @@ export default function DocumentAnalysisPage() {
                       <div key={i} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SEVERITY_STYLES[flag.importance]}`}
+                            className={`rounded-full px-2 py-0.5 text-caption font-medium ${SEVERITY_STYLES[flag.importance]}`}
                           >
                             {flag.importance.charAt(0).toUpperCase() + flag.importance.slice(1)}
                           </span>
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          <span className="rounded-full bg-accent px-2 py-0.5 text-caption font-medium text-accent-foreground">
                             {formatCategoryFallback(flag.category)}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-caption text-muted-foreground">
                             {Math.round(flag.confidence * 100)}% confidence
                           </span>
                         </div>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">
+                        <p className="text-meta leading-relaxed text-muted-foreground">
                           {flag.explanation}
                         </p>
                       </div>
@@ -2208,28 +2208,28 @@ export default function DocumentAnalysisPage() {
                 )
               ) : missingClauseDetection?.status === 'failed' ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-[13px] text-destructive">
+                  <p className="text-ui text-destructive">
                     {missingClauseDetection.error_message ??
                       'The last missing clause detection run failed.'}
                   </p>
                   <button
                     onClick={handleRunMissingClauseDetection}
                     disabled={isRunningMissingClauseDetection}
-                    className="w-fit rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:opacity-60"
                   >
                     Try again
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No missing clause detection has been run for this analysis yet. This
                     depends on Clause Classification having already completed.
                   </p>
                   <button
                     onClick={handleRunMissingClauseDetection}
                     disabled={isRunningMissingClauseDetection}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunningMissingClauseDetection ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2241,7 +2241,7 @@ export default function DocumentAnalysisPage() {
                       : 'Detect Missing Clauses'}
                   </button>
                   {missingClauseDetectionError && (
-                    <p className="text-[12px] text-destructive">{missingClauseDetectionError}</p>
+                    <p className="text-meta text-destructive">{missingClauseDetectionError}</p>
                   )}
                 </div>
               )}
@@ -2254,12 +2254,12 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Gavel className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">Compliance Detection</h2>
+                <h2 className="text-section text-foreground">Compliance Detection</h2>
               </div>
 
               {complianceDetection?.status === 'completed' && complianceDetection.result ? (
                 complianceDetection.result.flags.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No compliance issues were identified for this document.
                   </p>
                 ) : (
@@ -2268,22 +2268,22 @@ export default function DocumentAnalysisPage() {
                       <div key={i} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SEVERITY_STYLES[flag.severity]}`}
+                            className={`rounded-full px-2 py-0.5 text-caption font-medium ${SEVERITY_STYLES[flag.severity]}`}
                           >
                             {flag.severity.charAt(0).toUpperCase() + flag.severity.slice(1)}
                           </span>
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          <span className="rounded-full bg-accent px-2 py-0.5 text-caption font-medium text-accent-foreground">
                             {FRAMEWORK_LABELS[flag.framework]}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-caption text-muted-foreground">
                             {COMPLIANCE_TYPE_LABELS[flag.type]}
                           </span>
                           {flag.category && (
-                            <span className="text-[11px] text-muted-foreground">
+                            <span className="text-caption text-muted-foreground">
                               {formatCategoryFallback(flag.category)}
                             </span>
                           )}
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-caption text-muted-foreground">
                             {Math.round(flag.confidence * 100)}% confidence
                           </span>
                         </div>
@@ -2291,11 +2291,11 @@ export default function DocumentAnalysisPage() {
                             own KEY DECISION — only non_compliant_clause
                             issues have real clause text to quote. */}
                         {flag.excerpt && (
-                          <p className="text-[13px] leading-relaxed text-foreground">
+                          <p className="text-ui leading-relaxed text-foreground">
                             {flag.excerpt}
                           </p>
                         )}
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">
+                        <p className="text-meta leading-relaxed text-muted-foreground">
                           {flag.explanation}
                         </p>
                       </div>
@@ -2304,27 +2304,27 @@ export default function DocumentAnalysisPage() {
                 )
               ) : complianceDetection?.status === 'failed' ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-[13px] text-destructive">
+                  <p className="text-ui text-destructive">
                     {complianceDetection.error_message ?? 'The last compliance detection run failed.'}
                   </p>
                   <button
                     onClick={handleRunComplianceDetection}
                     disabled={isRunningComplianceDetection}
-                    className="w-fit rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:opacity-60"
                   >
                     Try again
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No compliance detection has been run for this analysis yet. This depends
                     on Clause Classification having already completed.
                   </p>
                   <button
                     onClick={handleRunComplianceDetection}
                     disabled={isRunningComplianceDetection}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunningComplianceDetection ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2334,7 +2334,7 @@ export default function DocumentAnalysisPage() {
                     {isRunningComplianceDetection ? 'Checking compliance…' : 'Detect Compliance Issues'}
                   </button>
                   {complianceDetectionError && (
-                    <p className="text-[12px] text-destructive">{complianceDetectionError}</p>
+                    <p className="text-meta text-destructive">{complianceDetectionError}</p>
                   )}
                 </div>
               )}
@@ -2351,12 +2351,12 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Lightbulb className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">AI Recommendations</h2>
+                <h2 className="text-section text-foreground">AI Recommendations</h2>
               </div>
 
               {aiRecommendation?.status === 'completed' && aiRecommendation.result ? (
                 aiRecommendation.result.recommendations.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No actionable recommendations were synthesized for this document.
                   </p>
                 ) : (
@@ -2365,37 +2365,37 @@ export default function DocumentAnalysisPage() {
                       <div key={i} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SEVERITY_STYLES[rec.priority]}`}
+                            className={`rounded-full px-2 py-0.5 text-caption font-medium ${SEVERITY_STYLES[rec.priority]}`}
                           >
                             {rec.priority.charAt(0).toUpperCase() + rec.priority.slice(1)}
                           </span>
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          <span className="rounded-full bg-accent px-2 py-0.5 text-caption font-medium text-accent-foreground">
                             {formatRiskType(rec.actionType)}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-caption text-muted-foreground">
                             {Math.round(rec.confidence * 100)}% confidence
                           </span>
                         </div>
-                        <p className="text-[13px] font-medium leading-relaxed text-foreground">
+                        <p className="text-ui font-medium leading-relaxed text-foreground">
                           {rec.title}
                         </p>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">
+                        <p className="text-meta leading-relaxed text-muted-foreground">
                           {rec.recommendation}
                         </p>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">
+                        <p className="text-meta leading-relaxed text-muted-foreground">
                           {rec.rationale}
                         </p>
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
                           {rec.sourceModules.map((mod) => (
                             <span
                               key={mod}
-                              className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                              className="rounded-full bg-muted px-2 py-0.5 text-caption text-muted-foreground"
                             >
                               {formatRiskType(mod)}
                             </span>
                           ))}
                         </div>
-                        <p className="text-[11px] italic text-muted-foreground">
+                        <p className="text-caption italic text-muted-foreground">
                           {rec.sourceSummary}
                         </p>
                       </div>
@@ -2404,21 +2404,21 @@ export default function DocumentAnalysisPage() {
                 )
               ) : aiRecommendation?.status === 'failed' ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-[13px] text-destructive">
+                  <p className="text-ui text-destructive">
                     {aiRecommendation.error_message ??
                       'The last AI recommendation run failed.'}
                   </p>
                   <button
                     onClick={handleRunAIRecommendation}
                     disabled={isRunningAIRecommendation}
-                    className="w-fit rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:opacity-60"
                   >
                     Try again
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No AI recommendations have been generated for this analysis yet. This
                     depends on Clause Classification, Risk Detection, Missing Clause
                     Detection, and Compliance Detection all having already completed.
@@ -2426,7 +2426,7 @@ export default function DocumentAnalysisPage() {
                   <button
                     onClick={handleRunAIRecommendation}
                     disabled={isRunningAIRecommendation}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunningAIRecommendation ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2438,7 +2438,7 @@ export default function DocumentAnalysisPage() {
                       : 'Generate Recommendations'}
                   </button>
                   {aiRecommendationError && (
-                    <p className="text-[12px] text-destructive">{aiRecommendationError}</p>
+                    <p className="text-meta text-destructive">{aiRecommendationError}</p>
                   )}
                 </div>
               )}
@@ -2463,12 +2463,12 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">AI Legal Insights</h2>
+                <h2 className="text-section text-foreground">AI Legal Insights</h2>
               </div>
 
               {aiLegalInsight?.status === 'completed' && aiLegalInsight.result ? (
                 aiLegalInsight.result.insights.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No cross-module insights were synthesized for this document.
                   </p>
                 ) : (
@@ -2476,27 +2476,27 @@ export default function DocumentAnalysisPage() {
                     {aiLegalInsight.result.insights.map((insight, i) => (
                       <div key={i} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-caption text-muted-foreground">
                             {Math.round(insight.confidence * 100)}% confidence
                           </span>
                         </div>
-                        <p className="text-[13px] font-medium leading-relaxed text-foreground">
+                        <p className="text-ui font-medium leading-relaxed text-foreground">
                           {insight.title}
                         </p>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">
+                        <p className="text-meta leading-relaxed text-muted-foreground">
                           {insight.narrative}
                         </p>
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
                           {insight.sourceModules.map((mod) => (
                             <span
                               key={mod}
-                              className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                              className="rounded-full bg-muted px-2 py-0.5 text-caption text-muted-foreground"
                             >
                               {formatRiskType(mod)}
                             </span>
                           ))}
                         </div>
-                        <p className="text-[11px] italic text-muted-foreground">
+                        <p className="text-caption italic text-muted-foreground">
                           {insight.sourceSummary}
                         </p>
                       </div>
@@ -2505,20 +2505,20 @@ export default function DocumentAnalysisPage() {
                 )
               ) : aiLegalInsight?.status === 'failed' ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-[13px] text-destructive">
+                  <p className="text-ui text-destructive">
                     {aiLegalInsight.error_message ?? 'The last AI legal insight run failed.'}
                   </p>
                   <button
                     onClick={handleRunAILegalInsight}
                     disabled={isRunningAILegalInsight}
-                    className="w-fit rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:opacity-60"
                   >
                     Try again
                   </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     No AI legal insights have been generated for this analysis yet. This depends
                     on Clause Classification, Risk Detection, Missing Clause Detection,
                     Compliance Detection, AI Recommendation Engine, and Legal Health Score all
@@ -2527,7 +2527,7 @@ export default function DocumentAnalysisPage() {
                   <button
                     onClick={handleRunAILegalInsight}
                     disabled={isRunningAILegalInsight}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isRunningAILegalInsight ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2537,7 +2537,7 @@ export default function DocumentAnalysisPage() {
                     {isRunningAILegalInsight ? 'Generating insights…' : 'Generate Insights'}
                   </button>
                   {aiLegalInsightError && (
-                    <p className="text-[12px] text-destructive">{aiLegalInsightError}</p>
+                    <p className="text-meta text-destructive">{aiLegalInsightError}</p>
                   )}
                 </div>
               )}
@@ -2551,19 +2551,19 @@ export default function DocumentAnalysisPage() {
             <section className="rounded-lg border border-border bg-card p-6">
               <div className="mb-4 flex items-center gap-2">
                 <MessageCircle className="h-4 w-4 text-primary" strokeWidth={1.75} />
-                <h2 className="font-serif text-[18px] text-foreground">Ask About This Document</h2>
+                <h2 className="text-section text-foreground">Ask About This Document</h2>
               </div>
 
               {!activeConversation ? (
                 <div className="flex flex-col items-start gap-3">
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-ui text-muted-foreground">
                     Start a conversation to ask questions about this document — its clauses,
                     risks, and the analysis above.
                   </p>
                   <button
                     onClick={handleStartConversation}
                     disabled={isStartingConversation}
-                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isStartingConversation ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2573,23 +2573,23 @@ export default function DocumentAnalysisPage() {
                     {isStartingConversation ? 'Starting…' : 'Start Conversation'}
                   </button>
                   {startConversationError && (
-                    <p className="text-[12px] text-destructive">{startConversationError}</p>
+                    <p className="text-meta text-destructive">{startConversationError}</p>
                   )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
                   <div className="flex max-h-[480px] flex-col gap-3 overflow-y-auto">
                     {messages.length === 0 && !streamingAssistantText ? (
-                      <p className="text-[13px] text-muted-foreground">
+                      <p className="text-ui text-muted-foreground">
                         No messages yet. Ask a question to get started.
                       </p>
                     ) : (
                       messages.map((message) => (
                         <div
                           key={message.id}
-                          className={`flex flex-col gap-1 rounded-lg px-3 py-2 text-[13px] leading-relaxed ${
+                          className={`flex flex-col gap-1 rounded-lg px-3 py-2 text-ui leading-relaxed ${
                             message.role === 'user'
-                              ? 'ml-8 bg-primary/10 text-foreground'
+                              ? 'ml-8 bg-accent text-foreground'
                               : 'mr-8 bg-muted text-foreground'
                           }`}
                         >
@@ -2604,7 +2604,7 @@ export default function DocumentAnalysisPage() {
                         per File 153's own open item on mid-stream
                         failures not persisting a partial message). */}
                     {streamingAssistantText !== null && (
-                      <div className="mr-8 flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-[13px] leading-relaxed text-foreground">
+                      <div className="mr-8 flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-ui leading-relaxed text-foreground">
                         {streamingAssistantText || (
                           <span className="text-muted-foreground">Thinking…</span>
                         )}
@@ -2613,7 +2613,7 @@ export default function DocumentAnalysisPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <input
+                    <input aria-label="Ask a question about this document"
                       type="text"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
@@ -2625,12 +2625,12 @@ export default function DocumentAnalysisPage() {
                       disabled={isSendingMessage}
                       placeholder="Ask a question about this document…"
                       maxLength={4000}
-                      className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground disabled:opacity-60"
+                      className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-ui text-foreground placeholder:text-muted-foreground disabled:opacity-60"
                     />
                     <button
                       onClick={handleSendMessage}
                       disabled={isSendingMessage || chatInput.trim().length === 0}
-                      className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                      className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-ui font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSendingMessage ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2640,7 +2640,7 @@ export default function DocumentAnalysisPage() {
                     </button>
                   </div>
                   {sendMessageError && (
-                    <p className="text-[12px] text-destructive">{sendMessageError}</p>
+                    <p className="text-meta text-destructive">{sendMessageError}</p>
                   )}
                 </div>
               )}

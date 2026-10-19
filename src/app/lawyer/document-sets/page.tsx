@@ -43,6 +43,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, FolderPlus, ArrowLeft, Layers, Loader2, Plus } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
 
 // Real columns confirmed via 20260801000000_create_document_sets_tables.sql,
 // pasted this session.
@@ -149,22 +151,20 @@ export default function DocumentSetsPage() {
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <h1 className="font-serif text-[22px] leading-none text-foreground">Document sets</h1>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-page-title text-foreground">Document sets</h1>
       </header>
 
       <main className="flex-1 px-8 py-10">
         <div className="mx-auto max-w-3xl">
           <form onSubmit={handleCreate} className="mb-6 flex items-center gap-2">
-            <input
+            <Input aria-label="New document set name" className="flex-1"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="New set name, e.g. Smith v. Acme — discovery docs"
-              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
-            <button
+            <Button variant="outline"
               type="submit"
               disabled={isCreating || !newName.trim()}
-              className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-[13px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-40"
             >
               {isCreating ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -172,11 +172,11 @@ export default function DocumentSetsPage() {
                 <Plus className="h-3.5 w-3.5" />
               )}
               Create set
-            </button>
+            </Button>
           </form>
 
           {createError && (
-            <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+            <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive bg-destructive-subtle px-3 py-2 text-ui text-destructive-subtle-foreground">
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               {createError}
             </div>
@@ -185,15 +185,15 @@ export default function DocumentSetsPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading document sets…</p>
+              <p className="text-ui">Loading document sets…</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-16 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-16 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{error}</p>
+              <p className="text-ui">{error}</p>
               <button
                 onClick={() => fetchSets()}
-                className="text-[13px] font-medium underline underline-offset-2"
+                className="text-ui font-medium underline underline-offset-2"
               >
                 Try again
               </button>
@@ -201,7 +201,7 @@ export default function DocumentSetsPage() {
           ) : sets.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-16 text-muted-foreground">
               <FolderPlus className="h-6 w-6" />
-              <p className="text-[13px]">No document sets yet. Create one above to get started.</p>
+              <p className="text-ui">No document sets yet. Create one above to get started.</p>
             </div>
           ) : (
             <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
@@ -211,12 +211,12 @@ export default function DocumentSetsPage() {
                   onClick={() => router.push(`/lawyer/document-sets/${set.id}`)}
                   className="flex w-full items-center gap-4 px-5 py-4 text-left hover:bg-muted/30"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <Layers className="h-4 w-4 text-primary" strokeWidth={1.5} />
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <Layers className="h-4 w-4 text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-medium text-foreground">{set.name}</p>
-                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                    <p className="truncate text-ui font-medium text-foreground">{set.name}</p>
+                    <p className="mt-0.5 text-meta text-muted-foreground">
                       Created {formatTimestamp(set.created_at)}
                     </p>
                   </div>

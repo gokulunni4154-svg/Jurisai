@@ -104,4 +104,81 @@ describe("AssistantChat", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/interrupted/i);
     expect(screen.queryByText(/JURISAI_STREAM_ERROR/)).toBeNull();
   });
+
+  it("disables Send until there is text and exposes the composer by label", () => {
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    );
+    render(<AssistantChat {...props} />);
+    const send = screen.getByRole("button", { name: "Send message" });
+    expect(send).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Message the assistant"), {
+      target: { value: "hello" },
+    });
+    expect(send).toBeEnabled();
+  });
+
+  it("Retry re-sends the same prompt", async () => {
+    let posts = 0;
+    fetchMock.mockImplementation(async (_u: string, init?: RequestInit) => {
+      if (init?.method !== "POST")
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      posts += 1;
+      return posts === 1
+        ? new Response("{}", { status: 429 })
+        : streamResponse("second try");
+    });
+    render(<AssistantChat {...props} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Summarize my upcoming hearings." }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("second try")).toBeInTheDocument();
+    const bodies = fetchMock.mock.calls
+      .filter((c) => c[1]?.method === "POST")
+      .map((c) => JSON.parse(c[1].body).message);
+    expect(bodies).toEqual([
+      "Summarize my upcoming hearings.",
+      "Summarize my upcoming hearings.",
+    ]);
+  });
+
+  it("shows the disclaimer and a status indicator while waiting for the first token", async () => {
+    let release: () => void = () => {};
+    fetchMock.mockImplementation(async (_u: string, init?: RequestInit) => {
+      if (init?.method !== "POST")
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      await new Promise<void>((r) => (release = r));
+      return streamResponse("done");
+    });
+    render(<AssistantChat {...props} />);
+    expect(screen.getByText("disc")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Summarize my upcoming hearings." }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(/thinking/i);
+    release();
+    expect(await screen.findByText("done")).toBeInTheDocument();
+  });
+
+  it("labels the conversation list and transcript, and does not make the transcript a live region", async () => {
+    fetchMock.mockImplementation(async (_u: string, init?: RequestInit) =>
+      init?.method === "POST"
+        ? streamResponse("Hi there")
+        : new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    );
+    render(<AssistantChat {...props} />);
+    expect(
+      screen.getByRole("complementary", { name: "Conversations" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Summarize my upcoming hearings." }),
+    );
+    await screen.findByText("Hi there");
+    const transcript = screen.getByRole("region", { name: "Conversation" });
+    expect(transcript).toHaveAttribute("tabindex", "0");
+    expect(transcript).not.toHaveAttribute("aria-live");
+    expect(screen.getByText("You:")).toBeInTheDocument();
+    expect(screen.getByText("Assistant:")).toBeInTheDocument();
+  });
 });

@@ -178,13 +178,13 @@ export default function AdminAuditLogPage() {
           ) : (
             <>
           <form onSubmit={handleApplyFilters} className="mb-4 flex items-center gap-2">
-            <input
+            <input aria-label="Filter by action prefix"
               value={actionPrefix}
               onChange={(e) => setActionPrefix(e.target.value)}
               placeholder="Filter by action prefix, e.g. billing."
               className="w-64 rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
-            <select
+            <select aria-label="Filter by actor type"
               value={actorType}
               onChange={(e) => setActorType(e.target.value as ActorType | '')}
               className="rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none"

@@ -6,15 +6,14 @@
 
 import { useParams } from 'next/navigation';
 
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { InquiryReviewPanel } from '@/shared/components/lawyer-inquiries/inquiry-review-panel';
 
 export default function FirmInquiryReviewPage() {
   const params = useParams<{ firmId: string; id: string }>();
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="inquiries" terminal="firm" firmId={params.firmId} />
+    <AppShell active="inquiries" terminal="firm" firmId={params.firmId}>
       <main className="flex-1 overflow-y-auto">
         <InquiryReviewPanel
           inquiryId={params.id}
@@ -22,6 +21,6 @@ export default function FirmInquiryReviewPage() {
           backHref={`/firm/${params.firmId}/inquiries`}
         />
       </main>
-    </div>
+    </AppShell>
   );
 }

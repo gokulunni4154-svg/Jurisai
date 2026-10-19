@@ -124,7 +124,7 @@ export function HearingReminderStatus() {
 
   if (isLoading && !hasCheckedOnce) {
     return (
-      <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+      <div className="flex items-center gap-2 text-caption text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         <span>Checking reminder status…</span>
       </div>
@@ -133,7 +133,7 @@ export function HearingReminderStatus() {
 
   if (loadError) {
     return (
-      <div className="flex items-center gap-2 text-[12px] text-destructive">
+      <div className="flex items-center gap-2 text-caption text-destructive">
         <AlertCircle className="h-3.5 w-3.5" />
         <span>{loadError}</span>
         <button onClick={fetchStatus} className="font-medium underline underline-offset-2">
@@ -145,7 +145,7 @@ export function HearingReminderStatus() {
 
   if (!lastReminder) {
     return (
-      <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+      <div className="flex items-center gap-2 text-caption text-muted-foreground">
         <BellRing className="h-3.5 w-3.5" />
         <span>No hearing reminders sent yet.</span>
       </div>
@@ -153,7 +153,7 @@ export function HearingReminderStatus() {
   }
 
   return (
-    <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+    <div className="flex items-center gap-2 text-caption text-muted-foreground">
       <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
       <span>
         Last reminder sent {formatRelativeTime(lastReminder.created_at)} — hearing on{' '}

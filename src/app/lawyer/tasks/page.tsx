@@ -84,8 +84,10 @@ import {
   Clock,
   CalendarDays,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Select } from '@/shared/components/ui/input';
 
 type TaskStatus = 'todo' | 'in_progress' | 'done';
 
@@ -112,8 +114,8 @@ const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
   todo: 'bg-muted text-muted-foreground',
-  in_progress: 'bg-amber-500/10 text-amber-700',
-  done: 'bg-emerald-500/10 text-emerald-700',
+  in_progress: 'bg-warning-subtle text-warning-subtle-foreground',
+  done: 'bg-success-subtle text-success-subtle-foreground',
 };
 
 const STATUS_FILTERS: Array<{ value: 'all' | TaskStatus; label: string }> = [
@@ -354,52 +356,54 @@ export default function TasksAndDeadlinesPage() {
   const isFiltering = q.length > 0 || statusFilter !== 'all';
 
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="tasks" terminal="lawyer" />
-
+    <AppShell active="tasks" terminal="lawyer">
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-background px-8 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <ListTodo className="h-5 w-5 text-primary" strokeWidth={1.75} />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+              <ListTodo className="h-5 w-5 text-accent-foreground" strokeWidth={1.75} />
             </div>
             <div>
-              <h1 className="text-[19px] font-semibold leading-tight text-foreground">
+              <h1 className="text-xl font-semibold leading-tight tracking-tight sm:text-page-title text-foreground">
                 Tasks &amp; Deadlines
               </h1>
-              <p className="text-[12.5px] text-muted-foreground">
+              <p className="text-meta text-muted-foreground">
                 Everything assigned to you, across every case and firm to-do.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
-              <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
-              <input
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search title, description, case…"
-                className="w-56 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                aria-label="Search title, description, case…"
+                className="w-full pl-9 sm:w-64"
               />
             </div>
 
-            <select
+            <Select aria-label="Filter by status" className="w-auto"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as 'all' | TaskStatus)}
-              className="rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none"
             >
               {STATUS_FILTERS.map((f) => (
                 <option key={f.value} value={f.value}>
                   {f.label}
                 </option>
               ))}
-            </select>
+            </Select>
 
-            <button
+            <Button variant="outline" size="icon" className="relative"
               onClick={() => setIsNotificationsPanelOpen((v) => !v)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />
@@ -408,7 +412,7 @@ export default function TasksAndDeadlinesPage() {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -422,20 +426,20 @@ export default function TasksAndDeadlinesPage() {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your tasks…</p>
+              <p className="text-ui">Loading your tasks…</p>
             </div>
           ) : forbidden ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-24 text-muted-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">You don&apos;t have access to this workspace.</p>
+              <p className="text-ui">You don&apos;t have access to this workspace.</p>
             </div>
           ) : loadError ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{loadError}</p>
+              <p className="text-ui">{loadError}</p>
               <button
                 onClick={loadTasks}
-                className="text-[13px] font-medium underline underline-offset-2"
+                className="text-ui font-medium underline underline-offset-2"
               >
                 Retry
               </button>
@@ -445,39 +449,39 @@ export default function TasksAndDeadlinesPage() {
               {/* Summary strip */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-destructive/10">
-                    <AlertTriangle className="h-[18px] w-[18px] text-destructive" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-destructive-subtle">
+                    <AlertTriangle className="h-[18px] w-[18px] text-destructive-subtle-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">{summary.overdue}</p>
-                    <p className="text-[12px] text-muted-foreground">Overdue</p>
+                    <p className="text-section text-foreground">{summary.overdue}</p>
+                    <p className="text-meta text-muted-foreground">Overdue</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <Clock className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <Clock className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">{summary.dueToday}</p>
-                    <p className="text-[12px] text-muted-foreground">Due today</p>
+                    <p className="text-section text-foreground">{summary.dueToday}</p>
+                    <p className="text-meta text-muted-foreground">Due today</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <CalendarDays className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <CalendarDays className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">{summary.dueThisWeek}</p>
-                    <p className="text-[12px] text-muted-foreground">Due this week</p>
+                    <p className="text-section text-foreground">{summary.dueThisWeek}</p>
+                    <p className="text-meta text-muted-foreground">Due this week</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-500/10">
-                    <CheckCircle2 className="h-[18px] w-[18px] text-emerald-700" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-success-subtle">
+                    <CheckCircle2 className="h-[18px] w-[18px] text-success-subtle-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">{summary.completed}</p>
-                    <p className="text-[12px] text-muted-foreground">Completed</p>
+                    <p className="text-section text-foreground">{summary.completed}</p>
+                    <p className="text-meta text-muted-foreground">Completed</p>
                   </div>
                 </div>
               </div>
@@ -486,7 +490,7 @@ export default function TasksAndDeadlinesPage() {
               {!hasAnyVisibleTasks ? (
                 <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card py-20 text-muted-foreground">
                   <Inbox className="h-6 w-6" />
-                  <p className="text-[13px]">
+                  <p className="text-ui">
                     {isFiltering
                       ? 'No tasks match your search or filter.'
                       : tasks.length === 0
@@ -494,7 +498,7 @@ export default function TasksAndDeadlinesPage() {
                         : 'No tasks match your search or filter.'}
                   </p>
                   {!isFiltering && tasks.length === 0 && (
-                    <p className="text-[12px] text-muted-foreground/80">
+                    <p className="text-meta text-muted-foreground/80">
                       Tasks assigned to you on a case, or as a firm to-do, will show up here.
                     </p>
                   )}
@@ -514,7 +518,7 @@ export default function TasksAndDeadlinesPage() {
                             className={`h-4 w-4 ${bucket === 'overdue' ? 'text-destructive' : 'text-muted-foreground'}`}
                             strokeWidth={1.75}
                           />
-                          <h2 className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">
+                          <h2 className="text-ui font-medium uppercase tracking-wide text-muted-foreground">
                             {meta.label} ({rows.length})
                           </h2>
                         </div>
@@ -524,9 +528,9 @@ export default function TasksAndDeadlinesPage() {
                             <div key={task.id} className="flex flex-col gap-2 px-5 py-3.5">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-[13px] font-medium text-foreground">{task.title}</p>
+                                  <p className="text-ui font-medium text-foreground">{task.title}</p>
                                   {task.description && (
-                                    <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+                                    <p className="mt-0.5 text-meta leading-relaxed text-muted-foreground">
                                       {task.description}
                                     </p>
                                   )}
@@ -534,7 +538,7 @@ export default function TasksAndDeadlinesPage() {
                                 <button
                                   onClick={() => handleAdvanceStatus(task)}
                                   disabled={busyTaskId === task.id}
-                                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60 ${STATUS_STYLES[task.status]}`}
+                                  className={`shrink-0 rounded-full px-2.5 py-1 text-caption font-medium disabled:cursor-not-allowed disabled:opacity-60 ${STATUS_STYLES[task.status]}`}
                                   title="Click to advance status"
                                 >
                                   {busyTaskId === task.id ? (
@@ -545,7 +549,7 @@ export default function TasksAndDeadlinesPage() {
                                 </button>
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                              <div className="flex flex-wrap items-center gap-3 text-caption text-muted-foreground">
                                 {task.due_date && (
                                   <span
                                     className={`flex items-center gap-1 ${
@@ -573,7 +577,7 @@ export default function TasksAndDeadlinesPage() {
                               </div>
 
                               {taskErrors[task.id] && (
-                                <p className="text-[12px] text-destructive">{taskErrors[task.id]}</p>
+                                <p className="text-meta text-destructive">{taskErrors[task.id]}</p>
                               )}
                             </div>
                           ))}
@@ -587,6 +591,6 @@ export default function TasksAndDeadlinesPage() {
           )}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

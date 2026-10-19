@@ -4,99 +4,117 @@
 
 @layer base {
   :root {
-    /* Surfaces */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    color-scheme: light;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    /* Brand — deep trust-blue, JurisAI primary identity */
-    --primary: 224 76% 48%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    /* Domain-semantic — Legal Health Score / Timeline urgency states */
-    --success: 142 71% 40%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 38 92% 50%;
-    --warning-foreground: 222.2 84% 4.9%;
-
-    --info: 199 89% 42%;
-    --info-foreground: 0 0% 100%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 224 76% 48%;
+    /* JurisAI design tokens — light theme (Stage 1).
+       Every colour is "H S% L%" for hsl(var(--x)); the hex is the source value.
+       Brand: navy #17263F (sidebar), indigo #4F46E5 (primary actions).
+       *-subtle / *-subtle-foreground are solid tint pairs for status badges
+       and banners: prefer them over bg-<status>/10 text-<status>, which does
+       not reliably reach 4.5:1 (warning in particular, ~2:1). */
+    --background: 220 23.1% 97.5%; /* #F7F8FA */
+    --foreground: 222.2 47.4% 11.2%; /* #0F172A */
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 222.2 47.4% 11.2%; /* #0F172A */
+    --popover: 0 0% 100%; /* #FFFFFF */
+    --popover-foreground: 222.2 47.4% 11.2%; /* #0F172A */
+    --primary: 243.4 75.4% 58.6%; /* #4F46E5 */
+    --primary-foreground: 0 0% 100%; /* #FFFFFF */
+    --secondary: 220 21.4% 94.5%; /* #EEF0F4 */
+    --secondary-foreground: 217.5 46.5% 16.9%; /* #17263F */
+    --muted: 216 20% 95.1%; /* #F0F2F5 */
+    --muted-foreground: 220 14.9% 39.6%; /* #566074 */
+    --accent: 232.9 81% 95.9%; /* #ECEEFD */
+    --accent-foreground: 217.5 46.5% 16.9%; /* #17263F */
+    --destructive: 0 74.3% 42.7%; /* #BE1C1C */
+    --destructive-foreground: 0 0% 100%; /* #FFFFFF */
+    --success: 142.7 73.6% 25.3%; /* #117035 */
+    --success-foreground: 0 0% 100%; /* #FFFFFF */
+    --warning: 37.7 92.1% 50.2%; /* #F59E0B */
+    --warning-foreground: 222.2 47.4% 11.2%; /* #0F172A */
+    --info: 201.3 96.3% 32.2%; /* #0369A1 */
+    --info-foreground: 0 0% 100%; /* #FFFFFF */
+    --success-subtle: 140.6 84.2% 92.5%; /* #DCFCE7 */
+    --success-subtle-foreground: 142.8 64.2% 24.1%; /* #166534 */
+    --warning-subtle: 48 96.5% 88.8%; /* #FEF3C7 */
+    --warning-subtle-foreground: 22.7 82.5% 31.4%; /* #92400E */
+    --info-subtle: 204 93.8% 93.7%; /* #E0F2FE */
+    --info-subtle-foreground: 201 90% 27.5%; /* #075985 */
+    --destructive-subtle: 0 93.3% 94.1%; /* #FEE2E2 */
+    --destructive-subtle-foreground: 0 70% 35.3%; /* #991B1B */
+    --border: 220 18.4% 90.4%; /* #E2E5EB */
+    --input: 219.3 13.4% 57.5%; /* #848EA1 */
+    --ring: 243.4 75.4% 58.6%; /* #4F46E5 */
+    --sidebar-background: 217.5 46.5% 16.9%; /* #17263F */
+    --sidebar-foreground: 210 40% 96.1%; /* #F1F5F9 */
+    --sidebar-muted: 218.7 22% 72.4%; /* #A9B4C8 */
+    --sidebar-border: 218.2 33.8% 25.5%; /* #2B3B57 */
+    --sidebar-accent: 217.2 41% 23.9%; /* #243756 */
+    --sidebar-accent-foreground: 0 0% 100%; /* #FFFFFF */
+    --sidebar-ring: 229.7 93.5% 81.8%; /* #A5B4FC */
 
     --radius: 0.5rem;
 
-    /* Sidebar — same 224° brand hue as --primary, taken dark, for the
-       app shell's navy nav rail (AppSidebar). Kept as its own token
-       group rather than reusing --primary directly so the sidebar's
-       dark surface can't accidentally get pulled into light-surface
-       components that reference --primary. */
-    --sidebar-background: 224 45% 13%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-muted: 222 30% 64%;
-    --sidebar-border: 224 35% 22%;
-    --sidebar-accent: 224 55% 22%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-ring: 224 76% 58%;
+    /* Elevation */
+    --shadow-xs: 0 1px 2px 0 hsl(217 47% 17% / 0.05);
+    --shadow-sm: 0 1px 3px 0 hsl(217 47% 17% / 0.08), 0 1px 2px -1px hsl(217 47% 17% / 0.06);
+    --shadow-md: 0 4px 12px -2px hsl(217 47% 17% / 0.10), 0 2px 4px -2px hsl(217 47% 17% / 0.06);
+    --shadow-popover: 0 10px 30px -6px hsl(217 47% 17% / 0.18), 0 4px 8px -4px hsl(217 47% 17% / 0.10);
+
+    /* App shell dimensions (consumed by AppShell in Stage 2) */
+    --sidebar-width: 248px;
+    --sidebar-width-collapsed: 72px;
+    --topbar-height: 64px;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    color-scheme: dark;
 
-    --card: 222.2 84% 7%;
-    --card-foreground: 210 40% 98%;
+    --background: 220.9 39.3% 11%; /* #111827 */
+    --foreground: 210 20% 98%; /* #F9FAFB */
+    --card: 215 27.9% 16.9%; /* #1F2937 */
+    --card-foreground: 210 20% 98%; /* #F9FAFB */
+    --popover: 215 27.9% 16.9%; /* #1F2937 */
+    --popover-foreground: 210 20% 98%; /* #F9FAFB */
+    --primary: 235.8 87.6% 77.8%; /* #959CF8 */
+    --primary-foreground: 220.9 39.3% 11%; /* #111827 */
+    --secondary: 218.6 25% 22%; /* #2A3446 */
+    --secondary-foreground: 210 20% 98%; /* #F9FAFB */
+    --muted: 217.2 27.1% 21%; /* #273244 */
+    --muted-foreground: 212.7 26.8% 83.9%; /* #CBD5E1 */
+    --accent: 227.1 32.3% 25.5%; /* #2C3556 */
+    --accent-foreground: 210 20% 98%; /* #F9FAFB */
+    --destructive: 0 89.6% 73.7%; /* #F88080 */
+    --destructive-foreground: 220.9 39.3% 11%; /* #111827 */
+    --success: 141.9 69.2% 58%; /* #4ADE80 */
+    --success-foreground: 144.9 80.4% 10%; /* #052E16 */
+    --warning: 37.7 92.1% 50.2%; /* #F59E0B */
+    --warning-foreground: 220.9 39.3% 11%; /* #111827 */
+    --info: 198.4 93.2% 59.6%; /* #38BDF8 */
+    --info-foreground: 204 80.2% 15.9%; /* #082F49 */
+    --success-subtle: 150.9 49.3% 13.9%; /* #123524 */
+    --success-subtle-foreground: 141.7 76.6% 73.1%; /* #86EFAC */
+    --warning-subtle: 39.6 68.1% 13.5%; /* #3A2A0B */
+    --warning-subtle-foreground: 45.9 96.7% 64.5%; /* #FCD34D */
+    --info-subtle: 207 71.4% 16.5%; /* #0C2D48 */
+    --info-subtle-foreground: 199.4 95.5% 73.9%; /* #7DD3FC */
+    --destructive-subtle: 351.9 41.6% 17.5%; /* #3F1A1F */
+    --destructive-subtle-foreground: 0 93.5% 81.8%; /* #FCA5A5 */
+    --border: 216.9 19.1% 26.7%; /* #374151 */
+    --input: 218.6 12% 54.1%; /* #7C8698 */
+    --ring: 234.5 89.5% 73.9%; /* #818CF8 */
+    --sidebar-background: 220.8 49% 10%; /* #0D1526 */
+    --sidebar-foreground: 210 40% 96.1%; /* #F1F5F9 */
+    --sidebar-muted: 218.7 22% 72.4%; /* #A9B4C8 */
+    --sidebar-border: 220.5 33.9% 21.4%; /* #243049 */
+    --sidebar-accent: 219.5 44.9% 19.2%; /* #1B2A47 */
+    --sidebar-accent-foreground: 0 0% 100%; /* #FFFFFF */
+    --sidebar-ring: 229.7 93.5% 81.8%; /* #A5B4FC */
 
-    --popover: 222.2 84% 7%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 217 91% 60%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 38 92% 50%;
-    --warning-foreground: 222.2 84% 4.9%;
-
-    --info: 199 89% 48%;
-    --info-foreground: 0 0% 100%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 217 91% 60%;
+    --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.30);
+    --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.40), 0 1px 2px -1px hsl(0 0% 0% / 0.30);
+    --shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.45), 0 2px 4px -2px hsl(0 0% 0% / 0.30);
+    --shadow-popover: 0 10px 30px -6px hsl(0 0% 0% / 0.60), 0 4px 8px -4px hsl(0 0% 0% / 0.40);
   }
 }
 
@@ -151,9 +169,7 @@
 }
 
 @media (max-width: 767px) {
-  div.flex.h-screen.w-full.bg-muted\/30,
-  div.flex.h-screen.w-full.bg-background,
-  div.relative.flex.h-screen.w-full.bg-background {
+  div.flex.h-screen.w-full.bg-background {
     width: 100%;
     height: 100dvh;
     min-height: 100dvh;
@@ -161,64 +177,25 @@
     flex-direction: column;
   }
 
-  div.flex.h-screen.w-full.bg-muted\/30 > aside,
-  div.flex.h-screen.w-full.bg-background > aside,
-  div.relative.flex.h-screen.w-full.bg-background > aside {
-    width: 100%;
-    height: auto;
-    max-height: none;
-    flex: 0 0 auto;
-    overflow: visible;
-  }
-
-  div.flex.h-screen.w-full.bg-muted\/30 > aside nav,
-  div.flex.h-screen.w-full.bg-background > aside nav,
-  div.relative.flex.h-screen.w-full.bg-background > aside nav {
-    display: flex;
-    flex-direction: row;
-    gap: 0.25rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 0.25rem 0.75rem 0.75rem;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  div.flex.h-screen.w-full.bg-muted\/30 > aside nav > *,
-  div.flex.h-screen.w-full.bg-background > aside nav > *,
-  div.relative.flex.h-screen.w-full.bg-background > aside nav > * {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-
-  div.flex.h-screen.w-full.bg-muted\/30 header,
-  div.flex.h-screen.w-full.bg-muted\/30 main,
   div.flex.h-screen.w-full.bg-background header,
-  div.flex.h-screen.w-full.bg-background main,
-  div.relative.flex.h-screen.w-full.bg-background header,
-  div.relative.flex.h-screen.w-full.bg-background main {
+  div.flex.h-screen.w-full.bg-background main {
     min-width: 0;
     padding-left: 1rem;
     padding-right: 1rem;
   }
 
-  div.flex.h-screen.w-full.bg-muted\/30 main,
-  div.flex.h-screen.w-full.bg-background main,
-  div.relative.flex.h-screen.w-full.bg-background main {
+  div.flex.h-screen.w-full.bg-background main {
     padding-top: 1rem;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 
-  div.flex.h-screen.w-full.bg-muted\/30 main .grid.grid-cols-2,
   div.flex.h-screen.w-full.bg-background main .grid.grid-cols-2,
-  div.relative.flex.h-screen.w-full.bg-background main .grid.grid-cols-2,
   div.flex.h-screen.w-full.flex-col.bg-background main .grid.grid-cols-2,
   div.flex.min-h-screen.w-full.flex-col.bg-background main .grid.grid-cols-2 {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  div.flex.h-screen.w-full.bg-muted\/30 main .overflow-x-auto,
-  div.flex.h-screen.w-full.bg-background main .overflow-x-auto,
-  div.relative.flex.h-screen.w-full.bg-background main .overflow-x-auto {
+  div.flex.h-screen.w-full.bg-background main .overflow-x-auto {
     max-width: 100%;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
@@ -253,17 +230,12 @@
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 
-  div.flex.h-screen.w-full.bg-muted\/30 main .overflow-x-auto table,
   div.flex.h-screen.w-full.bg-background main .overflow-x-auto table,
-  div.relative.flex.h-screen.w-full.bg-background main .overflow-x-auto table,
   div.flex.h-screen.w-full.flex-col.bg-background main .overflow-x-auto table,
   div.flex.min-h-screen.w-full.flex-col.bg-background main .overflow-x-auto table {
     min-width: max-content;
   }
 
-  div.flex.h-screen.w-full.bg-muted\/30 h1,
-  div.flex.h-screen.w-full.bg-muted\/30 h2,
-  div.flex.h-screen.w-full.bg-muted\/30 p,
   div.flex.h-screen.w-full.bg-background h1,
   div.flex.h-screen.w-full.bg-background h2,
   div.flex.h-screen.w-full.bg-background p,
@@ -275,17 +247,104 @@
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
-  div.flex.h-screen.w-full.bg-muted\/30 header,
-  div.flex.h-screen.w-full.bg-muted\/30 main,
   div.flex.h-screen.w-full.bg-background header,
   div.flex.h-screen.w-full.bg-background main,
-  div.relative.flex.h-screen.w-full.bg-background header,
-  div.relative.flex.h-screen.w-full.bg-background main,
   div.flex.h-screen.w-full.flex-col.bg-background header,
   div.flex.h-screen.w-full.flex-col.bg-background main,
   div.flex.min-h-screen.w-full.flex-col.bg-background header,
   div.flex.min-h-screen.w-full.flex-col.bg-background main {
     padding-left: 1.5rem;
     padding-right: 1.5rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   AppShell (Stage 2): responsive rules scoped to [data-app-shell].
+   These mirror the legacy per-wrapper rules above 1:1 so pages that migrate to
+   <AppShell> keep the same mobile/tablet behaviour. Once every page has
+   migrated and been verified, the legacy block above can be deleted.
+   --------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  [data-app-shell] {
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 100dvh;
+    min-width: 0;
+  }
+
+  [data-app-shell] > aside {
+    width: 100%;
+    height: auto;
+    max-height: none;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  [data-app-shell] > aside nav {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0.75rem 0.75rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-app-shell] > aside nav > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  [data-app-shell] header,
+  [data-app-shell] main {
+    min-width: 0;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  [data-app-shell] main {
+    padding-top: 1rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  [data-app-shell] main .grid.grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-app-shell] main .overflow-x-auto {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-app-shell] main .overflow-x-auto table {
+    min-width: max-content;
+  }
+
+  [data-app-shell] h1,
+  [data-app-shell] h2,
+  [data-app-shell] p {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  [data-app-shell] header,
+  [data-app-shell] main {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+/* Stage 7: honour reduced-motion for every animation/transition, including
+   Tailwind's animate-spin / animate-pulse used by loading indicators. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

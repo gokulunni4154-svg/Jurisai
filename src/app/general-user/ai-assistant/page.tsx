@@ -1,12 +1,11 @@
 "use client";
 
-import { AppSidebar } from "@/shared/components/layout/app-sidebar";
+import { AppShell } from "@/shared/components/layout/app-shell";
 import { AssistantChat } from "@/shared/components/assistant/assistant-chat";
 
 export default function GeneralAiAssistantPage() {
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="ai-assistant" terminal="general" />
+    <AppShell active="ai-assistant" terminal="general">
       <div className="min-w-0 flex-1">
         <AssistantChat
           endpoint="/api/assistant/general"
@@ -20,6 +19,6 @@ export default function GeneralAiAssistantPage() {
           disclaimer="General information only, not legal advice. Laws change; consult a qualified Indian lawyer for your specific situation."
         />
       </div>
-    </div>
+    </AppShell>
   );
 }

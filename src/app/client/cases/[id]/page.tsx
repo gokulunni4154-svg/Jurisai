@@ -84,13 +84,13 @@ function statusBadgeClass(status: string): string {
   switch (status) {
     case 'open':
     case 'pending':
-      return 'bg-primary/10 text-primary';
+      return 'bg-accent text-accent-foreground';
     case 'won':
     case 'settled':
-      return 'bg-emerald-500/10 text-emerald-700';
+      return 'bg-success-subtle text-success-subtle-foreground';
     case 'lost':
     case 'withdrawn':
-      return 'bg-destructive/10 text-destructive';
+      return 'bg-destructive-subtle text-destructive-subtle-foreground';
     default:
       return 'bg-muted text-muted-foreground';
   }
@@ -233,7 +233,7 @@ export default function ClientCaseDetailPage() {
             </p>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
             <p className="text-[13px]">{error}</p>
           </div>
@@ -297,8 +297,8 @@ export default function ClientCaseDetailPage() {
                 <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
                   {data.hearings.map((h) => (
                     <div key={h.id} className="flex items-start gap-3 px-5 py-4">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                        <Gavel className="h-4 w-4 text-primary" strokeWidth={1.5} />
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent">
+                        <Gavel className="h-4 w-4 text-accent-foreground" strokeWidth={1.5} />
                       </div>
                       <div className="min-w-0">
                         <p className="text-[13px] font-medium text-foreground">

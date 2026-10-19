@@ -127,8 +127,10 @@ import {
   StickyNote,
   ArrowRight,
 } from 'lucide-react';
-import { AppSidebar } from '@/shared/components/layout/app-sidebar';
+import { AppShell } from '@/shared/components/layout/app-shell';
 import { NotificationsPanel } from '@/shared/components/notifications/notifications-panel';
+import { Button } from '@/shared/components/ui/button';
+import { Input, Select } from '@/shared/components/ui/input';
 
 type HearingType = 'first_hearing' | 'arguments' | 'evidence' | 'judgment' | 'other';
 
@@ -431,9 +433,7 @@ export default function UpcomingHearingsPage() {
   const openCaseHearings = (caseId: string) => router.push(`/lawyer/cases/${caseId}/hearings`);
 
   return (
-    <div className="relative flex h-screen w-full bg-background font-sans text-foreground">
-      <AppSidebar active="hearings" terminal="lawyer" />
-
+    <AppShell active="hearings" terminal="lawyer">
       <NotificationsPanel
         isOpen={isNotificationsPanelOpen}
         onClose={() => setIsNotificationsPanelOpen(false)}
@@ -444,27 +444,32 @@ export default function UpcomingHearingsPage() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-8 py-6">
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="mb-1 text-caption font-medium uppercase tracking-[0.14em] text-muted-foreground">
               JurisAI
             </p>
-            <h1 className="font-serif text-[26px] leading-none text-foreground">Hearings &amp; Calendar</h1>
+            <h1 className="text-xl font-semibold tracking-tight sm:text-page-title text-foreground">Hearings &amp; Calendar</h1>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
-              <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
-              <input
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by matter, court, location"
-                className="w-56 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                aria-label="Search by matter, court, location"
+                className="w-full pl-9 sm:w-64"
               />
             </div>
 
-            <select
+            <Select aria-label="Filter by hearing type" className="w-auto"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value as HearingType | 'all')}
-              className="rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none"
             >
               <option value="all">All types</option>
               {(Object.keys(HEARING_TYPE_LABELS) as HearingType[]).map((t) => (
@@ -472,14 +477,13 @@ export default function UpcomingHearingsPage() {
                   {HEARING_TYPE_LABELS[t]}
                 </option>
               ))}
-            </select>
+            </Select>
 
-            <button
+            <Button variant="outline"
               onClick={goToToday}
-              className="rounded-md border border-input bg-background px-3 py-2 text-[13px] font-medium text-foreground hover:bg-muted"
             >
               Today
-            </button>
+            </Button>
             <div className="flex items-center gap-1 rounded-md border border-input bg-background">
               <button
                 onClick={goToPreviousMonth}
@@ -488,7 +492,7 @@ export default function UpcomingHearingsPage() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="min-w-[9rem] text-center text-[13px] font-medium text-foreground">
+              <span className="min-w-[9rem] text-center text-ui font-medium text-foreground">
                 {monthLabel}
               </span>
               <button
@@ -499,9 +503,8 @@ export default function UpcomingHearingsPage() {
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <button
+            <Button variant="outline" size="icon" className="relative"
               onClick={() => setIsNotificationsPanelOpen((prev) => !prev)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground hover:bg-muted"
               aria-label="Notifications"
               aria-expanded={isNotificationsPanelOpen}
             >
@@ -511,7 +514,7 @@ export default function UpcomingHearingsPage() {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -519,49 +522,49 @@ export default function UpcomingHearingsPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <p className="text-[13px]">Loading your calendar…</p>
+              <p className="text-ui">Loading your calendar…</p>
             </div>
           ) : unauthenticated ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-24 text-muted-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">Please sign in to view your hearings and calendar.</p>
+              <p className="text-ui">Please sign in to view your hearings and calendar.</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
               <AlertCircle className="h-5 w-5" />
-              <p className="text-[13px]">{error}</p>
+              <p className="text-ui">{error}</p>
             </div>
           ) : (
             <div className="space-y-6">
               {/* Summary strip -- same tokens as (dashboard)/lawyer/page.tsx's own summary strip */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <Gavel className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <Gavel className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">{todaysCount}</p>
-                    <p className="text-[12px] text-muted-foreground">Hearings today</p>
+                    <p className="text-section text-foreground">{todaysCount}</p>
+                    <p className="text-meta text-muted-foreground">Hearings today</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <CalendarClock className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <CalendarClock className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-foreground">{thisWeekCount}</p>
-                    <p className="text-[12px] text-muted-foreground">This week</p>
+                    <p className="text-section text-foreground">{thisWeekCount}</p>
+                    <p className="text-meta text-muted-foreground">This week</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
-                    <Gavel className="h-[18px] w-[18px] text-primary" strokeWidth={1.5} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent">
+                    <Gavel className="h-[18px] w-[18px] text-accent-foreground" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <p className="text-[15px] font-semibold text-foreground">
+                    <p className="text-body font-semibold text-foreground">
                       {nextHearing ? urgencyLabel(daysUntil(nextHearing.hearing_date)) : '—'}
                     </p>
-                    <p className="text-[12px] text-muted-foreground">Next hearing</p>
+                    <p className="text-meta text-muted-foreground">Next hearing</p>
                   </div>
                 </div>
               </div>
@@ -574,7 +577,7 @@ export default function UpcomingHearingsPage() {
                       {WEEKDAY_LABELS.map((label) => (
                         <div
                           key={label}
-                          className="px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                          className="px-2 py-2 text-center text-caption font-semibold uppercase tracking-wide text-muted-foreground"
                         >
                           {label}
                         </div>
@@ -596,11 +599,11 @@ export default function UpcomingHearingsPage() {
                               key={dateKey(day)}
                               onClick={() => setSelectedDay(startOfDay(day))}
                               className={`min-h-[104px] border-b border-r border-border p-1.5 text-left last:border-r-0 [&:nth-child(7n)]:border-r-0 ${
-                                isSelected ? 'bg-primary/5' : inCurrentMonth ? 'bg-card' : 'bg-muted/40'
-                              } ${weekIndex === weeks.length - 1 ? 'border-b-0' : ''} hover:bg-primary/5`}
+                                isSelected ? 'bg-accent' : inCurrentMonth ? 'bg-card' : 'bg-muted/40'
+                              } ${weekIndex === weeks.length - 1 ? 'border-b-0' : ''} hover:bg-muted`}
                             >
                               <span
-                                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${
+                                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-caption ${
                                   isToday
                                     ? 'border border-primary font-semibold text-primary'
                                     : inCurrentMonth
@@ -619,10 +622,10 @@ export default function UpcomingHearingsPage() {
                                     <span
                                       key={h.id}
                                       title={`${HEARING_TYPE_LABELS[h.hearing_type]} · ${caseTitles[h.case_id] ?? `Case ${h.case_id.slice(0, 8)}`}`}
-                                      className={`block truncate rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                                      className={`block truncate rounded px-1.5 py-0.5 text-caption font-medium ${
                                         urgent
-                                          ? 'bg-destructive/10 text-destructive'
-                                          : 'bg-primary/10 text-primary'
+                                          ? 'bg-destructive-subtle text-destructive-subtle-foreground'
+                                          : 'bg-accent text-accent-foreground'
                                       }`}
                                     >
                                       {formatTime(h.hearing_date)} · {caseTitles[h.case_id] ?? `Case ${h.case_id.slice(0, 8)}`}
@@ -630,7 +633,7 @@ export default function UpcomingHearingsPage() {
                                   );
                                 })}
                                 {overflowCount > 0 && (
-                                  <p className="px-1.5 text-[11px] text-muted-foreground">+{overflowCount} more</p>
+                                  <p className="px-1.5 text-caption text-muted-foreground">+{overflowCount} more</p>
                                 )}
                               </div>
                             </button>
@@ -644,7 +647,7 @@ export default function UpcomingHearingsPage() {
                 {/* Right panel: selected day + rundown */}
                 <div className="space-y-6">
                   <section>
-                    <h2 className="font-serif text-[17px] text-foreground">
+                    <h2 className="text-subsection text-foreground">
                       {isSameDay(selectedDay, today)
                         ? 'Today'
                         : selectedDay.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
@@ -652,7 +655,7 @@ export default function UpcomingHearingsPage() {
                     {selectedDayHearings.length === 0 ? (
                       <div className="mt-3 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-10 text-muted-foreground">
                         <Inbox className="h-5 w-5" />
-                        <p className="text-[13px]">No hearings scheduled for this day.</p>
+                        <p className="text-ui">No hearings scheduled for this day.</p>
                       </div>
                     ) : (
                       <div className="mt-3 flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
@@ -663,10 +666,10 @@ export default function UpcomingHearingsPage() {
                             className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-muted"
                           >
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-medium text-foreground">
+                              <p className="truncate text-ui font-medium text-foreground">
                                 {caseTitles[h.case_id] ?? `Case ${h.case_id.slice(0, 8)}`}
                               </p>
-                              <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+                              <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-muted-foreground">
                                 <span>{formatTime(h.hearing_date)}</span>
                                 <span>{HEARING_TYPE_LABELS[h.hearing_type]}</span>
                                 {h.court_name && <span>{h.court_name}</span>}
@@ -690,16 +693,16 @@ export default function UpcomingHearingsPage() {
                   </section>
 
                   <section>
-                    <h2 className="font-serif text-[17px] text-foreground">
+                    <h2 className="text-subsection text-foreground">
                       Upcoming{' '}
-                      <span className="font-sans text-[13px] font-normal text-muted-foreground">
+                      <span className="font-sans text-ui font-normal text-muted-foreground">
                         ({filteredHearings.filter((h) => daysUntil(h.hearing_date) >= 0).length})
                       </span>
                     </h2>
                     {rundownGroups.length === 0 ? (
                       <div className="mt-3 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-10 text-muted-foreground">
                         <Inbox className="h-5 w-5" />
-                        <p className="text-[13px]">
+                        <p className="text-ui">
                           {query || typeFilter !== 'all' ? 'No hearings match your filters.' : 'No upcoming hearings.'}
                         </p>
                       </div>
@@ -707,7 +710,7 @@ export default function UpcomingHearingsPage() {
                       <div className="mt-3 space-y-4">
                         {rundownGroups.map((group) => (
                           <div key={group.label}>
-                            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <p className="mb-1.5 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
                               {group.label}
                             </p>
                             <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-card">
@@ -723,30 +726,30 @@ export default function UpcomingHearingsPage() {
                                   >
                                     <div
                                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-                                        urgent ? 'bg-destructive/10' : soon ? 'bg-primary/10' : 'bg-muted'
+                                        urgent ? 'bg-destructive-subtle' : soon ? 'bg-accent' : 'bg-muted'
                                       }`}
                                     >
                                       <Gavel
                                         className={`h-4 w-4 ${
-                                          urgent ? 'text-destructive' : soon ? 'text-primary' : 'text-muted-foreground'
+                                          urgent ? 'text-destructive-subtle-foreground' : soon ? 'text-accent-foreground' : 'text-muted-foreground'
                                         }`}
                                         strokeWidth={1.5}
                                       />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                      <p className="truncate text-[13px] font-medium text-foreground">
+                                      <p className="truncate text-ui font-medium text-foreground">
                                         {caseTitles[h.case_id] ?? `Case ${h.case_id.slice(0, 8)}`}
                                       </p>
-                                      <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                                      <p className="mt-0.5 truncate text-meta text-muted-foreground">
                                         {formatDateTime(h.hearing_date)} · {HEARING_TYPE_LABELS[h.hearing_type]}
                                       </p>
                                     </div>
                                     <span
-                                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                      className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-medium ${
                                         urgent
-                                          ? 'bg-destructive/10 text-destructive'
+                                          ? 'bg-destructive-subtle text-destructive-subtle-foreground'
                                           : soon
-                                            ? 'bg-primary/10 text-primary'
+                                            ? 'bg-accent text-accent-foreground'
                                             : 'bg-muted text-muted-foreground'
                                       }`}
                                     >
@@ -767,6 +770,6 @@ export default function UpcomingHearingsPage() {
           )}
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }

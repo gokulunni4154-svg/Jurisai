@@ -5,6 +5,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table';
 
 // Same mirrored-shapes convention as src/app/observability/page.tsx and
 // src/app/documents/[id]/page.tsx — see that file's own comment for the
@@ -73,9 +81,9 @@ function StatusPill({ status }: { status: string | null }) {
   }
 
   const styles: Record<string, string> = {
-    completed: 'bg-emerald-500/10 text-emerald-600',
-    failed: 'bg-destructive/10 text-destructive',
-    processing: 'bg-amber-500/10 text-amber-600',
+    completed: 'bg-success-subtle text-success-subtle-foreground',
+    failed: 'bg-destructive-subtle text-destructive-subtle-foreground',
+    processing: 'bg-warning-subtle text-warning-subtle-foreground',
     pending: 'bg-muted text-muted-foreground',
   };
 
@@ -150,7 +158,7 @@ export default function ObservabilityAdminPage() {
             <p className="text-[13px]">Loading run history…</p>
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 py-24 text-destructive">
+          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive bg-destructive-subtle py-24 text-destructive-subtle-foreground">
             <AlertCircle className="h-5 w-5" />
             <p className="text-[13px]">{loadError}</p>
             <button
@@ -166,44 +174,44 @@ export default function ObservabilityAdminPage() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border">
-            <table className="w-full text-left text-[13px]">
-              <thead className="bg-muted/50 text-[12px] font-medium text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2.5">Module</th>
-                  <th className="px-4 py-2.5">Document</th>
-                  <th className="px-4 py-2.5">Owner</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5">Provider</th>
-                  <th className="px-4 py-2.5">Error</th>
-                  <th className="px-4 py-2.5">Started</th>
-                  <th className="px-4 py-2.5">Completed</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
+            <Table className="text-meta">
+              <TableHeader className="bg-muted/50">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="px-4">Module</TableHead>
+                  <TableHead className="px-4">Document</TableHead>
+                  <TableHead className="px-4">Owner</TableHead>
+                  <TableHead className="px-4">Status</TableHead>
+                  <TableHead className="px-4">Provider</TableHead>
+                  <TableHead className="px-4">Error</TableHead>
+                  <TableHead className="px-4">Started</TableHead>
+                  <TableHead className="px-4">Completed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {runs.map((run) => (
-                  <tr key={`${run.module}-${run.id}`}>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{MODULE_LABELS[run.module]}</td>
-                    <td className="px-4 py-2.5">{run.documentTitle ?? '—'}</td>
-                    <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">
+                  <TableRow key={`${run.module}-${run.id}`}>
+                    <TableCell className="px-4 whitespace-nowrap">{MODULE_LABELS[run.module]}</TableCell>
+                    <TableCell className="px-4">{run.documentTitle ?? '—'}</TableCell>
+                    <TableCell className="px-4 font-mono text-[11px] text-muted-foreground">
                       {run.documentOwnerId ?? '—'}
-                    </td>
-                    <td className="px-4 py-2.5">
+                    </TableCell>
+                    <TableCell className="px-4">
                       <StatusPill status={run.status} />
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{run.providerUsed ?? '—'}</td>
-                    <td className="px-4 py-2.5 max-w-xs truncate text-destructive">
+                    </TableCell>
+                    <TableCell className="px-4 whitespace-nowrap">{run.providerUsed ?? '—'}</TableCell>
+                    <TableCell className="px-4 max-w-xs truncate text-destructive">
                       {run.errorMessage ?? '—'}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                       {formatTimestamp(run.createdAt)}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="px-4 whitespace-nowrap text-muted-foreground">
                       {run.completedAt ? formatTimestamp(run.completedAt) : '—'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </main>

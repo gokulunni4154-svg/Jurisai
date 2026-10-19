@@ -1,12 +1,11 @@
 "use client";
 
-import { AppSidebar } from "@/shared/components/layout/app-sidebar";
+import { AppShell } from "@/shared/components/layout/app-shell";
 import { AssistantChat } from "@/shared/components/assistant/assistant-chat";
 
 export default function LawyerAiAssistantPage() {
   return (
-    <div className="flex h-screen w-full bg-muted/30 font-sans text-foreground">
-      <AppSidebar active="ai-assistant" terminal="lawyer" />
+    <AppShell active="ai-assistant" terminal="lawyer">
       <div className="min-w-0 flex-1">
         <AssistantChat
           endpoint="/api/assistant/lawyer"
@@ -20,6 +19,6 @@ export default function LawyerAiAssistantPage() {
           disclaimer="AI-generated. Verify citations and provisions before relying on them. Drafts need your professional review."
         />
       </div>
-    </div>
+    </AppShell>
   );
 }
