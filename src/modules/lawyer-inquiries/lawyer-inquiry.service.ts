@@ -332,6 +332,9 @@ export class LawyerInquiryService extends BaseService {
       await this.caseService.assertCanCreateCase(row.target_firm_id, teamId);
     }
 
+    // The case links the inquiry's document rows; make sure they exist.
+    await this.repository.ensureDocumentRow(row);
+
     const title = await this.resolveCaseTitle(row.id, input.title);
 
     try {

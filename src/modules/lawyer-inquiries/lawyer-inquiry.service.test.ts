@@ -428,6 +428,7 @@ describe('LawyerInquiryService#acceptInquiry', () => {
     const repository = {
       findById: vi.fn().mockResolvedValueOnce(row).mockResolvedValue(accepted),
       listDocumentsForInquiry: vi.fn().mockResolvedValue([{ file_name: 'agreement.pdf' }]),
+      ensureDocumentRow: vi.fn().mockResolvedValue(undefined),
       acceptAtomic: vi.fn().mockResolvedValue({ case_id: 'case-1', already_accepted: false }),
     } as unknown as LawyerInquiryRepository;
     const caseService = { assertCanCreateCase: vi.fn().mockResolvedValue(undefined) } as unknown as CaseService;
@@ -453,6 +454,16 @@ describe('LawyerInquiryService#acceptInquiry', () => {
     });
     expect(result.caseId).toBe('case-1');
     expect(result.status).toBe('accepted');
+  });
+
+  it('makes sure the inquiry has its document rows before the case is created, and not for an unauthorized caller', async () => {
+    const ok = build(LAWYER, PENDING);
+    await ok.service.acceptInquiry('inquiry-1');
+    expect(ok.repository.ensureDocumentRow).toHaveBeenCalledWith(PENDING);
+
+    const denied = build({ id: 'someone-else', role: 'lawyer' } as unknown as AuthUser, PENDING);
+    await expect(denied.service.acceptInquiry('inquiry-1')).rejects.toThrow(AuthorizationError);
+    expect(denied.repository.ensureDocumentRow).not.toHaveBeenCalled();
   });
 
   it('a listing never carries the report or the storage path', async () => {
