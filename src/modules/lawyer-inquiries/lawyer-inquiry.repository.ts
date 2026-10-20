@@ -309,6 +309,58 @@ export class LawyerInquiryRepository {
     return data ?? [];
   }
 
+  /**
+   * Self-heal: guarantees an inquiry has a lawyer_inquiry_documents row.
+   * An inquiry created by code that predates that table (or in the window
+   * between the migration and the deploy) has none, and the review page would
+   * show nothing. Rebuilds the row from the inquiry's OWN columns -- the same
+   * logic as the migration backfill -- and is a no-op when one exists.
+   * Callers invoke it only AFTER the reviewer has been authorized.
+   */
+  async ensureDocumentRow(row: LawyerInquiryRow): Promise<void> {
+    const { data: existing, error: existingError } = await this.client
+      .from(DOCUMENTS_TABLE)
+      .select('id')
+      .eq('inquiry_id', row.id)
+      .limit(1);
+
+    if (existingError) {
+      throw existingError;
+    }
+    if (existing && existing.length > 0) {
+      return;
+    }
+
+    const { data: document, error: documentError } = await this.client
+      .from('documents')
+      .select('id')
+      .eq('storage_path', row.document_storage_path)
+      .eq('owner_id', row.client_profile_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (documentError) {
+      throw documentError;
+    }
+
+    const { error } = await this.client.from(DOCUMENTS_TABLE).upsert(
+      {
+        inquiry_id: row.id,
+        document_id: document?.id ?? null,
+        storage_path: row.document_storage_path,
+        file_name: fileNameFromPath(row.document_storage_path),
+        analysis_id: null,
+        analysis_state: 'complete',
+        analysis_snapshot: row.analysis_result,
+      },
+      { onConflict: 'inquiry_id,storage_path', ignoreDuplicates: true }
+    );
+
+    if (error) {
+      throw error;
+    }
+  }
+
   /** Documents attached to ONE inquiry, oldest first. */
   async listDocumentsForInquiry(inquiryId: string): Promise<InquiryDocumentRow[]> {
     const { data, error } = await this.client

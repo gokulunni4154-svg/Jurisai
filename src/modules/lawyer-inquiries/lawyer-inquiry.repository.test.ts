@@ -8,7 +8,7 @@ function fakeClient(plan: { tables?: Record<string, { data?: unknown; error?: un
   const from = vi.fn((table: string) => {
     const result = plan.tables?.[table] ?? { data: null, error: null };
     const builder: Record<string, unknown> = {};
-    for (const op of ['insert', 'select', 'update', 'delete', 'eq', 'neq', 'is', 'order']) {
+    for (const op of ['insert', 'upsert', 'select', 'update', 'delete', 'eq', 'neq', 'is', 'limit', 'order']) {
       builder[op] = (...args: unknown[]) => {
         calls.push({ table, op, args });
         return builder;
@@ -121,6 +121,45 @@ describe('LawyerInquiryRepository queries', () => {
     expect(await new LawyerInquiryRepository(b.client).convert('inq-1', 'case-1')).toBeNull();
     expect(b.calls.find((c) => c.op === 'eq' && c.args[0] === 'status')?.args[1]).toBe('accepted');
     expect(b.calls.find((c) => c.op === 'is')?.args).toEqual(['case_id', null]);
+  });
+});
+
+describe('LawyerInquiryRepository#ensureDocumentRow', () => {
+  const ROW = {
+    id: 'inq-1',
+    client_profile_id: 'c1',
+    document_storage_path: 'c1/d1/Report.pdf',
+    analysis_result: { score: 9 },
+  } as never;
+
+  it('does nothing when the inquiry already has a document row', async () => {
+    const { client, calls } = fakeClient({ tables: { lawyer_inquiry_documents: { data: [{ id: 'x' }] } } });
+
+    await new LawyerInquiryRepository(client).ensureDocumentRow(ROW);
+
+    expect(calls.some((c) => c.op === 'upsert')).toBe(false);
+  });
+
+  it('rebuilds the row from the inquiry columns, linking the owner\'s document when it exists', async () => {
+    const { client, calls } = fakeClient({
+      tables: { lawyer_inquiry_documents: { data: [] }, documents: { data: { id: 'doc-7' } } },
+    });
+
+    await new LawyerInquiryRepository(client).ensureDocumentRow(ROW);
+
+    const upsert = calls.find((c) => c.op === 'upsert');
+    expect(upsert?.args[0]).toEqual({
+      inquiry_id: 'inq-1',
+      document_id: 'doc-7',
+      storage_path: 'c1/d1/Report.pdf',
+      file_name: 'Report.pdf',
+      analysis_id: null,
+      analysis_state: 'complete',
+      analysis_snapshot: { score: 9 },
+    });
+    expect(upsert?.args[1]).toEqual({ onConflict: 'inquiry_id,storage_path', ignoreDuplicates: true });
+    const owner = calls.filter((c) => c.table === 'documents' && c.op === 'eq').map((c) => c.args);
+    expect(owner).toContainEqual(['owner_id', 'c1']);
   });
 });
 

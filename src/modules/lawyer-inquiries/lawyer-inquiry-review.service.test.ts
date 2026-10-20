@@ -75,6 +75,7 @@ function build(user: AuthUser | null, o: Options = {}) {
     findDocumentForInquiry: vi.fn().mockImplementation(async (inquiryId: string, docId: string) =>
       inquiryId === 'inq-1' && docId === 'idoc-1' ? DOC_COMPLETE : null
     ),
+    ensureDocumentRow: vi.fn().mockResolvedValue(undefined),
     createSignedUrl: vi.fn().mockResolvedValue(o.signedUrl === undefined ? 'https://signed.example/x' : o.signedUrl),
     listForFirm: vi.fn().mockResolvedValue([ROW, { ...ROW, id: 'inq-2', target_profile_id: null }, { ...ROW, id: 'inq-3', target_profile_id: null, status: 'declined' }]),
   } as unknown as LawyerInquiryRepository;
@@ -224,6 +225,27 @@ describe('LawyerInquiryReviewService — after the decision', () => {
     await expect(service.getReview('inq-1')).rejects.toThrow(NotFoundError);
     expect(repository.openReview).not.toHaveBeenCalled();
     expect(repository.listDocumentsForInquiry).not.toHaveBeenCalled();
+  });
+});
+
+describe('LawyerInquiryReviewService — missing document row (self-heal)', () => {
+  it('heals the row for an authorized reviewer before listing documents', async () => {
+    const { service, repository } = build(LAWYER);
+
+    await service.getReview('inq-1');
+
+    expect(repository.ensureDocumentRow).toHaveBeenCalledWith(ROW);
+    const order = (repository.ensureDocumentRow as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
+    const listOrder = (repository.listDocumentsForInquiry as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
+    expect(order).toBeLessThan(listOrder);
+  });
+
+  it('never heals (or touches documents) for an unauthorized caller', async () => {
+    const openReview = vi.fn().mockRejectedValue({ message: 'not_authorized', code: '42501' });
+    const { service, repository } = build(STRANGER, { openReview });
+
+    await expect(service.getReview('inq-1')).rejects.toThrow(NotFoundError);
+    expect(repository.ensureDocumentRow).not.toHaveBeenCalled();
   });
 });
 

@@ -160,6 +160,14 @@ export class LawyerInquiryReviewService extends BaseService {
   }
 
   private async authorize(inquiryId: string): Promise<Authorized> {
+    const access = await this.decideAccess(inquiryId);
+    // Only an authorized caller reaches this point. Heals an inquiry that has
+    // no document row yet (see LawyerInquiryRepository#ensureDocumentRow).
+    await this.repository.ensureDocumentRow(access.row);
+    return access;
+  }
+
+  private async decideAccess(inquiryId: string): Promise<Authorized> {
     const user = this.requireAuthentication();
 
     const row = await this.repository.findById(inquiryId);
