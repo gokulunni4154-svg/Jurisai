@@ -1,61 +1,78 @@
-import Link from 'next/link';
+import Link from "next/link";
+import { Check } from "lucide-react";
+
+import { ThemeSwitcher } from "@/shared/components/layout/theme-switcher";
+import { BrandMark } from "@/shared/components/marketing/brand-mark";
 
 /**
- * Shared shell for every page under /auth/* (sign-in, sign-up,
- * request-password-reset, and — once built — update-password).
+ * Shared shell for the pages in the `(auth)` route group (sign-in, sign-up,
+ * request-password-reset, update-password). `(auth)` is a route group, so
+ * these live at /sign-in, /sign-up etc. with no `/auth` prefix; that is what
+ * route-protection.ts's PUBLIC_ROUTES lists. Do not rename the group without
+ * updating that list.
  *
- * NAMING NOTE, important: this lives at `src/app/auth/layout.tsx`, a
- * real URL segment, NOT `src/app/(auth)/layout.tsx` (a route group,
- * which would be invisible in the URL). route-protection.ts's
- * PUBLIC_ROUTES does exact-match checks against literal paths like
- * `/auth/sign-in` — a route group would produce pages at `/sign-in`
- * instead, which is not in that list and would 404 under a redirect
- * loop. This segment name is load-bearing, not cosmetic; do not
- * "clean it up" into a route group later without updating
- * route-protection.ts (and middleware.ts's matcher, if it ever
- * becomes segment-aware) in the same change.
- *
- * Deliberately does NOT re-wrap ThemeProvider or set the font variable
- * — both already come from the root layout (File 6), which wraps this
- * one. This file only adds the auth-specific visual shell.
- *
- * Deliberately does NOT use Shadcn UI primitives (Button/Card/etc.) —
- * whether Shadcn has actually been initialized in this project
- * (components.json / src/components/ui/) is still an open question,
- * not confirmed. Plain Tailwind classes only, using the CSS custom
- * properties already defined in globals.css (File 5) via their mapped
- * token classes (bg-background, bg-card, text-muted-foreground,
- * border-border, text-primary). If Shadcn is confirmed set up later,
- * swapping the card wrapper for <Card> is a small, isolated follow-up,
- * not a rebuild.
- *
- * Individual pages (src/app/auth/sign-in/page.tsx etc., not yet built)
- * are responsible for their own form content and are expected to
- * render inside the <main> card below — this layout only supplies the
- * centered shell, brand header, and consistent max-width.
+ * Theme state comes from the root layout's ThemeProvider; the navy panel
+ * uses the existing sidebar tokens, so nothing new is introduced.
  */
-interface AuthLayoutProps {
+const POINTS = [
+  "Separate workspaces for general users, individual lawyers and law firms.",
+  "AI-assisted document review that supports, and never replaces, legal advice.",
+] as const;
+
+export default function AuthLayout({
+  children,
+}: {
   children: React.ReactNode;
-}
-
-export default function AuthLayout({ children }: AuthLayoutProps) {
+}) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-2 text-center">
-          <Link
-            href="/"
-            className="text-xl font-semibold tracking-tight text-foreground"
-          >
-            Juris<span className="text-primary">AI</span>
-          </Link>
-          <p className="text-sm text-muted-foreground">
-            India&rsquo;s AI Legal Operating System
-          </p>
+    <div className="grid min-h-screen bg-background lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <aside className="hidden flex-col justify-between bg-sidebar p-12 text-sidebar-foreground lg:flex">
+        <BrandMark tone="inverse" />
+        <div className="max-w-md space-y-6">
+          <h2 className="text-balance text-[2rem] font-semibold leading-tight tracking-tight">
+            An AI-assisted legal workspace, built for India.
+          </h2>
+          <ul className="space-y-3">
+            {POINTS.map((point) => (
+              <li
+                key={point}
+                className="flex items-start gap-3 text-body text-sidebar-muted"
+              >
+                <Check
+                  className="mt-1 h-4 w-4 shrink-0 text-sidebar-ring"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
+                {point}
+              </li>
+            ))}
+          </ul>
         </div>
+        <p className="text-caption text-sidebar-muted">
+          &copy; {new Date().getFullYear()} JurisAI
+        </p>
+      </aside>
 
-        <main className="rounded-lg border border-border bg-card p-6 shadow-sm sm:p-8">
-          {children}
+      <div className="flex min-w-0 flex-col">
+        <header className="flex items-center justify-between px-4 py-4 sm:px-8">
+          <div className="lg:invisible">
+            <BrandMark />
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="rounded-md text-ui font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Back to home
+            </Link>
+            <ThemeSwitcher />
+          </div>
+        </header>
+
+        <main className="flex flex-1 items-center justify-center px-4 pb-12 pt-4 sm:px-8">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>

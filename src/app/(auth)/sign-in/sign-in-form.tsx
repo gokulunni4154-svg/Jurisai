@@ -1,8 +1,16 @@
-'use client';
+"use client";
 
-import { useState, type FormEvent } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+
+import {
+  AuthAlert,
+  AuthField,
+  AuthHeading,
+  PasswordField,
+  SubmitButton,
+} from "@/shared/components/auth/auth-ui";
 
 /**
  * Only same-origin relative paths are ever redirected to after sign-in.
@@ -14,9 +22,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
  * that open-redirect hole rather than trusting the param verbatim.
  */
 function sanitizeRedirectTarget(raw: string | null): string {
-  if (!raw) return '/';
-  if (!raw.startsWith('/')) return '/';
-  if (raw.startsWith('//') || raw.startsWith('/\\')) return '/';
+  if (!raw) return "/";
+  if (!raw.startsWith("/")) return "/";
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return "/";
   return raw;
 }
 
@@ -66,21 +74,25 @@ function sanitizeRedirectTarget(raw: string | null): string {
  * only a fixed allowlist of static strings is ever rendered.
  */
 const REDIRECT_ERROR_MESSAGES: Record<string, string> = {
-  email_not_confirmed: 'Please confirm your email address before signing in.',
+  email_not_confirmed: "Please confirm your email address before signing in.",
   confirmation_failed:
-    'That confirmation link is invalid or has expired. Sign in, or sign up again to get a new link.',
+    "That confirmation link is invalid or has expired. Sign in, or sign up again to get a new link.",
 };
 
 export function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
 
-  const errorCode = searchParams.get('error');
+  const errorCode = searchParams.get("error");
   const redirectErrorMessage =
     errorCode !== null && Object.hasOwn(REDIRECT_ERROR_MESSAGES, errorCode)
       ? REDIRECT_ERROR_MESSAGES[errorCode]
@@ -89,17 +101,40 @@ export function SignInForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
+
+    // Field validation (presentation only): blocks an obviously empty or
+    // malformed submit and points at the field. Real validation and every
+    // authentication decision stay on the server. Messages here never say
+    // anything about whether an account exists.
+    const nextFieldErrors: { email?: string; password?: string } = {};
+    if (email.trim().length === 0) {
+      nextFieldErrors.email = "Enter your email address.";
+    } else if (!/^\S+@\S+$/.test(email.trim())) {
+      nextFieldErrors.email = "Enter a valid email address.";
+    }
+    if (password.length === 0) {
+      nextFieldErrors.password = "Enter your password.";
+    }
+    setFieldErrors(nextFieldErrors);
+    if (nextFieldErrors.email || nextFieldErrors.password) {
+      document
+        .getElementById(nextFieldErrors.email ? "email" : "password")
+        ?.focus();
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/auth/sign-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       if (!response.ok) {
-        let message = 'Unable to sign in. Please check your credentials and try again.';
+        let message =
+          "Unable to sign in. Please check your credentials and try again.";
         try {
           const body = await response.json();
           message = body?.error?.message ?? body?.message ?? message;
@@ -119,10 +154,14 @@ export function SignInForm() {
         // sanitizeRedirectTarget() below.
       }
 
-      const queryRedirect = searchParams.get('redirectTo');
+      const queryRedirect = searchParams.get("redirectTo");
       const serverRedirect =
-        typeof responseBody.redirectTo === 'string' ? responseBody.redirectTo : null;
-      const redirectTarget = sanitizeRedirectTarget(queryRedirect ?? serverRedirect);
+        typeof responseBody.redirectTo === "string"
+          ? responseBody.redirectTo
+          : null;
+      const redirectTarget = sanitizeRedirectTarget(
+        queryRedirect ?? serverRedirect,
+      );
       router.push(redirectTarget);
       // Server Components and middleware read the session from cookies
       // per-request. router.push() alone can land on a destination
@@ -131,77 +170,67 @@ export function SignInForm() {
       // valid session.
       router.refresh();
     } catch {
-      setErrorMessage('Something went wrong. Please try again.');
+      setErrorMessage("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
   }
 
+  const formError = errorMessage ?? redirectErrorMessage;
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-1 text-center">
-        <h1 className="text-lg font-semibold text-foreground">Sign in</h1>
-        <p className="text-sm text-muted-foreground">Welcome back to JurisAI.</p>
-      </div>
+    <div className="space-y-7">
+      <AuthHeading
+        title="Sign in"
+        description="Welcome back. Sign in to your JurisAI workspace."
+      />
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="text-sm font-medium text-foreground">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          />
-        </div>
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {formError !== null && <AuthAlert>{formError}</AuthAlert>}
+
+        <AuthField
+          id="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          error={fieldErrors.email}
+        />
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label htmlFor="password" className="text-sm font-medium text-foreground">
-              Password
-            </label>
-            <Link
-              href="/request-password-reset"
-              className="text-xs text-muted-foreground hover:text-primary"
-            >
-              Forgot password?
-            </Link>
-          </div>
-          <input
+          <PasswordField
             id="password"
-            name="password"
-            type="password"
+            label="Password"
             autoComplete="current-password"
             required
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            error={fieldErrors.password}
           />
+          <div className="flex justify-end">
+            <Link
+              href="/request-password-reset"
+              className="rounded-sm text-meta font-medium text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </div>
 
-        {(errorMessage ?? redirectErrorMessage) !== null && (
-          <p role="alert" className="text-sm text-destructive">
-            {errorMessage ?? redirectErrorMessage}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? 'Signing in…' : 'Sign in'}
-        </button>
+        <SubmitButton
+          pending={isSubmitting}
+          idleLabel="Sign in"
+          pendingLabel="Signing in…"
+        />
       </form>
 
-      <p className="text-center text-sm text-muted-foreground">
-        Don&rsquo;t have an account?{' '}
-        <Link href="/sign-up" className="font-medium text-primary hover:underline">
+      <p className="text-center text-ui text-muted-foreground">
+        Don&rsquo;t have an account?{" "}
+        <Link
+          href="/sign-up"
+          className="font-medium text-primary hover:underline"
+        >
           Sign up
         </Link>
       </p>

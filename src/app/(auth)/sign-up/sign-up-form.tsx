@@ -1,10 +1,23 @@
-'use client';
+"use client";
 
-import { useState, type FormEvent } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, MailCheck } from "lucide-react";
 
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/modules/auth/auth.schemas';
+import {
+  AuthAlert,
+  AuthField,
+  AuthHeading,
+  PasswordField,
+  SubmitButton,
+} from "@/shared/components/auth/auth-ui";
+import { cn } from "@/shared/lib/cn";
+
+import {
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+} from "@/modules/auth/auth.schemas";
 
 /**
  * NEW -- three-way sign-up (this session). Which account type the form
@@ -12,12 +25,36 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/modules/auth/auth.sc
  * (registrationNumber vs firmName vs neither), and which route the form
  * posts to.
  */
-type AccountType = 'individual' | 'lawyer' | 'firm';
+type AccountType = "individual" | "lawyer" | "firm";
+
+const ACCOUNT_TYPE_OPTIONS: ReadonlyArray<{
+  value: AccountType;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "individual",
+    label: "Any user",
+    description:
+      "Upload and review documents, and send inquiries to lawyers and firms.",
+  },
+  {
+    value: "lawyer",
+    label: "Individual lawyer",
+    description:
+      "Manage matters, hearings and tasks. Your bar registration is verified manually.",
+  },
+  {
+    value: "firm",
+    label: "Lawyer firm",
+    description: "Create a firm workspace with teams, clients and inquiries.",
+  },
+];
 
 const ACCOUNT_TYPE_ENDPOINT: Record<AccountType, string> = {
-  individual: '/api/auth/sign-up',
-  lawyer: '/api/auth/sign-up-lawyer',
-  firm: '/api/auth/sign-up-firm',
+  individual: "/api/auth/sign-up",
+  lawyer: "/api/auth/sign-up-lawyer",
+  firm: "/api/auth/sign-up-firm",
 };
 
 /**
@@ -75,24 +112,29 @@ const ACCOUNT_TYPE_ENDPOINT: Record<AccountType, string> = {
  */
 export function SignUpForm() {
   const router = useRouter();
-  const [accountType, setAccountType] = useState<AccountType>('individual');
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [registrationNumber, setRegistrationNumber] = useState('');
-  const [firmName, setFirmName] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>("individual");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [registrationNumber, setRegistrationNumber] = useState("");
+  const [firmName, setFirmName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const [confirmationRequired, setConfirmationRequired] = useState(true);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
+    setConfirmError(null);
 
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
+      // Field-level (inline) error; the form-level alert is reserved for
+      // server/registration failures.
+      setConfirmError("Passwords do not match.");
+      document.getElementById("confirmPassword")?.focus();
       return;
     }
 
@@ -101,23 +143,24 @@ export function SignUpForm() {
     try {
       const body: Record<string, string> = { email, password, fullName };
 
-      if (accountType === 'lawyer') {
-        body['registrationNumber'] = registrationNumber;
-      } else if (accountType === 'firm') {
-        body['firmName'] = firmName;
+      if (accountType === "lawyer") {
+        body["registrationNumber"] = registrationNumber;
+      } else if (accountType === "firm") {
+        body["firmName"] = firmName;
       }
 
       const response = await fetch(ACCOUNT_TYPE_ENDPOINT[accountType], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
       if (!response.ok) {
-        let message = 'Unable to create your account. Please try again.';
+        let message = "Unable to create your account. Please try again.";
         try {
           const responseBody = await response.json();
-          message = responseBody?.error?.message ?? responseBody?.message ?? message;
+          message =
+            responseBody?.error?.message ?? responseBody?.message ?? message;
         } catch {
           // Response wasn't JSON — keep the generic fallback message.
         }
@@ -139,7 +182,9 @@ export function SignUpForm() {
       //     product decision, see the professional-verification gate), but
       //     they get an accurate "account created" panel instead of a false
       //     "check your email" one.
-      let responseBody: { data?: { emailConfirmationRequired?: unknown; firmId?: unknown } } = {};
+      let responseBody: {
+        data?: { emailConfirmationRequired?: unknown; firmId?: unknown };
+      } = {};
       try {
         responseBody = await response.json();
       } catch {
@@ -155,11 +200,11 @@ export function SignUpForm() {
         // /general-user/dashboard.
         const firmId = responseBody.data.firmId;
         let destination: string | null = null;
-        if (accountType === 'individual') {
-          destination = '/general-user/dashboard';
-        } else if (accountType === 'lawyer') {
-          destination = '/lawyer/dashboard';
-        } else if (typeof firmId === 'string' && firmId.length > 0) {
+        if (accountType === "individual") {
+          destination = "/general-user/dashboard";
+        } else if (accountType === "lawyer") {
+          destination = "/lawyer/dashboard";
+        } else if (typeof firmId === "string" && firmId.length > 0) {
           destination = `/firm/${encodeURIComponent(firmId)}/dashboard`;
         }
 
@@ -178,23 +223,35 @@ export function SignUpForm() {
 
       setSubmittedEmail(email);
     } catch {
-      setErrorMessage('Something went wrong. Please try again.');
+      setErrorMessage("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
   }
 
   if (submittedEmail !== null && !confirmationRequired) {
     return (
-      <div className="space-y-4 text-center">
-        <h1 className="text-lg font-semibold text-foreground">Account created</h1>
-        <p className="text-sm text-muted-foreground">
-          Your account for{' '}
-          <span className="font-medium text-foreground">{submittedEmail}</span> is ready. No
-          email confirmation is needed &mdash; you can sign in now.
-        </p>
+      <div className="space-y-5 text-center">
+        <CheckCircle2
+          className="mx-auto h-10 w-10 text-success"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <AuthHeading
+          title="Account created"
+          description={
+            <>
+              Your account for{" "}
+              <span className="font-medium text-foreground">
+                {submittedEmail}
+              </span>{" "}
+              is ready. No email confirmation is needed &mdash; you can sign in
+              now.
+            </>
+          }
+        />
         <Link
           href="/sign-in"
-          className="inline-block text-sm font-medium text-primary hover:underline"
+          className="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-ui font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Go to sign in
         </Link>
@@ -204,16 +261,27 @@ export function SignUpForm() {
 
   if (submittedEmail !== null) {
     return (
-      <div className="space-y-4 text-center">
-        <h1 className="text-lg font-semibold text-foreground">Check your email</h1>
-        <p className="text-sm text-muted-foreground">
-          We&rsquo;ve sent a confirmation link to{' '}
-          <span className="font-medium text-foreground">{submittedEmail}</span>. Follow
-          the link to activate your account, then sign in.
-        </p>
+      <div className="space-y-5 text-center">
+        <MailCheck
+          className="mx-auto h-10 w-10 text-primary"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <AuthHeading
+          title="Check your email"
+          description={
+            <>
+              We&rsquo;ve sent a confirmation link to{" "}
+              <span className="font-medium text-foreground">
+                {submittedEmail}
+              </span>
+              . Follow the link to activate your account, then sign in.
+            </>
+          }
+        />
         <Link
           href="/sign-in"
-          className="inline-block text-sm font-medium text-primary hover:underline"
+          className="inline-flex h-11 w-full items-center justify-center rounded-md border border-input bg-background px-4 text-ui font-medium text-foreground transition-colors hover:bg-muted"
         >
           Back to sign in
         </Link>
@@ -221,191 +289,142 @@ export function SignUpForm() {
     );
   }
 
-  const passwordTooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  const passwordTooShort =
+    password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  const selectedOption = ACCOUNT_TYPE_OPTIONS.find(
+    (option) => option.value === accountType,
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1 text-center">
-        <h1 className="text-lg font-semibold text-foreground">Create your account</h1>
-        <p className="text-sm text-muted-foreground">Get started with JurisAI.</p>
-      </div>
+    <div className="space-y-7">
+      <AuthHeading
+        title="Create your account"
+        description="Choose how you’ll use JurisAI, then enter your details."
+      />
 
-      <div className="space-y-1.5">
-        <span className="text-sm font-medium text-foreground">I am signing up as</span>
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => setAccountType('individual')}
-            aria-pressed={accountType === 'individual'}
-            className={
-              accountType === 'individual'
-                ? 'rounded-md border border-primary bg-primary/10 px-2 py-2 text-xs font-medium text-primary'
-                : 'rounded-md border border-input px-2 py-2 text-xs font-medium text-foreground hover:bg-accent'
-            }
-          >
-            Any user
-          </button>
-          <button
-            type="button"
-            onClick={() => setAccountType('lawyer')}
-            aria-pressed={accountType === 'lawyer'}
-            className={
-              accountType === 'lawyer'
-                ? 'rounded-md border border-primary bg-primary/10 px-2 py-2 text-xs font-medium text-primary'
-                : 'rounded-md border border-input px-2 py-2 text-xs font-medium text-foreground hover:bg-accent'
-            }
-          >
-            Individual lawyer
-          </button>
-          <button
-            type="button"
-            onClick={() => setAccountType('firm')}
-            aria-pressed={accountType === 'firm'}
-            className={
-              accountType === 'firm'
-                ? 'rounded-md border border-primary bg-primary/10 px-2 py-2 text-xs font-medium text-primary'
-                : 'rounded-md border border-input px-2 py-2 text-xs font-medium text-foreground hover:bg-accent'
-            }
-          >
-            Lawyer firm
-          </button>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <div className="space-y-1.5">
-          <label htmlFor="fullName" className="text-sm font-medium text-foreground">
-            Full name
-          </label>
-          <input
-            id="fullName"
-            name="fullName"
-            type="text"
-            autoComplete="name"
-            required
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          />
-        </div>
-
-        {accountType === 'firm' && (
-          <div className="space-y-1.5">
-            <label htmlFor="firmName" className="text-sm font-medium text-foreground">
-              Firm name
-            </label>
-            <input
-              id="firmName"
-              name="firmName"
-              type="text"
-              autoComplete="organization"
-              required
-              value={firmName}
-              onChange={(event) => setFirmName(event.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            />
-          </div>
-        )}
-
-        {accountType === 'lawyer' && (
-          <div className="space-y-1.5">
-            <label htmlFor="registrationNumber" className="text-sm font-medium text-foreground">
-              Bar registration number
-            </label>
-            <input
-              id="registrationNumber"
-              name="registrationNumber"
-              type="text"
-              required
-              value={registrationNumber}
-              onChange={(event) => setRegistrationNumber(event.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            />
-            <p className="text-xs text-muted-foreground">
-              Submitted for manual verification. You&rsquo;ll be notified once approved.
-            </p>
-          </div>
-        )}
-
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="text-sm font-medium text-foreground">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="password" className="text-sm font-medium text-foreground">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={MIN_PASSWORD_LENGTH}
-            maxLength={MAX_PASSWORD_LENGTH}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            aria-describedby="password-hint"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          />
-          <p
-            id="password-hint"
-            className={
-              passwordTooShort
-                ? 'text-xs text-destructive'
-                : 'text-xs text-muted-foreground'
-            }
-          >
-            At least {MIN_PASSWORD_LENGTH} characters.
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">
-            Confirm password
-          </label>
-          <input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          />
-        </div>
-
-        {errorMessage !== null && (
-          <p role="alert" className="text-sm text-destructive">
-            {errorMessage}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+      <div
+        role="group"
+        aria-labelledby="account-type-label"
+        className="space-y-2"
+      >
+        <span
+          id="account-type-label"
+          className="text-ui font-medium text-foreground"
         >
-          {isSubmitting ? 'Creating account…' : 'Create account'}
-        </button>
+          I am signing up as
+        </span>
+        <div className="grid grid-cols-3 gap-2">
+          {ACCOUNT_TYPE_OPTIONS.map((option) => {
+            const selected = accountType === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setAccountType(option.value)}
+                aria-pressed={selected}
+                className={cn(
+                  "min-h-11 rounded-md border px-2 py-2 text-meta font-medium transition-colors",
+                  selected
+                    ? "border-primary bg-accent text-accent-foreground ring-1 ring-primary"
+                    : "border-input bg-background text-foreground hover:bg-muted",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-meta text-muted-foreground" aria-live="polite">
+          {selectedOption?.description}
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {errorMessage !== null && <AuthAlert>{errorMessage}</AuthAlert>}
+
+        <AuthField
+          id="fullName"
+          label="Full name"
+          type="text"
+          autoComplete="name"
+          required
+          value={fullName}
+          onChange={(event) => setFullName(event.target.value)}
+        />
+
+        {accountType === "firm" && (
+          <AuthField
+            id="firmName"
+            label="Firm name"
+            type="text"
+            autoComplete="organization"
+            required
+            value={firmName}
+            onChange={(event) => setFirmName(event.target.value)}
+          />
+        )}
+
+        {accountType === "lawyer" && (
+          <AuthField
+            id="registrationNumber"
+            label="Bar registration number"
+            type="text"
+            required
+            value={registrationNumber}
+            onChange={(event) => setRegistrationNumber(event.target.value)}
+            hint="Submitted for manual verification. You’ll be notified once approved."
+          />
+        )}
+
+        <AuthField
+          id="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+
+        <PasswordField
+          id="password"
+          label="Password"
+          autoComplete="new-password"
+          required
+          minLength={MIN_PASSWORD_LENGTH}
+          maxLength={MAX_PASSWORD_LENGTH}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+          hintTone={passwordTooShort ? "error" : "muted"}
+        />
+
+        <PasswordField
+          id="confirmPassword"
+          label="Confirm password"
+          autoComplete="new-password"
+          required
+          value={confirmPassword}
+          onChange={(event) => {
+            setConfirmPassword(event.target.value);
+            if (confirmError !== null) setConfirmError(null);
+          }}
+          error={confirmError}
+        />
+
+        <SubmitButton
+          pending={isSubmitting}
+          idleLabel="Create account"
+          pendingLabel="Creating account…"
+        />
       </form>
 
-      <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{' '}
-        <Link href="/sign-in" className="font-medium text-primary hover:underline">
+      <p className="text-center text-ui text-muted-foreground">
+        Already have an account?{" "}
+        <Link
+          href="/sign-in"
+          className="font-medium text-primary hover:underline"
+        >
           Sign in
         </Link>
       </p>
